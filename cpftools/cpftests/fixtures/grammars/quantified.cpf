@@ -1,0 +1,10 @@
+quant_choice -> quant_alpha | quant_digit;
+quant_alpha -> 'a':text;
+quant_digit -> r'[0-9]':text;
+
+maybe_choice -> quant_choice?:value;
+star_choice -> quant_choice*:values;
+plus_choice -> quant_choice+:values;
+exact_digit_triplet -> r'[0-9]'{3}:digits;
+optional_terminal -> 'go'?:marker;
+

@@ -214,6 +214,44 @@ namespace cpf {
             return attributes;
          }
 
+         void parse_symbol_quantifier(symbol& parsed_symbol) {
+            skip_ignored();
+            if (take("?")) {
+               parsed_symbol.quantifier = symbol_quantifier::optional;
+               parsed_symbol.exact_repetition = 1;
+               return;
+            }
+            if (take("*")) {
+               parsed_symbol.quantifier = symbol_quantifier::zero_or_more;
+               parsed_symbol.exact_repetition = 0;
+               return;
+            }
+            if (take("+")) {
+               parsed_symbol.quantifier = symbol_quantifier::one_or_more;
+               parsed_symbol.exact_repetition = 1;
+               return;
+            }
+            if (!take("{")) {
+               return;
+            }
+
+            skip_ignored();
+            if (eof() || std::isdigit(static_cast<unsigned char>(current())) == 0) {
+               throw error("Expected repetition count inside '{...}'");
+            }
+
+            std::string digits;
+            while (!eof() && std::isdigit(static_cast<unsigned char>(current())) != 0) {
+               digits += current();
+               advance();
+            }
+            skip_ignored();
+            expect("}");
+
+            parsed_symbol.quantifier = symbol_quantifier::exact;
+            parsed_symbol.exact_repetition = static_cast<std::size_t>(std::stoull(digits));
+         }
+
          symbol parse_symbol() {
             skip_ignored();
             symbol parsed_symbol;
@@ -228,9 +266,18 @@ namespace cpf {
                parsed_symbol.kind = symbol_kind::reference;
                parsed_symbol.value = parse_identifier();
             }
+            parse_symbol_quantifier(parsed_symbol);
             skip_ignored();
             if (take(":")) {
                parsed_symbol.label = parse_identifier();
+               auto original_quantifier = parsed_symbol.quantifier;
+               auto original_exact_repetition = parsed_symbol.exact_repetition;
+               parse_symbol_quantifier(parsed_symbol);
+               if (parsed_symbol.quantifier != original_quantifier || parsed_symbol.exact_repetition != original_exact_repetition) {
+                  if (original_quantifier != symbol_quantifier::one || original_exact_repetition != 1) {
+                     throw error("A symbol can only have one repetition suffix");
+                  }
+               }
             }
             return parsed_symbol;
          }

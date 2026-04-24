@@ -14,6 +14,15 @@ namespace cpf {
       regex
    };
 
+   /// @brief Postfix repetition applied to a grammar symbol.
+   enum class symbol_quantifier {
+      one,
+      optional,
+      zero_or_more,
+      one_or_more,
+      exact
+   };
+
    /// @brief Operator used by a grammar attribute assignment.
    enum class attribute_operator {
       assign,
@@ -34,10 +43,24 @@ namespace cpf {
       symbol_kind kind = symbol_kind::reference;
       std::string value;
       std::string label;
+      symbol_quantifier quantifier = symbol_quantifier::one;
+      std::size_t exact_repetition = 1;
 
       /// @brief Checks whether the symbol exposes a generated member label.
       /// @return True when the symbol was annotated with a label.
       [[nodiscard]] bool has_label() const;
+
+      /// @brief Checks whether the symbol can match zero times.
+      /// @return True when the symbol is optional.
+      [[nodiscard]] bool is_optional() const;
+
+      /// @brief Checks whether the symbol can match more than once.
+      /// @return True when the symbol is repeated into a list.
+      [[nodiscard]] bool is_repeated() const;
+
+      /// @brief Checks whether the symbol behaves like a single required occurrence.
+      /// @return True when the symbol lowers to exactly one occurrence.
+      [[nodiscard]] bool is_single() const;
    };
 
    /// @brief One production alternative for a rule.

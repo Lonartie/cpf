@@ -58,6 +58,36 @@ number -> r'[0-9]+';
 
 parses `1 + 2 * 3` as `1 + (2 * 3)` even though no explicit attributes are written.
 
+## Quantified symbol syntax
+
+CPF also supports postfix quantifiers on individual symbols so grammar files can stay compact while the generated parser still uses the same Earley runtime internally.
+
+Supported postfix forms:
+
+| Syntax | Meaning |
+| ------ | ------- |
+| `symbol?` | optional symbol |
+| `symbol*` | zero or more repetitions |
+| `symbol+` | one or more repetitions |
+| `symbol{n}` | exactly `n` repetitions |
+
+Quantifiers can be written either before or after a label:
+
+```text
+maybe_choice -> quant_choice?:value;
+star_choice -> quant_choice*:values;
+exact_digit_triplet -> r'[0-9]':digits{3};
+```
+
+Generated member types follow the quantified symbol kind:
+
+- optional references: `std::unique_ptr<rule>`
+- optional terminals: `std::optional<std::string>`
+- repeated references: `std::vector<std::unique_ptr<rule>>`
+- repeated terminals: `std::vector<std::string>`
+
+Internally the generator lowers quantified syntax into helper context-free productions, so the parser remains Earley-based rather than switching to a different parsing strategy.
+
 Rules may also be declared multiple times. CPF merges every production for the same identifier into one generated node type while keeping per-production attributes and defaults intact.
 
 ```text

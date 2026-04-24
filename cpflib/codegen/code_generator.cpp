@@ -11,11 +11,19 @@
 
 namespace cpf {
    namespace {
+      enum class field_shape {
+         terminal_scalar,
+         terminal_optional,
+         terminal_vector,
+         node_scalar,
+         node_vector
+      };
+
       struct field_info {
          std::string name;
          std::string type;
          std::string resolved_rule;
-         bool node_pointer = false;
+         field_shape shape = field_shape::terminal_scalar;
       };
 
       struct class_info {
@@ -23,6 +31,46 @@ namespace cpf {
          std::string base;
          bool base_rule = false;
          std::vector<field_info> fields;
+      };
+
+      enum class helper_kind {
+         optional,
+         zero_or_more,
+         one_or_more,
+         exact
+      };
+
+      struct helper_info {
+         std::size_t id = 0;
+         std::size_t rule_index = 0;
+         std::string rule_name;
+         symbol base_symbol;
+         std::string owner_rule_name;
+         std::size_t owner_definition = 0;
+         helper_kind kind = helper_kind::optional;
+         std::size_t exact_count = 0;
+         std::vector<std::size_t> production_indices;
+      };
+
+      struct lowered_symbol {
+         const symbol* source = nullptr;
+         std::optional<std::size_t> helper_id;
+      };
+
+      struct emitted_symbol {
+         symbol_kind kind = symbol_kind::reference;
+         std::size_t value = 0;
+         std::string text;
+      };
+
+      struct emitted_production_info {
+         std::size_t lhs = 0;
+         std::string lhs_name;
+         std::string debug_text;
+         std::vector<emitted_symbol> symbols;
+         const rule* source_rule = nullptr;
+         const production* source_production = nullptr;
+         std::vector<lowered_symbol> lowered_symbols;
       };
 
       struct infix_definition_info {
@@ -76,6 +124,9 @@ namespace cpf {
          }
          const auto& symbols = production.symbols;
          return symbols.size() == 3
+             && symbols[0].is_single()
+             && symbols[1].is_single()
+             && symbols[2].is_single()
              && symbols[0].kind == symbol_kind::reference
              && symbols[2].kind == symbol_kind::reference
              && symbols[0].value == info.base
@@ -134,6 +185,7 @@ namespace cpf {
 
       [[nodiscard]] bool is_single_unlabeled_terminal(const production& production) {
          return production.symbols.size() == 1
+             && production.symbols.front().is_single()
              && production.symbols.front().kind != symbol_kind::reference
              && !production.symbols.front().has_label();
       }
@@ -172,8 +224,88 @@ namespace cpf {
          return "copy->" + field.name + " = " + field.name + " ? " + field.name + "->clone() : nullptr;";
       }
 
+      [[nodiscard]] bool is_node_field(const field_info& field) {
+         return field.shape == field_shape::node_scalar || field.shape == field_shape::node_vector;
+      }
+
+      [[nodiscard]] bool uses_helper_rule(const symbol& symbol) {
+         return !symbol.is_single();
+      }
+
+      [[nodiscard]] field_info field_from_symbol(const symbol& symbol) {
+         field_info field;
+         field.name = symbol.label;
+         if (symbol.kind == symbol_kind::reference) {
+            field.resolved_rule = symbol.value;
+            if (symbol.is_repeated()) {
+               field.shape = field_shape::node_vector;
+               field.type = "std::vector<std::unique_ptr<" + symbol.value + ">>";
+            } else {
+               field.shape = field_shape::node_scalar;
+               field.type = "std::unique_ptr<" + symbol.value + ">";
+            }
+            return field;
+         }
+
+         if (symbol.is_repeated()) {
+            field.shape = field_shape::terminal_vector;
+            field.type = "std::vector<std::string>";
+         } else if (symbol.is_optional()) {
+            field.shape = field_shape::terminal_optional;
+            field.type = "std::optional<std::string>";
+         } else {
+            field.shape = field_shape::terminal_scalar;
+            field.type = "std::string";
+         }
+         return field;
+      }
+
+
+      [[nodiscard]] bool field_shapes_compatible(field_shape existing, field_shape candidate) {
+         if (existing == candidate) {
+            return true;
+         }
+         if ((existing == field_shape::terminal_scalar && candidate == field_shape::terminal_optional)
+          || (existing == field_shape::terminal_optional && candidate == field_shape::terminal_scalar)) {
+            return true;
+         }
+         if ((existing == field_shape::node_scalar && candidate == field_shape::node_scalar)
+          || (existing == field_shape::node_vector && candidate == field_shape::node_vector)) {
+            return true;
+         }
+         return false;
+      }
+
+      [[nodiscard]] std::string merged_field_type(const field_info& field) {
+         switch (field.shape) {
+            case field_shape::terminal_scalar:
+               return "std::string";
+            case field_shape::terminal_optional:
+               return "std::optional<std::string>";
+            case field_shape::terminal_vector:
+               return "std::vector<std::string>";
+            case field_shape::node_scalar:
+               return "std::unique_ptr<" + field.resolved_rule + ">";
+            case field_shape::node_vector:
+               return "std::vector<std::unique_ptr<" + field.resolved_rule + ">>";
+         }
+         return {};
+      }
+
       [[nodiscard]] std::string describe_field_type(const field_info& field) {
-         return field.node_pointer ? field.resolved_rule : "std::string";
+         switch (field.shape) {
+            case field_shape::terminal_scalar:
+               return "std::string";
+            case field_shape::terminal_optional:
+               return "std::optional<std::string>";
+            case field_shape::terminal_vector:
+               return "std::vector<std::string>";
+            case field_shape::node_scalar:
+               return field.resolved_rule;
+            case field_shape::node_vector:
+               return "std::vector<" + field.resolved_rule + ">";
+         }
+         return {};
       }
 
       [[nodiscard]] std::optional<std::string> common_rule_base(
@@ -231,6 +363,23 @@ namespace cpf {
             text = "'" + symbol.value + "'";
          } else {
             text = "r'" + symbol.value + "'";
+         }
+
+         switch (symbol.quantifier) {
+            case symbol_quantifier::one:
+               break;
+            case symbol_quantifier::optional:
+               text += "?";
+               break;
+            case symbol_quantifier::zero_or_more:
+               text += "*";
+               break;
+            case symbol_quantifier::one_or_more:
+               text += "+";
+               break;
+            case symbol_quantifier::exact:
+               text += "{" + std::to_string(symbol.exact_repetition) + "}";
+               break;
          }
 
          if (symbol.has_label()) {
@@ -297,15 +446,28 @@ namespace cpf {
                   auto existing_it = resolved_fields.find(field.name);
                   if (existing_it == resolved_fields.end()) {
                      field_order.push_back(field.name);
+                     field.type = merged_field_type(field);
                      resolved_fields.emplace(field.name, std::move(field));
                      return;
                   }
 
                   auto& existing = existing_it->second;
-                  if (existing.node_pointer != field.node_pointer) {
+                  auto existing_is_node = is_node_field(existing);
+                  auto field_is_node = is_node_field(field);
+                  if (existing_is_node != field_is_node) {
                      throw std::runtime_error{"Rule '" + rule.identifier + "' label '" + field.name + "' has conflicting member types '" + describe_field_type(existing) + "' and '" + describe_field_type(field) + "'"};
                   }
-                  if (!existing.node_pointer) {
+
+                  if (!field_shapes_compatible(existing.shape, field.shape)) {
+                     throw std::runtime_error{"Rule '" + rule.identifier + "' label '" + field.name + "' has conflicting member types '" + describe_field_type(existing) + "' and '" + describe_field_type(field) + "'"};
+                  }
+
+                  if (!existing_is_node) {
+                     if ((existing.shape == field_shape::terminal_scalar && field.shape == field_shape::terminal_optional)
+                      || (existing.shape == field_shape::terminal_optional && field.shape == field_shape::terminal_scalar)) {
+                        existing.shape = field_shape::terminal_optional;
+                     }
+                     existing.type = merged_field_type(existing);
                      return;
                   }
 
@@ -315,7 +477,7 @@ namespace cpf {
                   }
 
                   existing.resolved_rule = *common_base;
-                  existing.type = "std::unique_ptr<" + *common_base + ">";
+                  existing.type = merged_field_type(existing);
                };
 
                for (const auto& production : rule.productions) {
@@ -331,20 +493,12 @@ namespace cpf {
                         throw std::runtime_error{"Rule '" + rule.identifier + "' uses label '" + symbol.label + "' more than once in definition " + std::to_string(production.definition)};
                      }
 
-                     field_info field;
-                     field.name = symbol.label;
-                     field.node_pointer = symbol.kind == symbol_kind::reference;
-                     if (field.node_pointer) {
-                        field.resolved_rule = symbol.value;
-                        field.type = "std::unique_ptr<" + symbol.value + ">";
-                     } else {
-                        field.type = "std::string";
-                     }
+                     auto field = field_from_symbol(symbol);
                      merge_field(std::move(field));
                   }
 
                   if (is_single_unlabeled_terminal(production)) {
-                     merge_field(field_info{"value", "std::string", {}, false});
+                     merge_field(field_info{"value", "std::string", {}, field_shape::terminal_scalar});
                   }
                }
 
@@ -536,10 +690,12 @@ namespace cpf {
          line(header, 0, "#include <cpflib>");
          line(header, 0, "#include <iosfwd>");
          line(header, 0, "#include <memory>");
+         line(header, 0, "#include <optional>");
          line(header, 0, "#include <string>");
          line(header, 0, "#include <string_view>");
          line(header, 0, "#include <typeinfo>");
          line(header, 0, "#include <utility>");
+         line(header, 0, "#include <vector>");
          line(header, 0);
 
          for (const auto& rule : grammar.rules) {
@@ -610,9 +766,15 @@ namespace cpf {
             line(header, 0, "void visit_recursive(const " + info.name + "& node, Visitor&& visitor) {");
             line(header, 1, "std::forward<Visitor>(visitor)(node);");
             for (const auto& field : info.fields) {
-               if (field.node_pointer) {
+               if (field.shape == field_shape::node_scalar) {
                   line(header, 1, "if (node." + field.name + ") {");
                   line(header, 2, "visit_recursive(*node." + field.name + ", visitor);");
+                  line(header, 1, "}");
+               } else if (field.shape == field_shape::node_vector) {
+                  line(header, 1, "for (const auto& child : node." + field.name + ") {");
+                  line(header, 2, "if (child) {");
+                  line(header, 3, "visit_recursive(*child, visitor);");
+                  line(header, 2, "}");
                   line(header, 1, "}");
                }
             }
@@ -623,6 +785,121 @@ namespace cpf {
          std::unordered_map<std::string, std::size_t> rule_indices;
          for (std::size_t i = 0; i < grammar.rules.size(); ++i) {
              rule_indices.emplace(grammar.rules[i].identifier, i);
+         }
+
+         std::vector<std::string> emitted_rule_names;
+         emitted_rule_names.reserve(grammar.rules.size());
+         for (const auto& rule : grammar.rules) {
+            emitted_rule_names.push_back(rule.identifier);
+         }
+
+         std::vector<helper_info> helpers;
+         std::vector<emitted_production_info> emitted_productions;
+
+         auto make_emitted_symbol = [&](const symbol& source_symbol) {
+            emitted_symbol lowered_symbol;
+            lowered_symbol.kind = source_symbol.kind;
+            if (source_symbol.kind == symbol_kind::reference) {
+               lowered_symbol.value = rule_indices.at(source_symbol.value);
+               lowered_symbol.text = source_symbol.value;
+            } else {
+               lowered_symbol.text = source_symbol.value;
+            }
+            return lowered_symbol;
+         };
+
+         auto create_helper = [&](const symbol& source_symbol, std::string_view owner_rule_name, std::size_t owner_definition) {
+            helper_info helper;
+            helper.id = helpers.size();
+            helper.rule_index = emitted_rule_names.size();
+            helper.rule_name = "__cpf_internal_" + std::to_string(helper.id);
+            helper.base_symbol = source_symbol;
+            helper.owner_rule_name = std::string{owner_rule_name};
+            helper.owner_definition = owner_definition;
+            helper.exact_count = source_symbol.exact_repetition;
+            switch (source_symbol.quantifier) {
+               case symbol_quantifier::optional:
+                  helper.kind = helper_kind::optional;
+                  break;
+               case symbol_quantifier::zero_or_more:
+                  helper.kind = helper_kind::zero_or_more;
+                  break;
+               case symbol_quantifier::one_or_more:
+                  helper.kind = helper_kind::one_or_more;
+                  break;
+               case symbol_quantifier::exact:
+                  helper.kind = helper_kind::exact;
+                  break;
+               case symbol_quantifier::one:
+                  break;
+            }
+            emitted_rule_names.push_back(helper.rule_name);
+            helpers.push_back(helper);
+            return helper.id;
+         };
+
+         for (const auto& rule : grammar.rules) {
+            for (const auto& production : rule.productions) {
+               emitted_production_info emitted_production;
+               emitted_production.lhs = rule_indices.at(rule.identifier);
+               emitted_production.lhs_name = rule.identifier;
+               emitted_production.debug_text = render_production_debug(rule.identifier, production);
+               emitted_production.source_rule = &rule;
+               emitted_production.source_production = &production;
+               for (const auto& source_symbol : production.symbols) {
+                  lowered_symbol lowered;
+                  lowered.source = &source_symbol;
+                  if (uses_helper_rule(source_symbol)) {
+                     auto helper_id = create_helper(source_symbol, rule.identifier, production.definition);
+                     lowered.helper_id = helper_id;
+                     emitted_production.symbols.push_back(emitted_symbol{symbol_kind::reference, helpers[helper_id].rule_index, helpers[helper_id].rule_name});
+                  } else {
+                     emitted_production.symbols.push_back(make_emitted_symbol(source_symbol));
+                  }
+                  emitted_production.lowered_symbols.push_back(lowered);
+               }
+               emitted_productions.push_back(std::move(emitted_production));
+            }
+         }
+
+         for (auto& helper : helpers) {
+            auto append_helper_production = [&](std::vector<emitted_symbol> symbols, std::string text) {
+               helper.production_indices.push_back(emitted_productions.size());
+               emitted_production_info emitted_production;
+               emitted_production.lhs = helper.rule_index;
+               emitted_production.lhs_name = helper.owner_rule_name;
+               emitted_production.debug_text = std::move(text);
+               emitted_production.symbols = std::move(symbols);
+               emitted_productions.push_back(std::move(emitted_production));
+            };
+
+            auto base_symbol = make_emitted_symbol(helper.base_symbol);
+            auto helper_reference = emitted_symbol{symbol_kind::reference, helper.rule_index, helper.rule_name};
+            auto helper_text = render_symbol_debug(helper.base_symbol);
+
+            switch (helper.kind) {
+               case helper_kind::optional:
+                  append_helper_production({}, helper.owner_rule_name + " -> /* optional empty */");
+                  append_helper_production({base_symbol}, helper.owner_rule_name + " -> " + helper_text + "?");
+                  break;
+               case helper_kind::zero_or_more:
+                  append_helper_production({}, helper.owner_rule_name + " -> /* repetition empty */");
+                  append_helper_production({base_symbol, helper_reference}, helper.owner_rule_name + " -> " + helper_text + "*");
+                  break;
+               case helper_kind::one_or_more:
+                  append_helper_production({base_symbol}, helper.owner_rule_name + " -> " + helper_text + "+");
+                  append_helper_production({base_symbol, helper_reference}, helper.owner_rule_name + " -> " + helper_text + "+");
+                  break;
+               case helper_kind::exact: {
+                  std::vector<emitted_symbol> symbols;
+                  symbols.reserve(helper.exact_count);
+                  for (std::size_t i = 0; i < helper.exact_count; ++i) {
+                     symbols.push_back(base_symbol);
+                  }
+                  append_helper_production(std::move(symbols), helper.owner_rule_name + " -> " + helper_text);
+                  break;
+               }
+            }
          }
 
          std::ostringstream source;
@@ -639,30 +916,28 @@ namespace cpf {
          line(source, 0);
 
          auto production_index = 0;
-         for (const auto& rule : grammar.rules) {
-            for (const auto& production : rule.productions) {
-               line(source, 0, "namespace {");
-               line(source, 1, "constexpr std::array<cpf::detail::parser_symbol, " + std::to_string(production.symbols.size()) + "> production_" + std::to_string(production_index) + "_symbols{{");
-               for (std::size_t i = 0; i < production.symbols.size(); ++i) {
-                  const auto& symbol = production.symbols[i];
-                  std::string rendered_symbol;
-                  if (symbol.kind == symbol_kind::reference) {
-                     rendered_symbol = "{cpf::detail::parser_symbol_kind::nonterminal, " + std::to_string(rule_indices.at(symbol.value)) + ", " + cpp_string_literal(symbol.value) + "}";
-                  } else if (symbol.kind == symbol_kind::literal) {
-                     rendered_symbol = "{cpf::detail::parser_symbol_kind::literal, 0, " + cpp_string_literal(symbol.value) + "}";
-                  } else {
-                     rendered_symbol = "{cpf::detail::parser_symbol_kind::regex, 0, " + cpp_string_literal(symbol.value) + "}";
-                  }
-                  if (i + 1 != production.symbols.size()) {
-                     rendered_symbol += ",";
-                  }
-                  line(source, 2, rendered_symbol);
+         for (const auto& production : emitted_productions) {
+            line(source, 0, "namespace {");
+            line(source, 1, "constexpr std::array<cpf::detail::parser_symbol, " + std::to_string(production.symbols.size()) + "> production_" + std::to_string(production_index) + "_symbols{{");
+            for (std::size_t i = 0; i < production.symbols.size(); ++i) {
+               const auto& symbol = production.symbols[i];
+               std::string rendered_symbol;
+               if (symbol.kind == symbol_kind::reference) {
+                  rendered_symbol = "{cpf::detail::parser_symbol_kind::nonterminal, " + std::to_string(symbol.value) + ", " + cpp_string_literal(symbol.text) + "}";
+               } else if (symbol.kind == symbol_kind::literal) {
+                  rendered_symbol = "{cpf::detail::parser_symbol_kind::literal, 0, " + cpp_string_literal(symbol.text) + "}";
+               } else {
+                  rendered_symbol = "{cpf::detail::parser_symbol_kind::regex, 0, " + cpp_string_literal(symbol.text) + "}";
                }
-               line(source, 1, "}};");
-               line(source, 0, "} // namespace");
-               line(source, 0);
-               ++production_index;
+               if (i + 1 != production.symbols.size()) {
+                  rendered_symbol += ",";
+               }
+               line(source, 2, rendered_symbol);
             }
+            line(source, 1, "}};");
+            line(source, 0, "} // namespace");
+            line(source, 0);
+            ++production_index;
          }
 
          const auto production_count = production_index;
@@ -670,31 +945,140 @@ namespace cpf {
          line(source, 0, "namespace {");
          line(source, 1, "constexpr std::array<cpf::detail::production_spec, " + std::to_string(production_count) + "> grammar_productions{{");
          production_index = 0;
-         for (const auto& rule : grammar.rules) {
-            for (std::size_t production_offset = 0; production_offset < rule.productions.size(); ++production_offset) {
-               const auto& production = rule.productions[production_offset];
-               auto rendered_production = "{" + std::to_string(rule_indices.at(rule.identifier))
-                  + ", " + cpp_string_literal(rule.identifier)
-                  + ", " + cpp_string_literal(render_production_debug(rule.identifier, production))
-                  + ", production_" + std::to_string(production_index) + "_symbols.data(), production_" + std::to_string(production_index) + "_symbols.size()}";
-               if (production_index + 1 != production_count) {
-                  rendered_production += ",";
-               }
-               line(source, 2, rendered_production);
-               ++production_index;
+         for (const auto& production : emitted_productions) {
+            auto rendered_production = "{" + std::to_string(production.lhs)
+               + ", " + cpp_string_literal(production.lhs_name)
+               + ", " + cpp_string_literal(production.debug_text)
+               + ", production_" + std::to_string(production_index) + "_symbols.data(), production_" + std::to_string(production_index) + "_symbols.size()}";
+            if (production_index + 1 != production_count) {
+               rendered_production += ",";
             }
+            line(source, 2, rendered_production);
+            ++production_index;
          }
          line(source, 1, "}};");
-         line(source, 1, "constexpr cpf::detail::grammar_spec grammar_spec{grammar_productions.data(), grammar_productions.size(), " + std::to_string(grammar.rules.size()) + "};");
-          line(source, 1, "constexpr std::array<std::string_view, " + std::to_string(grammar.rules.size()) + "> grammar_rule_names{{");
-          for (std::size_t i = 0; i < grammar.rules.size(); ++i) {
-             auto rendered_name = cpp_string_literal(grammar.rules[i].identifier);
-             if (i + 1 != grammar.rules.size()) {
-                rendered_name += ",";
-             }
-             line(source, 2, rendered_name);
-          }
-          line(source, 1, "}};");
+         line(source, 1, "constexpr cpf::detail::grammar_spec grammar_spec{grammar_productions.data(), grammar_productions.size(), " + std::to_string(emitted_rule_names.size()) + "};");
+         line(source, 1, "constexpr std::array<std::string_view, " + std::to_string(emitted_rule_names.size()) + "> grammar_rule_names{{");
+         for (std::size_t i = 0; i < emitted_rule_names.size(); ++i) {
+            auto rendered_name = cpp_string_literal(emitted_rule_names[i]);
+            if (i + 1 != emitted_rule_names.size()) {
+               rendered_name += ",";
+            }
+            line(source, 2, rendered_name);
+         }
+         line(source, 1, "}};");
+         line(source, 1, "std::unique_ptr<cpf::node> build_node(const parse_node_ptr& tree);");
+         line(source, 0);
+
+         for (const auto& helper : helpers) {
+            auto helper_name = "helper_" + std::to_string(helper.id);
+            if (helper.base_symbol.kind == symbol_kind::reference) {
+               if (helper.kind == helper_kind::optional) {
+                  line(source, 1, "template<typename T>");
+                  line(source, 1, "std::unique_ptr<T> extract_" + helper_name + "(const parse_node_ptr& tree) {");
+                  line(source, 2, "switch (tree->production) {");
+                  line(source, 3, "case " + std::to_string(helper.production_indices[0]) + ":");
+                  line(source, 4, "return nullptr;");
+                  line(source, 3, "case " + std::to_string(helper.production_indices[1]) + ": {");
+                  line(source, 4, "auto built = build_node(std::get<parse_node_ptr>(tree->children.front()));");
+                  line(source, 4, "return std::unique_ptr<T>{static_cast<T*>(built.release())};");
+                  line(source, 3, "}");
+                  line(source, 3, "default:");
+                  line(source, 4, "throw std::runtime_error{\"Unknown quantified helper production\"};");
+                  line(source, 2, "}");
+                  line(source, 1, "}");
+               } else {
+                  line(source, 1, "template<typename T>");
+                  line(source, 1, "void collect_" + helper_name + "(const parse_node_ptr& tree, std::vector<std::unique_ptr<T>>& values) {");
+                  line(source, 2, "switch (tree->production) {");
+                  if (helper.kind == helper_kind::zero_or_more) {
+                     line(source, 3, "case " + std::to_string(helper.production_indices[0]) + ":");
+                     line(source, 4, "return;");
+                     line(source, 3, "case " + std::to_string(helper.production_indices[1]) + ": {");
+                     line(source, 4, "auto built = build_node(std::get<parse_node_ptr>(tree->children[0]));");
+                     line(source, 4, "values.push_back(std::unique_ptr<T>{static_cast<T*>(built.release())});");
+                     line(source, 4, "collect_" + helper_name + "(std::get<parse_node_ptr>(tree->children[1]), values);");
+                     line(source, 4, "return;");
+                     line(source, 3, "}");
+                  } else if (helper.kind == helper_kind::one_or_more) {
+                     line(source, 3, "case " + std::to_string(helper.production_indices[0]) + ": {");
+                     line(source, 4, "auto built = build_node(std::get<parse_node_ptr>(tree->children[0]));");
+                     line(source, 4, "values.push_back(std::unique_ptr<T>{static_cast<T*>(built.release())});");
+                     line(source, 4, "return;");
+                     line(source, 3, "}");
+                     line(source, 3, "case " + std::to_string(helper.production_indices[1]) + ": {");
+                     line(source, 4, "auto built = build_node(std::get<parse_node_ptr>(tree->children[0]));");
+                     line(source, 4, "values.push_back(std::unique_ptr<T>{static_cast<T*>(built.release())});");
+                     line(source, 4, "collect_" + helper_name + "(std::get<parse_node_ptr>(tree->children[1]), values);");
+                     line(source, 4, "return;");
+                     line(source, 3, "}");
+                  } else {
+                     line(source, 3, "case " + std::to_string(helper.production_indices[0]) + ":");
+                     for (std::size_t i = 0; i < helper.exact_count; ++i) {
+                        line(source, 4, "{ auto built = build_node(std::get<parse_node_ptr>(tree->children[" + std::to_string(i) + "])); values.push_back(std::unique_ptr<T>{static_cast<T*>(built.release())}); }");
+                     }
+                     line(source, 4, "return;");
+                  }
+                  line(source, 3, "default:");
+                  line(source, 4, "throw std::runtime_error{\"Unknown quantified helper production\"};");
+                  line(source, 2, "}");
+                  line(source, 1, "}");
+                  line(source, 1, "template<typename T>");
+                  line(source, 1, "std::vector<std::unique_ptr<T>> extract_" + helper_name + "(const parse_node_ptr& tree) {");
+                  line(source, 2, "std::vector<std::unique_ptr<T>> values;");
+                  line(source, 2, "collect_" + helper_name + "(tree, values);");
+                  line(source, 2, "return values;");
+                  line(source, 1, "}");
+               }
+            } else if (helper.kind == helper_kind::optional) {
+               line(source, 1, "std::optional<std::string> extract_" + helper_name + "(const parse_node_ptr& tree) {");
+               line(source, 2, "switch (tree->production) {");
+               line(source, 3, "case " + std::to_string(helper.production_indices[0]) + ":");
+               line(source, 4, "return std::nullopt;");
+               line(source, 3, "case " + std::to_string(helper.production_indices[1]) + ":");
+               line(source, 4, "return std::get<std::string>(tree->children.front());");
+               line(source, 3, "default:");
+               line(source, 4, "throw std::runtime_error{\"Unknown quantified helper production\"};");
+               line(source, 2, "}");
+               line(source, 1, "}");
+            } else {
+               line(source, 1, "void collect_" + helper_name + "(const parse_node_ptr& tree, std::vector<std::string>& values) {");
+               line(source, 2, "switch (tree->production) {");
+               if (helper.kind == helper_kind::zero_or_more) {
+                  line(source, 3, "case " + std::to_string(helper.production_indices[0]) + ":");
+                  line(source, 4, "return;");
+                  line(source, 3, "case " + std::to_string(helper.production_indices[1]) + ":");
+                  line(source, 4, "values.push_back(std::get<std::string>(tree->children[0]));");
+                  line(source, 4, "collect_" + helper_name + "(std::get<parse_node_ptr>(tree->children[1]), values);");
+                  line(source, 4, "return;");
+               } else if (helper.kind == helper_kind::one_or_more) {
+                  line(source, 3, "case " + std::to_string(helper.production_indices[0]) + ":");
+                  line(source, 4, "values.push_back(std::get<std::string>(tree->children[0]));");
+                  line(source, 4, "return;");
+                  line(source, 3, "case " + std::to_string(helper.production_indices[1]) + ":");
+                  line(source, 4, "values.push_back(std::get<std::string>(tree->children[0]));");
+                  line(source, 4, "collect_" + helper_name + "(std::get<parse_node_ptr>(tree->children[1]), values);");
+                  line(source, 4, "return;");
+               } else {
+                  line(source, 3, "case " + std::to_string(helper.production_indices[0]) + ":");
+                  for (std::size_t i = 0; i < helper.exact_count; ++i) {
+                     line(source, 4, "values.push_back(std::get<std::string>(tree->children[" + std::to_string(i) + "]));");
+                  }
+                  line(source, 4, "return;");
+               }
+               line(source, 3, "default:");
+               line(source, 4, "throw std::runtime_error{\"Unknown quantified helper production\"};");
+               line(source, 2, "}");
+               line(source, 1, "}");
+               line(source, 1, "std::vector<std::string> extract_" + helper_name + "(const parse_node_ptr& tree) {");
+               line(source, 2, "std::vector<std::string> values;");
+               line(source, 2, "collect_" + helper_name + "(tree, values);");
+               line(source, 2, "return values;");
+               line(source, 1, "}");
+            }
+            line(source, 0);
+         }
+
          line(source, 0);
 
          for (const auto& rule : grammar.rules) {
@@ -766,7 +1150,7 @@ namespace cpf {
 
              auto needs_value = !infix_definitions.empty();
             for (const auto& field : info.fields) {
-               if (field.node_pointer) {
+               if (is_node_field(field)) {
                   needs_value = true;
                   break;
                }
@@ -778,12 +1162,17 @@ namespace cpf {
                line(source, 2, "if (dynamic_cast<const " + info.name + "*>(&node) != nullptr) {");
             }
             for (const auto& field : info.fields) {
-               if (!field.node_pointer) {
-                  continue;
+               if (field.shape == field_shape::node_scalar) {
+                  line(source, 3, "if (value->" + field.name + " && !validate_generated_node(*value->" + field.name + ")) {");
+                  line(source, 4, "return false;");
+                  line(source, 3, "}");
+               } else if (field.shape == field_shape::node_vector) {
+                  line(source, 3, "for (const auto& child : value->" + field.name + ") {");
+                  line(source, 4, "if (child && !validate_generated_node(*child)) {");
+                  line(source, 5, "return false;");
+                  line(source, 4, "}");
+                  line(source, 3, "}");
                }
-               line(source, 3, "if (value->" + field.name + " && !validate_generated_node(*value->" + field.name + ")) {");
-               line(source, 4, "return false;");
-               line(source, 3, "}");
             }
 
              if (!infix_definitions.empty()) {
@@ -815,35 +1204,53 @@ namespace cpf {
 
          line(source, 1, "std::unique_ptr<cpf::node> build_node(const parse_node_ptr& tree) {");
          line(source, 2, "switch (tree->production) {");
-         production_index = 0;
-         for (const auto& rule : grammar.rules) {
-            const auto& info = classes.at(rule.identifier);
-            for (const auto& production : rule.productions) {
-               line(source, 3, "case " + std::to_string(production_index) + ": {");
-               if (info.base_rule) {
-                  line(source, 4, "return build_node(std::get<parse_node_ptr>(tree->children.front()));");
-               } else {
-                  line(source, 4, "auto node = std::make_unique<" + info.name + ">();");
-                  line(source, 4, "node->definition = " + std::to_string(production.definition) + ";");
-                  for (std::size_t i = 0; i < production.symbols.size(); ++i) {
-                     const auto& symbol = production.symbols[i];
-                     if (symbol.kind == symbol_kind::reference) {
-                        if (symbol.has_label()) {
-                           const auto& field = fields_by_rule.at(info.name).at(symbol.label);
-                           line(source, 4, "auto child_" + std::to_string(i) + " = build_node(std::get<parse_node_ptr>(tree->children[" + std::to_string(i) + "]));");
-                           line(source, 4, "node->" + symbol.label + " = std::unique_ptr<" + field.resolved_rule + ">{static_cast<" + field.resolved_rule + "*>(child_" + std::to_string(i) + ".release())};");
-                        }
-                     } else if (symbol.has_label()) {
-                        line(source, 4, "node->" + symbol.label + " = std::get<std::string>(tree->children[" + std::to_string(i) + "]); ");
-                     } else if (is_single_unlabeled_terminal(production)) {
-                        line(source, 4, "node->value = std::get<std::string>(tree->children[" + std::to_string(i) + "]); ");
-                     }
-                  }
-                  line(source, 4, "return node;");
-               }
-               line(source, 3, "}");
-               ++production_index;
+         for (std::size_t emitted_index = 0; emitted_index < emitted_productions.size(); ++emitted_index) {
+            const auto& emitted_production = emitted_productions[emitted_index];
+            if (emitted_production.source_rule == nullptr || emitted_production.source_production == nullptr) {
+               continue;
             }
+
+            const auto& rule = *emitted_production.source_rule;
+            const auto& production = *emitted_production.source_production;
+            const auto& info = classes.at(rule.identifier);
+            line(source, 3, "case " + std::to_string(emitted_index) + ": {");
+            if (info.base_rule) {
+               line(source, 4, "return build_node(std::get<parse_node_ptr>(tree->children.front()));");
+            } else {
+               line(source, 4, "auto node = std::make_unique<" + info.name + ">();");
+               line(source, 4, "node->definition = " + std::to_string(production.definition) + ";");
+               for (std::size_t i = 0; i < emitted_production.lowered_symbols.size(); ++i) {
+                  const auto& lowered_symbol = emitted_production.lowered_symbols[i];
+                  const auto& symbol = *lowered_symbol.source;
+                  if (lowered_symbol.helper_id.has_value()) {
+                     if (!symbol.has_label()) {
+                        continue;
+                     }
+                     const auto& field = fields_by_rule.at(info.name).at(symbol.label);
+                     const auto helper_name = "helper_" + std::to_string(*lowered_symbol.helper_id);
+                     if (field.shape == field_shape::terminal_optional || field.shape == field_shape::terminal_vector) {
+                        line(source, 4, "node->" + symbol.label + " = extract_" + helper_name + "(std::get<parse_node_ptr>(tree->children[" + std::to_string(i) + "]));");
+                     } else if (field.shape == field_shape::node_scalar || field.shape == field_shape::node_vector) {
+                        line(source, 4, "node->" + symbol.label + " = extract_" + helper_name + "<" + field.resolved_rule + ">(std::get<parse_node_ptr>(tree->children[" + std::to_string(i) + "]));");
+                     }
+                     continue;
+                  }
+
+                  if (symbol.kind == symbol_kind::reference) {
+                     if (symbol.has_label()) {
+                        const auto& field = fields_by_rule.at(info.name).at(symbol.label);
+                        line(source, 4, "auto child_" + std::to_string(i) + " = build_node(std::get<parse_node_ptr>(tree->children[" + std::to_string(i) + "]));");
+                        line(source, 4, "node->" + symbol.label + " = std::unique_ptr<" + field.resolved_rule + ">{static_cast<" + field.resolved_rule + "*>(child_" + std::to_string(i) + ".release())};");
+                     }
+                  } else if (symbol.has_label()) {
+                     line(source, 4, "node->" + symbol.label + " = std::get<std::string>(tree->children[" + std::to_string(i) + "]); ");
+                  } else if (is_single_unlabeled_terminal(production)) {
+                     line(source, 4, "node->value = std::get<std::string>(tree->children[" + std::to_string(i) + "]); ");
+                  }
+               }
+               line(source, 4, "return node;");
+            }
+            line(source, 3, "}");
          }
          line(source, 3, "default:");
          line(source, 4, "throw std::runtime_error{\"Unknown parse production\"};");
@@ -875,7 +1282,7 @@ namespace cpf {
          line(source, 2, "}");
          line(source, 2, "result.error.expected.push_back(\"valid parse tree\");");
          line(source, 2, "result.error.found = \"<filtered parse>\";");
-         line(source, 2, "result.error.notes.push_back(std::string{\"completed Earley parses for rule '\"} + std::string{grammar_rule_names[root_rule]} + \"' were rejected by precedence/associativity constraints\");");
+         line(source, 2, "result.error.notes.push_back(std::string{R\"(completed Earley parses for rule ')\"} + std::string{grammar_rule_names[root_rule]} + R\"(' were rejected by precedence/associativity constraints)\");");
          line(source, 2, "cpf::detail::error_tracker::finalize(result.error);");
          line(source, 2, "return result;");
          line(source, 1, "}");
@@ -934,8 +1341,12 @@ namespace cpf {
                line(source, 1, "auto copy = std::make_unique<" + info.name + ">();");
                line(source, 1, "copy->definition = definition;");
                for (const auto& field : info.fields) {
-                  if (field.node_pointer) {
+                  if (field.shape == field_shape::node_scalar) {
                      line(source, 1, render_child_clone_expression(field));
+                  } else if (field.shape == field_shape::node_vector) {
+                     line(source, 1, "for (const auto& child : " + field.name + ") {");
+                     line(source, 2, "copy->" + field.name + ".push_back(child ? child->clone() : nullptr);");
+                     line(source, 1, "}");
                   } else {
                      line(source, 1, "copy->" + field.name + " = " + field.name + ";");
                   }
@@ -965,12 +1376,40 @@ namespace cpf {
                      line(source, 1, "os << \", \";");
                   }
                   line(source, 1, "os << \"" + field.name + "=\";");
-                  if (field.node_pointer) {
+                  if (field.shape == field_shape::node_scalar) {
                      line(source, 1, "if (node." + field.name + ") {");
                      line(source, 2, "os << *node." + field.name + ";");
                      line(source, 1, "} else {");
                      line(source, 2, "os << \"null\";");
                      line(source, 1, "}");
+                  } else if (field.shape == field_shape::node_vector) {
+                     line(source, 1, "os << \"[\";");
+                     line(source, 1, "for (std::size_t item_index = 0; item_index < node." + field.name + ".size(); ++item_index) {");
+                     line(source, 2, "if (item_index != 0) {");
+                     line(source, 3, "os << \", \";");
+                     line(source, 2, "}");
+                     line(source, 2, "if (node." + field.name + "[item_index]) {");
+                     line(source, 3, "os << *node." + field.name + "[item_index];");
+                     line(source, 2, "} else {");
+                     line(source, 3, "os << \"null\";");
+                     line(source, 2, "}");
+                     line(source, 1, "}");
+                     line(source, 1, "os << \"]\";");
+                  } else if (field.shape == field_shape::terminal_optional) {
+                     line(source, 1, "if (node." + field.name + ") {");
+                     line(source, 2, "os << cpf::detail::quoted(*node." + field.name + ");");
+                     line(source, 1, "} else {");
+                     line(source, 2, "os << \"null\";");
+                     line(source, 1, "}");
+                  } else if (field.shape == field_shape::terminal_vector) {
+                     line(source, 1, "os << \"[\";");
+                     line(source, 1, "for (std::size_t item_index = 0; item_index < node." + field.name + ".size(); ++item_index) {");
+                     line(source, 2, "if (item_index != 0) {");
+                     line(source, 3, "os << \", \";");
+                     line(source, 2, "}");
+                     line(source, 2, "os << cpf::detail::quoted(node." + field.name + "[item_index]);");
+                     line(source, 1, "}");
+                     line(source, 1, "os << \"]\";");
                   } else {
                      line(source, 1, "os << cpf::detail::quoted(node." + field.name + ");");
                   }

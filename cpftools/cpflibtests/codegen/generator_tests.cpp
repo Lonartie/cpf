@@ -149,5 +149,37 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(message.find("cannot resolve a common member type") != std::string::npos);
       }
    }
+
+   TEST_CASE("quantified grammar syntax generates optional and vector members") {
+      auto grammar = cpf::parse_grammar(R"(
+         quant_choice -> quant_alpha | quant_digit;
+         quant_alpha -> 'a':text;
+         quant_digit -> r'[0-9]':text;
+
+         maybe_choice -> quant_choice?:value;
+         star_choice -> quant_choice*:values;
+         plus_choice -> quant_choice+:values;
+         exact_digit_triplet -> r'[0-9]'{3}:digits;
+         optional_terminal -> 'go'?:marker;
+      )");
+
+      auto generated = cpf::generate_code(grammar, "quantified");
+
+      SUBCASE("header output exposes the expected quantified member types") {
+         CHECK(generated.header.find("std::unique_ptr<quant_choice> value;") != std::string::npos);
+         CHECK(generated.header.find("std::vector<std::unique_ptr<quant_choice>> values;") != std::string::npos);
+         CHECK(generated.header.find("std::vector<std::string> digits;") != std::string::npos);
+         CHECK(generated.header.find("std::optional<std::string> marker;") != std::string::npos);
+      }
+
+      SUBCASE("source output lowers quantified syntax through helper extractors") {
+         CHECK(generated.source.find("extract_helper_") != std::string::npos);
+         CHECK(generated.source.find("Unknown quantified helper production") != std::string::npos);
+         CHECK(generated.source.find("node->value = extract_helper_") != std::string::npos);
+         CHECK(generated.source.find("node->values = extract_helper_") != std::string::npos);
+         CHECK(generated.source.find("node->digits = extract_helper_") != std::string::npos);
+         CHECK(generated.source.find("node->marker = extract_helper_") != std::string::npos);
+      }
+   }
 }
 

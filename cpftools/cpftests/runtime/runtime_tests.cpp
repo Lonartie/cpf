@@ -3,6 +3,7 @@
 #include "error_choice.h"
 #include "message.h"
 #include "merged_definitions.h"
+#include "quantified.h"
 
 #include "support/doctest.h"
 
@@ -38,6 +39,11 @@ namespace {
       }
    };
 
+   struct quant_choice_visitor {
+      std::string operator()(const quant_alpha& node) const { return node.text; }
+      std::string operator()(const quant_digit& node) const { return node.text; }
+   };
+
    int evaluate(std::string_view input) {
       auto result = expression::parse(input);
       REQUIRE(result.success);
@@ -50,6 +56,15 @@ namespace {
       REQUIRE(result.success);
       REQUIRE(result.forest.size() == 1);
       return visit(*result.forest.front(), merged_expr_visitor{});
+   }
+
+   std::vector<std::string> collect_quant_values(const std::vector<std::unique_ptr<quant_choice>>& values) {
+      std::vector<std::string> result;
+      for (const auto& value : values) {
+         REQUIRE(value != nullptr);
+         result.push_back(visit(*value, quant_choice_visitor{}));
+      }
+      return result;
    }
 }
 
@@ -262,6 +277,61 @@ TEST_SUITE("generated.runtime") {
          auto* right = dynamic_cast<const merged_binary*>(root->right.get());
          REQUIRE(right != nullptr);
          CHECK(right->definition == 1);
+      }
+   }
+
+   TEST_CASE("quantified grammar syntax lowers to the existing Earley runtime") {
+      SUBCASE("optional references can be absent or present") {
+         auto empty = maybe_choice::parse("");
+         REQUIRE(empty.success);
+         REQUIRE(empty.forest.size() == 1);
+         CHECK(empty.forest.front()->value == nullptr);
+
+         auto present = maybe_choice::parse("a");
+         REQUIRE(present.success);
+         REQUIRE(present.forest.size() == 1);
+         REQUIRE(present.forest.front()->value != nullptr);
+         CHECK(visit(*present.forest.front()->value, quant_choice_visitor{}) == "a");
+      }
+
+      SUBCASE("zero-or-more references produce an empty-or-filled vector") {
+         auto empty = star_choice::parse("");
+         REQUIRE(empty.success);
+         REQUIRE(empty.forest.size() == 1);
+         CHECK(empty.forest.front()->values.empty());
+
+         auto repeated = star_choice::parse("a7a");
+         REQUIRE(repeated.success);
+         REQUIRE(repeated.forest.size() == 1);
+         CHECK(collect_quant_values(repeated.forest.front()->values) == std::vector<std::string>{"a", "7", "a"});
+      }
+
+      SUBCASE("one-or-more references require at least one match") {
+         auto missing = plus_choice::parse("");
+         CHECK_FALSE(missing.success);
+
+         auto repeated = plus_choice::parse("7a");
+         REQUIRE(repeated.success);
+         REQUIRE(repeated.forest.size() == 1);
+         CHECK(collect_quant_values(repeated.forest.front()->values) == std::vector<std::string>{"7", "a"});
+      }
+
+      SUBCASE("exact repetitions and optional terminals map to generated STL fields") {
+         auto digits = exact_digit_triplet::parse("123");
+         REQUIRE(digits.success);
+         REQUIRE(digits.forest.size() == 1);
+         CHECK(digits.forest.front()->digits == std::vector<std::string>{"1", "2", "3"});
+
+         auto missing_terminal = optional_terminal::parse("");
+         REQUIRE(missing_terminal.success);
+         REQUIRE(missing_terminal.forest.size() == 1);
+         CHECK_FALSE(missing_terminal.forest.front()->marker.has_value());
+
+         auto present_terminal = optional_terminal::parse("go");
+         REQUIRE(present_terminal.success);
+         REQUIRE(present_terminal.forest.size() == 1);
+         REQUIRE(present_terminal.forest.front()->marker.has_value());
+         CHECK(*present_terminal.forest.front()->marker == "go");
       }
    }
 }

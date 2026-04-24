@@ -1,16 +1,7 @@
 # TODO's
 
-* Allow for a grammar to be defined multiple times
-    * The rules should effectively merge but keep their respective attributes (also default ones)
-    * Even when defined multiple times, only a single class per identifier shall be generated
-    * When two definitions would conflict in their member type resolution an error should be emitted
-    * The ast node should contain a member representing which definition was used to generate the node
-* Implement support for more complex grammar features, such as:
-    * Optional elements
-    * Repetitions
-        * Zero or more
-        * One or more
-        * Specific number of repetitions
+* Make label that defines member variables optional
+    * If no label is provided the match should not be captured
 * Nodes should contain information about which source range was matched to generate the node
     * For string members we'd need to introduce a struct to hold the string value and the source range
 * Allow for a grammar to be defined in multiple files

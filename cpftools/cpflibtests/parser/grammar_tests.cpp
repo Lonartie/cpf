@@ -165,6 +165,58 @@ TEST_SUITE("cpflib.grammar_parser") {
       CHECK(merged_value->productions[3].definition == 3);
     }
 
+   TEST_CASE("quantified symbol suffixes are preserved in the grammar model") {
+      auto grammar = cpf::parse_grammar(R"(
+         child -> 'c':text;
+         quantified -> 'x'?:maybe_x child*:children r'[0-9]'+:digits child:fixed{3};
+      )");
+
+      auto* quantified = grammar.find_rule("quantified");
+      REQUIRE(quantified != nullptr);
+      REQUIRE(quantified->productions.size() == 1);
+      REQUIRE(quantified->productions.front().symbols.size() == 4);
+
+      const auto& maybe_x = quantified->productions.front().symbols[0];
+      const auto& children = quantified->productions.front().symbols[1];
+      const auto& digits = quantified->productions.front().symbols[2];
+      const auto& fixed = quantified->productions.front().symbols[3];
+
+      CHECK(maybe_x.quantifier == cpf::symbol_quantifier::optional);
+      CHECK(children.quantifier == cpf::symbol_quantifier::zero_or_more);
+      CHECK(digits.quantifier == cpf::symbol_quantifier::one_or_more);
+      CHECK(fixed.quantifier == cpf::symbol_quantifier::exact);
+      CHECK(fixed.exact_repetition == 3);
+   }
+
+   TEST_CASE("malformed repetition suffixes report expressive parser errors") {
+      auto capture_error = [](std::string_view source) -> std::string {
+         try {
+            static_cast<void>(cpf::parse_grammar(source));
+         } catch (const std::runtime_error& error) {
+            return error.what();
+         }
+         return std::string{};
+      };
+
+      SUBCASE("missing repetition counts are rejected") {
+         auto message = capture_error(R"(
+            expr -> 'x'{ };
+         )");
+
+         REQUIRE_FALSE(message.empty());
+         CHECK(message.find("Expected repetition count inside '{...}'") != std::string::npos);
+      }
+
+      SUBCASE("double repetition suffixes are rejected") {
+         auto message = capture_error(R"(
+            expr -> 'x'*:value?;
+         )");
+
+         REQUIRE_FALSE(message.empty());
+         CHECK(message.find("only have one repetition suffix") != std::string::npos);
+      }
+   }
+
    TEST_CASE("grammar parser reports precise and expressive source errors") {
       auto capture_error = [](std::string_view source) -> std::string {
          try {

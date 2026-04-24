@@ -7,6 +7,22 @@ namespace cpf {
 	  return !label.empty();
    }
 
+   bool symbol::is_optional() const {
+	return quantifier == symbol_quantifier::optional
+	  || (quantifier == symbol_quantifier::exact && exact_repetition == 0);
+   }
+
+   bool symbol::is_repeated() const {
+	return quantifier == symbol_quantifier::zero_or_more
+	  || quantifier == symbol_quantifier::one_or_more
+	  || (quantifier == symbol_quantifier::exact && exact_repetition != 1);
+   }
+
+   bool symbol::is_single() const {
+	return quantifier == symbol_quantifier::one
+	  || (quantifier == symbol_quantifier::exact && exact_repetition == 1);
+   }
+
    std::optional<attribute> production::find_attribute(std::string_view name) const {
 	  auto it = std::find_if(attributes.begin(), attributes.end(), [&](const auto& attribute) {
 		 return attribute.name == name;
