@@ -1,0 +1,6 @@
+default_expr -> default_add | default_subtract | default_multiply | default_number;
+default_add -> default_expr:left '+':op default_expr:right;
+default_subtract -> default_expr:left '-':op default_expr:right;
+default_multiply -> default_expr:left '*':op default_expr:right;
+default_number -> r'[0-9]+';
+

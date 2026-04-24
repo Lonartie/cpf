@@ -11,6 +11,8 @@ compile_commands.json
 CTestTestfile.cmake
 _deps
 CMakeUserPresets.json
+build/
+cmake-build-*/
 
 .idea
 .DS_Store

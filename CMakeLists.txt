@@ -1,7 +1,32 @@
-cmake_minimum_required(VERSION 4.0)
-project(cpf)
+cmake_minimum_required(VERSION 3.24)
+project(cpf LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 26)
+include(CTest)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+add_library(cpf_project_options INTERFACE)
+target_compile_features(cpf_project_options INTERFACE cxx_std_20)
+
+add_library(cpf_project_warnings INTERFACE)
+
+if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+   target_compile_options(cpf_project_warnings INTERFACE
+		   -Wall
+		   -Wextra
+		   -Wpedantic
+		   -Werror
+   )
+elseif (MSVC)
+   target_compile_options(cpf_project_warnings INTERFACE
+		   /W4
+		   /WX
+		   /permissive-
+   )
+endif ()
 
 add_subdirectory(cpflib)
 add_subdirectory(cpfgen)

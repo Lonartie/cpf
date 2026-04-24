@@ -1,0 +1,5 @@
+numeric_expr -> numeric_plus | numeric_times | numeric_number;
+numeric_plus  [prec = 10] -> numeric_expr:left '+':op numeric_expr:right;
+numeric_times [prec = 1]  -> numeric_expr:left '*':op numeric_expr:right;
+numeric_number [lbl = 'atom'] -> r'[0-9]+';
+

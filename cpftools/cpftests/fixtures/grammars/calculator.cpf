@@ -1,0 +1,8 @@
+// Calculator grammar file
+expression -> addition | subtraction | multiplication | division | number;
+addition        [prec = 'sub']              -> expression:left '+':op expression:right;
+subtraction     [prec < 'div', lbl = 'sub'] -> expression:left '-':op expression:right;
+multiplication  [prec = 'div']              -> expression:left '*':op expression:right;
+division        [prec < 'num', lbl = 'div'] -> expression:left '/':op expression:right;
+number          [lbl = 'num']               -> r'[0-9]+';
+

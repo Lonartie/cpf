@@ -1,0 +1,4 @@
+ambiguous_expr -> ambiguous_first | ambiguous_second;
+ambiguous_first -> 'x':text;
+ambiguous_second -> 'x':text;
+

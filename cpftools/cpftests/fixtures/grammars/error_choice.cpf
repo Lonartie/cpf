@@ -1,0 +1,4 @@
+choice_message -> say_hello | say_world;
+say_hello -> 'hello':text;
+say_world -> 'world':text;
+
