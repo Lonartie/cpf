@@ -1,3 +1,4 @@
+include(${CMAKE_CURRENT_LIST_DIR}/support/doctest.cmake)
 
 add_subdirectory(cpflibtests)
 add_subdirectory(cpftests)

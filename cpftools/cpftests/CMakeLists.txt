@@ -28,5 +28,5 @@ target_link_libraries(cpftests PRIVATE
 )
 
 if (BUILD_TESTING)
-   add_test(NAME cpftests COMMAND cpftests)
+   cpf_discover_doctest_tests(cpftests)
 endif ()
