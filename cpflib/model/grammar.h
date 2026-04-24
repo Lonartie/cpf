@@ -44,6 +44,8 @@ namespace cpf {
    struct production {
       std::vector<symbol> symbols;
       std::vector<attribute> attributes;
+      /// @brief Zero-based production index after merging repeated rule declarations.
+      std::size_t definition = 0;
       std::size_t line = 1;
 
       /// @brief Finds an attribute by name.

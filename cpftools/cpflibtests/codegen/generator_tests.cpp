@@ -49,9 +49,9 @@ TEST_SUITE("cpflib.code_generator") {
 
       SUBCASE("default precedence follows source order for infix rules") {
          CHECK(generated.source.find("int precedence_of_default_expr(const default_expr& node)") != std::string::npos);
-         CHECK(generated.source.find("dynamic_cast<const default_add*>(&node) != nullptr") != std::string::npos);
-         CHECK(generated.source.find("dynamic_cast<const default_subtract*>(&node) != nullptr") != std::string::npos);
-         CHECK(generated.source.find("dynamic_cast<const default_multiply*>(&node) != nullptr") != std::string::npos);
+         CHECK(generated.source.find("if (auto* value = dynamic_cast<const default_add*>(&node))") != std::string::npos);
+         CHECK(generated.source.find("if (auto* value = dynamic_cast<const default_subtract*>(&node))") != std::string::npos);
+         CHECK(generated.source.find("if (auto* value = dynamic_cast<const default_multiply*>(&node))") != std::string::npos);
          CHECK(generated.source.find("validate_default_expr_child(*value->left, 1, true, true)") != std::string::npos);
          CHECK(generated.source.find("validate_default_expr_child(*value->right, 3, true, false)") != std::string::npos);
       }
@@ -74,22 +74,80 @@ TEST_SUITE("cpflib.code_generator") {
       auto generated = cpf::generate_code(grammar, "default_labels");
 
       CHECK(generated.source.find("int precedence_of_default_label_expr(const default_label_expr& node)") != std::string::npos);
-      CHECK(generated.source.find("dynamic_cast<const default_label_add*>(&node) != nullptr") != std::string::npos);
-      CHECK(generated.source.find("dynamic_cast<const default_label_multiply*>(&node) != nullptr") != std::string::npos);
+      CHECK(generated.source.find("if (auto* value = dynamic_cast<const default_label_add*>(&node))") != std::string::npos);
+      CHECK(generated.source.find("if (auto* value = dynamic_cast<const default_label_multiply*>(&node))") != std::string::npos);
       CHECK(generated.source.find("validate_default_label_expr_child(*value->right, 1, true, false)") != std::string::npos);
       CHECK(generated.source.find("validate_default_label_expr_child(*value->right, 2, true, false)") != std::string::npos);
    }
 
-   TEST_CASE("ambiguous concrete grammars are rejected during code generation") {
+   TEST_CASE("duplicate concrete rule declarations generate one merged node type") {
       auto grammar = cpf::parse_grammar(R"(
-         ambiguous_node -> 'x':first | 'x':second;
+         merged_message -> merged_greeting | merged_farewell;
+         merged_greeting -> 'hello':text;
+         merged_farewell -> 'bye':text;
+
+         merged_wrapper -> merged_message:payload '!':suffix;
+         merged_wrapper -> merged_greeting:payload '?':suffix;
+
+         merged_expr -> merged_binary | merged_number;
+         merged_binary -> merged_expr:left '+':op merged_expr:right;
+         merged_binary -> merged_expr:left '*':op merged_expr:right;
+         merged_number -> r'[0-9]+';
       )");
 
-      CHECK_THROWS_WITH_AS(
-         cpf::generate_code(grammar, "ambiguous_node"),
-         doctest::Contains("must have exactly one production unless it is a pure choice rule"),
-         std::runtime_error
-      );
+      auto generated = cpf::generate_code(grammar, "merged_defs");
+
+      SUBCASE("merged fields resolve to a common node base") {
+         CHECK(generated.header.find("struct merged_wrapper : cpf::node") != std::string::npos);
+         CHECK(generated.header.find("std::unique_ptr<merged_message> payload;") != std::string::npos);
+         CHECK(generated.header.find("std::string suffix;") != std::string::npos);
+      }
+
+      SUBCASE("generated source stamps and preserves matched definitions") {
+         CHECK(generated.source.find("node->definition = 0;") != std::string::npos);
+         CHECK(generated.source.find("node->definition = 1;") != std::string::npos);
+         CHECK(generated.source.find("copy->definition = definition;") != std::string::npos);
+         CHECK(generated.source.find("switch (value->definition)") != std::string::npos);
+         CHECK(generated.source.find("std::unique_ptr<merged_message>{static_cast<merged_message*>(child_0.release())}") != std::string::npos);
+      }
+   }
+
+   TEST_CASE("conflicting merged member resolutions are rejected with expressive errors") {
+      auto capture_error = [](const cpf::grammar& grammar) {
+         try {
+            static_cast<void>(cpf::generate_code(grammar, "conflicting_rule"));
+         } catch (const std::runtime_error& error) {
+            return std::string{error.what()};
+         }
+         return std::string{};
+      };
+
+      SUBCASE("terminal and node labels cannot be merged") {
+         auto grammar = cpf::parse_grammar(R"(
+            number -> r'[0-9]+';
+            conflicting_value -> 'x':value;
+            conflicting_value -> number:value;
+         )");
+
+         auto message = capture_error(grammar);
+         REQUIRE_FALSE(message.empty());
+         CHECK(message.find("label 'value'") != std::string::npos);
+         CHECK(message.find("conflicting member types") != std::string::npos);
+      }
+
+      SUBCASE("unrelated node families report the common-type failure") {
+         auto grammar = cpf::parse_grammar(R"(
+            first -> 'a':text;
+            second -> 'b':text;
+            conflicting_node -> first:value;
+            conflicting_node -> second:value;
+         )");
+
+         auto message = capture_error(grammar);
+         REQUIRE_FALSE(message.empty());
+         CHECK(message.find("label 'value'") != std::string::npos);
+         CHECK(message.find("cannot resolve a common member type") != std::string::npos);
+      }
    }
 }
 

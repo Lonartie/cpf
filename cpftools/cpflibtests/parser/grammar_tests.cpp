@@ -145,6 +145,26 @@ TEST_SUITE("cpflib.grammar_parser") {
       CHECK(ambiguous_expr->productions[1].symbols[0].value == "ambiguous_second");
    }
 
+   TEST_CASE("duplicate concrete rule declarations keep merged production definition indices") {
+      auto grammar = cpf::parse_grammar(R"(
+         merged_value -> 'x':text;
+         merged_value -> r'x':text;
+         merged_value -> 'y':text | 'z':text;
+      )");
+
+      REQUIRE(grammar.rules.size() == 1);
+
+      auto* merged_value = grammar.find_rule("merged_value");
+      REQUIRE(merged_value != nullptr);
+      CHECK_FALSE(merged_value->is_choice_rule());
+      REQUIRE(merged_value->productions.size() == 4);
+
+      CHECK(merged_value->productions[0].definition == 0);
+      CHECK(merged_value->productions[1].definition == 1);
+      CHECK(merged_value->productions[2].definition == 2);
+      CHECK(merged_value->productions[3].definition == 3);
+    }
+
    TEST_CASE("grammar parser reports precise and expressive source errors") {
       auto capture_error = [](std::string_view source) -> std::string {
          try {

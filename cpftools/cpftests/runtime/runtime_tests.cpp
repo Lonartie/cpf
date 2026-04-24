@@ -2,6 +2,7 @@
 #include "calculator.h"
 #include "error_choice.h"
 #include "message.h"
+#include "merged_definitions.h"
 
 #include "support/doctest.h"
 
@@ -12,11 +13,29 @@
 
 namespace {
    struct calculator_visitor {
-      int operator()(const addition& node) const { return visit(*node.left, *this) + visit(*node.right, *this); }
-      int operator()(const subtraction& node) const { return visit(*node.left, *this) - visit(*node.right, *this); }
-      int operator()(const multiplication& node) const { return visit(*node.left, *this) * visit(*node.right, *this); }
-      int operator()(const division& node) const { return visit(*node.left, *this) / visit(*node.right, *this); }
+      auto visit(auto& node) const { return ::visit(node, *this); }
+      int operator()(const addition& node) const { return visit(*node.left) + visit(*node.right); }
+      int operator()(const subtraction& node) const { return visit(*node.left) - visit(*node.right); }
+      int operator()(const multiplication& node) const { return visit(*node.left) * visit(*node.right); }
+      int operator()(const division& node) const { return visit(*node.left) / visit(*node.right); }
       int operator()(const number& node) const { return std::stoi(node.value); }
+   };
+
+   struct merged_expr_visitor {
+      auto visit(auto& node) const { return ::visit(node, *this); }
+
+      int operator()(const merged_binary& node) const {
+         auto left = visit(*node.left);
+         auto right = visit(*node.right);
+         if (node.op == "+") {
+            return left + right;
+         }
+         return left * right;
+      }
+
+      int operator()(const merged_number& node) const {
+         return std::stoi(node.value);
+      }
    };
 
    int evaluate(std::string_view input) {
@@ -24,6 +43,13 @@ namespace {
       REQUIRE(result.success);
       REQUIRE(result.forest.size() == 1);
       return visit(*result.forest.front(), calculator_visitor{});
+   }
+
+   int evaluate_merged(std::string_view input) {
+      auto result = merged_expr::parse(input);
+      REQUIRE(result.success);
+      REQUIRE(result.forest.size() == 1);
+      return visit(*result.forest.front(), merged_expr_visitor{});
    }
 }
 
@@ -178,6 +204,65 @@ TEST_SUITE("generated.runtime") {
       CHECK(result.error.message.find("while parsing rule 'say_hello'") != std::string::npos);
       CHECK(result.error.message.find("while parsing rule 'say_world'") != std::string::npos);
       CHECK(result.error.message.find("while matching base rule 'choice_message'") != std::string::npos);
+   }
+
+   TEST_CASE("merged concrete rule definitions keep one generated type and mark the matched definition") {
+      SUBCASE("ambiguous same-type parses remain distinguishable through node::definition") {
+         auto result = repeated_token::parse("x");
+
+         REQUIRE(result.success);
+         REQUIRE(result.forest.size() == 2);
+
+         std::vector<std::size_t> definitions;
+         for (const auto& tree : result.forest) {
+            definitions.push_back(tree->definition);
+            CHECK(tree->text == "x");
+         }
+
+         CHECK(definitions == std::vector<std::size_t>{0, 1});
+      }
+
+      SUBCASE("shared labeled references resolve to the nearest common generated base") {
+         auto exclamation = merged_wrapper::parse("bye!");
+         REQUIRE(exclamation.success);
+         REQUIRE(exclamation.forest.size() == 1);
+         CHECK(exclamation.forest.front()->definition == 0);
+         CHECK(exclamation.forest.front()->suffix == "!");
+         REQUIRE(exclamation.forest.front()->payload != nullptr);
+         CHECK(dynamic_cast<const merged_farewell*>(exclamation.forest.front()->payload.get()) != nullptr);
+
+         auto question = merged_wrapper::parse("hello?");
+         REQUIRE(question.success);
+         REQUIRE(question.forest.size() == 1);
+         CHECK(question.forest.front()->definition == 1);
+         CHECK(question.forest.front()->suffix == "?");
+         REQUIRE(question.forest.front()->payload != nullptr);
+         CHECK(dynamic_cast<const merged_greeting*>(question.forest.front()->payload.get()) != nullptr);
+
+         auto cloned = question.forest.front()->clone();
+         REQUIRE(cloned != nullptr);
+         CHECK(cloned->definition == 1);
+         REQUIRE(cloned->payload != nullptr);
+         CHECK(dynamic_cast<const merged_greeting*>(cloned->payload.get()) != nullptr);
+      }
+
+      SUBCASE("default precedence is still evaluated per merged definition") {
+         auto result = merged_expr::parse("1 + 2 * 3");
+
+         REQUIRE(result.success);
+         REQUIRE(result.forest.size() == 1);
+         CHECK(visit(*result.forest.front(), merged_expr_visitor{}) == 7);
+         CHECK(evaluate_merged("4 * 5 + 6") == 26);
+
+         auto* root = dynamic_cast<const merged_binary*>(result.forest.front().get());
+         REQUIRE(root != nullptr);
+         CHECK(root->definition == 0);
+         REQUIRE(root->right != nullptr);
+
+         auto* right = dynamic_cast<const merged_binary*>(root->right.get());
+         REQUIRE(right != nullptr);
+         CHECK(right->definition == 1);
+      }
    }
 }
 

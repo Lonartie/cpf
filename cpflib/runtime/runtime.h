@@ -49,6 +49,9 @@ namespace cpf {
 
    /// @brief Base class for all generated model nodes.
    struct node {
+      /// @brief Zero-based production index within the rule that created this node.
+      std::size_t definition = 0;
+
       virtual ~node() = default;
 
       /// @brief Returns the dynamic type of the concrete node.

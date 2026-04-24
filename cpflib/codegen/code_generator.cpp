@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <functional>
 #include <map>
+#include <optional>
 #include <set>
 #include <sstream>
 #include <stdexcept>
@@ -13,16 +14,26 @@ namespace cpf {
       struct field_info {
          std::string name;
          std::string type;
+         std::string resolved_rule;
          bool node_pointer = false;
       };
 
       struct class_info {
-         const production* primary_production = nullptr;
          std::string name;
          std::string base;
          bool base_rule = false;
-         bool implicit_value = false;
          std::vector<field_info> fields;
+      };
+
+      struct infix_definition_info {
+         const production* production = nullptr;
+         std::string child;
+         std::size_t definition = 0;
+         std::string group;
+         std::string associativity;
+         std::string left_label;
+         std::string right_label;
+         int precedence = 0;
       };
 
       struct family_info {
@@ -30,9 +41,7 @@ namespace cpf {
          bool expression_family = false;
          std::vector<std::string> direct_children;
          std::vector<std::string> primary_children;
-         std::vector<std::string> infix_children;
-         std::map<std::string, int> precedence;
-         std::map<std::string, std::string> associativity;
+         std::vector<infix_definition_info> infix_definitions;
       };
 
       struct precedence_rank {
@@ -61,11 +70,11 @@ namespace cpf {
          stream << std::string(static_cast<std::size_t>(indent) * 3, ' ') << text << '\n';
       }
 
-      [[nodiscard]] bool is_infix_rule(const class_info& info) {
-         if (info.base.empty() || info.primary_production == nullptr) {
+      [[nodiscard]] bool is_infix_production(const class_info& info, const production& production) {
+         if (info.base.empty()) {
             return false;
          }
-         const auto& symbols = info.primary_production->symbols;
+         const auto& symbols = production.symbols;
          return symbols.size() == 3
              && symbols[0].kind == symbol_kind::reference
              && symbols[2].kind == symbol_kind::reference
@@ -74,58 +83,49 @@ namespace cpf {
              && symbols[1].kind != symbol_kind::reference;
       }
 
-      [[nodiscard]] std::string precedence_label(const class_info& info) {
-         if (info.primary_production == nullptr) {
-            return info.name;
+      [[nodiscard]] std::string default_precedence_alias(std::string_view rule_name, const production& production, bool repeated_definition) {
+         if (!repeated_definition) {
+            return std::string{rule_name};
          }
-         if (auto attribute = info.primary_production->find_attribute("prec"); attribute.has_value() && attribute->operation == attribute_operator::assign && !attribute->numeric) {
-            return attribute->value;
-         }
-         if (auto attribute = info.primary_production->find_attribute("lbl"); attribute.has_value()) {
-            return attribute->value;
-         }
-         return info.name;
+         return std::string{rule_name} + "#" + std::to_string(production.definition);
       }
 
-      [[nodiscard]] std::string precedence_alias(const class_info& info) {
-         if (info.primary_production == nullptr) {
-            return info.name;
-         }
-         if (auto attribute = info.primary_production->find_attribute("lbl"); attribute.has_value()) {
+      [[nodiscard]] std::string precedence_label(std::string_view rule_name, const production& production, bool repeated_definition) {
+         if (auto attribute = production.find_attribute("prec"); attribute.has_value() && attribute->operation == attribute_operator::assign && !attribute->numeric) {
             return attribute->value;
          }
-         return info.name;
+         if (auto attribute = production.find_attribute("lbl"); attribute.has_value()) {
+            return attribute->value;
+         }
+         return default_precedence_alias(rule_name, production, repeated_definition);
       }
 
-      [[nodiscard]] std::string associativity_of(const class_info& info) {
-         if (info.primary_production == nullptr) {
-            return "left";
+      [[nodiscard]] std::string precedence_alias(std::string_view rule_name, const production& production, bool repeated_definition) {
+         if (auto attribute = production.find_attribute("lbl"); attribute.has_value()) {
+            return attribute->value;
          }
-         if (auto attribute = info.primary_production->find_attribute("dir"); attribute.has_value()) {
+         return default_precedence_alias(rule_name, production, repeated_definition);
+      }
+
+      [[nodiscard]] std::string associativity_of(const production& production) {
+         if (auto attribute = production.find_attribute("dir"); attribute.has_value()) {
             return attribute->value;
          }
          return "left";
       }
 
-      [[nodiscard]] bool has_absolute_precedence_rank(const class_info& info) {
-         if (info.primary_production == nullptr) {
-            return false;
-         }
-         if (auto attribute = info.primary_production->find_attribute("prec"); attribute.has_value()) {
+      [[nodiscard]] bool has_absolute_precedence_rank(const production& production) {
+         if (auto attribute = production.find_attribute("prec"); attribute.has_value()) {
             return attribute->numeric;
          }
          return true;
       }
 
-      [[nodiscard]] precedence_rank precedence_rank_of(const class_info& info) {
+      [[nodiscard]] precedence_rank precedence_rank_of(const production& production) {
          precedence_rank rank;
-         if (info.primary_production == nullptr) {
-            return rank;
-         }
-
-         rank.line = info.primary_production->line;
-         rank.value = static_cast<int>(info.primary_production->line);
-         if (auto attribute = info.primary_production->find_attribute("prec"); attribute.has_value() && attribute->numeric) {
+         rank.line = production.line;
+         rank.value = static_cast<int>(production.line);
+         if (auto attribute = production.find_attribute("prec"); attribute.has_value() && attribute->numeric) {
             rank.explicit_value = true;
             rank.value = std::stoi(attribute->value);
          }
@@ -172,6 +172,57 @@ namespace cpf {
          return "copy->" + field.name + " = " + field.name + " ? " + field.name + "->clone() : nullptr;";
       }
 
+      [[nodiscard]] std::string describe_field_type(const field_info& field) {
+         return field.node_pointer ? field.resolved_rule : "std::string";
+      }
+
+      [[nodiscard]] std::optional<std::string> common_rule_base(
+         std::string_view left,
+         std::string_view right,
+         const std::unordered_map<std::string, std::string>& bases) {
+         std::set<std::string> left_ancestors;
+         auto current = std::string{left};
+         while (!current.empty()) {
+            left_ancestors.insert(current);
+            auto base_it = bases.find(current);
+            if (base_it == bases.end()) {
+               break;
+            }
+            current = base_it->second;
+         }
+
+         current = std::string{right};
+         while (!current.empty()) {
+            if (left_ancestors.contains(current)) {
+               return current;
+            }
+            auto base_it = bases.find(current);
+            if (base_it == bases.end()) {
+               break;
+            }
+            current = base_it->second;
+         }
+
+         return std::nullopt;
+      }
+
+      void register_group_alias(
+         std::unordered_map<std::string, std::string>& alias_to_group,
+         std::string_view alias,
+         std::string_view group,
+         std::string_view family_name) {
+         if (alias.empty()) {
+            return;
+         }
+
+         auto alias_text = std::string{alias};
+         auto group_text = std::string{group};
+         if (auto alias_it = alias_to_group.find(alias_text); alias_it != alias_to_group.end() && alias_it->second != group_text) {
+            throw std::runtime_error{"Expression family '" + std::string{family_name} + "' cannot use precedence alias '" + alias_text + "' for both '" + alias_it->second + "' and '" + group_text + "'"};
+         }
+         alias_to_group[alias_text] = std::move(group_text);
+      }
+
       [[nodiscard]] std::string render_symbol_debug(const symbol& symbol) {
          std::string text;
          if (symbol.kind == symbol_kind::reference) {
@@ -202,9 +253,6 @@ namespace cpf {
          std::unordered_map<std::string, std::string> bases;
 
          for (const auto& rule : grammar.rules) {
-            if (rules_by_name.contains(rule.identifier)) {
-               throw std::runtime_error{"Duplicate rule '" + rule.identifier + "'"};
-            }
             rules_by_name[rule.identifier] = &rule;
          }
 
@@ -224,43 +272,104 @@ namespace cpf {
 
          std::unordered_map<std::string, class_info> classes;
          for (const auto& rule : grammar.rules) {
-            if (!rule.is_choice_rule() && rule.productions.size() != 1) {
-               throw std::runtime_error{"Rule '" + rule.identifier + "' must have exactly one production unless it is a pure choice rule"};
+            class_info info;
+            info.name = rule.identifier;
+            const auto has_choice_definitions = std::any_of(rule.productions.begin(), rule.productions.end(), [](const auto& production) {
+               return production.is_direct_reference_choice();
+            });
+            const auto has_concrete_definitions = std::any_of(rule.productions.begin(), rule.productions.end(), [](const auto& production) {
+               return !production.is_direct_reference_choice();
+            });
+            if (has_choice_definitions && has_concrete_definitions) {
+               throw std::runtime_error{"Rule '" + rule.identifier + "' mixes choice-style and concrete definitions"};
             }
 
-            class_info info;
-            info.primary_production = rule.productions.empty() ? nullptr : &rule.productions.front();
-            info.name = rule.identifier;
-            info.base_rule = rule.is_choice_rule();
+            info.base_rule = has_choice_definitions;
             if (auto base_it = bases.find(rule.identifier); base_it != bases.end()) {
                info.base = base_it->second;
             }
-            if (!info.base_rule && info.primary_production != nullptr) {
-               info.implicit_value = is_single_unlabeled_terminal(*info.primary_production);
-               for (const auto& symbol : info.primary_production->symbols) {
-                  if (!symbol.has_label()) {
-                     continue;
+
+            if (!info.base_rule) {
+               std::unordered_map<std::string, field_info> resolved_fields;
+               std::vector<std::string> field_order;
+
+               auto merge_field = [&](field_info field) {
+                  auto existing_it = resolved_fields.find(field.name);
+                  if (existing_it == resolved_fields.end()) {
+                     field_order.push_back(field.name);
+                     resolved_fields.emplace(field.name, std::move(field));
+                     return;
                   }
-                  field_info field;
-                  field.name = symbol.label;
-                  field.node_pointer = symbol.kind == symbol_kind::reference;
-                  field.type = field.node_pointer ? "std::unique_ptr<" + symbol.value + ">" : "std::string";
-                  info.fields.push_back(std::move(field));
+
+                  auto& existing = existing_it->second;
+                  if (existing.node_pointer != field.node_pointer) {
+                     throw std::runtime_error{"Rule '" + rule.identifier + "' label '" + field.name + "' has conflicting member types '" + describe_field_type(existing) + "' and '" + describe_field_type(field) + "'"};
+                  }
+                  if (!existing.node_pointer) {
+                     return;
+                  }
+
+                  auto common_base = common_rule_base(existing.resolved_rule, field.resolved_rule, bases);
+                  if (!common_base.has_value()) {
+                     throw std::runtime_error{"Rule '" + rule.identifier + "' label '" + field.name + "' cannot resolve a common member type for rules '" + existing.resolved_rule + "' and '" + field.resolved_rule + "'"};
+                  }
+
+                  existing.resolved_rule = *common_base;
+                  existing.type = "std::unique_ptr<" + *common_base + ">";
+               };
+
+               for (const auto& production : rule.productions) {
+                  std::set<std::string> labels_in_definition;
+                  for (const auto& symbol : production.symbols) {
+                     if (symbol.kind == symbol_kind::reference && !rules_by_name.contains(symbol.value)) {
+                        throw std::runtime_error{"Rule '" + rule.identifier + "' references unknown rule '" + symbol.value + "'"};
+                     }
+                     if (!symbol.has_label()) {
+                        continue;
+                     }
+                     if (!labels_in_definition.insert(symbol.label).second) {
+                        throw std::runtime_error{"Rule '" + rule.identifier + "' uses label '" + symbol.label + "' more than once in definition " + std::to_string(production.definition)};
+                     }
+
+                     field_info field;
+                     field.name = symbol.label;
+                     field.node_pointer = symbol.kind == symbol_kind::reference;
+                     if (field.node_pointer) {
+                        field.resolved_rule = symbol.value;
+                        field.type = "std::unique_ptr<" + symbol.value + ">";
+                     } else {
+                        field.type = "std::string";
+                     }
+                     merge_field(std::move(field));
+                  }
+
+                  if (is_single_unlabeled_terminal(production)) {
+                     merge_field(field_info{"value", "std::string", {}, false});
+                  }
                }
-               if (info.implicit_value) {
-                  info.fields.push_back(field_info{"value", "std::string", false});
+
+               for (const auto& field_name : field_order) {
+                  info.fields.push_back(resolved_fields.at(field_name));
                }
             }
             classes.emplace(info.name, std::move(info));
          }
 
+         std::unordered_map<std::string, std::unordered_map<std::string, field_info>> fields_by_rule;
          for (const auto& [name, info] : classes) {
-            if (info.primary_production == nullptr) {
-               continue;
+            std::unordered_map<std::string, field_info> fields;
+            for (const auto& field : info.fields) {
+               fields.emplace(field.name, field);
             }
-            for (const auto& symbol : info.primary_production->symbols) {
-               if (symbol.kind == symbol_kind::reference && !rules_by_name.contains(symbol.value)) {
-                  throw std::runtime_error{"Rule '" + name + "' references unknown rule '" + symbol.value + "'"};
+            fields_by_rule.emplace(name, std::move(fields));
+         }
+
+         for (const auto& [name, info] : classes) {
+            for (const auto& production : rules_by_name.at(name)->productions) {
+               for (const auto& symbol : production.symbols) {
+                  if (symbol.kind == symbol_kind::reference && !rules_by_name.contains(symbol.value)) {
+                     throw std::runtime_error{"Rule '" + name + "' references unknown rule '" + symbol.value + "'"};
+                  }
                }
             }
          }
@@ -285,44 +394,58 @@ namespace cpf {
                   family.primary_children.push_back(child);
                   continue;
                }
-               if (is_infix_rule(child_info)) {
-                  family.expression_family = true;
-                  family.infix_children.push_back(child);
-                  auto group = precedence_label(child_info);
-                  alias_to_group[child] = group;
-                  alias_to_group[precedence_alias(child_info)] = group;
-                  group_line[group] = std::min(group_line.contains(group) ? group_line[group] : child_info.primary_production->line, child_info.primary_production->line);
-                  if (has_absolute_precedence_rank(child_info)) {
-                     auto rank = precedence_rank_of(child_info);
-                     if (!group_rank.contains(group)
-                      || (rank.explicit_value && !group_rank[group].explicit_value)
-                      || (rank.explicit_value == group_rank[group].explicit_value
-                       && (rank.value < group_rank[group].value
-                        || (rank.value == group_rank[group].value && rank.line < group_rank[group].line)))) {
-                        group_rank[group] = rank;
+
+               auto has_primary_definition = false;
+               const auto repeated_child_definitions = rules_by_name.at(child)->productions.size() > 1;
+               for (const auto& production : rules_by_name.at(child)->productions) {
+                  if (is_infix_production(child_info, production)) {
+                     family.expression_family = true;
+
+                     infix_definition_info infix_definition;
+                     infix_definition.production = &production;
+                     infix_definition.child = child;
+                     infix_definition.definition = production.definition;
+                     infix_definition.group = precedence_label(child_info.name, production, repeated_child_definitions);
+                     infix_definition.associativity = associativity_of(production);
+                     infix_definition.left_label = production.symbols[0].label.empty() ? "left" : production.symbols[0].label;
+                     infix_definition.right_label = production.symbols[2].label.empty() ? "right" : production.symbols[2].label;
+                     family.infix_definitions.push_back(infix_definition);
+
+                     register_group_alias(alias_to_group, precedence_alias(child_info.name, production, repeated_child_definitions), infix_definition.group, family.name);
+                     group_line[infix_definition.group] = std::min(group_line.contains(infix_definition.group) ? group_line[infix_definition.group] : production.line, production.line);
+                     if (has_absolute_precedence_rank(production)) {
+                        auto rank = precedence_rank_of(production);
+                        if (!group_rank.contains(infix_definition.group)
+                         || (rank.explicit_value && !group_rank[infix_definition.group].explicit_value)
+                         || (rank.explicit_value == group_rank[infix_definition.group].explicit_value
+                          && (rank.value < group_rank[infix_definition.group].value
+                           || (rank.value == group_rank[infix_definition.group].value && rank.line < group_rank[infix_definition.group].line)))) {
+                           group_rank[infix_definition.group] = rank;
+                        }
                      }
+                  } else {
+                     has_primary_definition = true;
                   }
-                  family.associativity[child] = associativity_of(child_info);
-               } else {
+               }
+
+               if (has_primary_definition) {
                   family.primary_children.push_back(child);
                }
             }
 
-            for (const auto& child : family.infix_children) {
-               const auto& child_info = classes.at(child);
-               auto group = precedence_label(child_info);
-               if (auto attribute = child_info.primary_production->find_attribute("prec"); attribute.has_value() && !attribute->numeric) {
+            for (const auto& infix_definition : family.infix_definitions) {
+               if (auto attribute = infix_definition.production->find_attribute("prec"); attribute.has_value() && !attribute->numeric) {
                   if (attribute->operation == attribute_operator::less_than) {
-                     edges[group].insert(attribute->value);
+                     edges[infix_definition.group].insert(attribute->value);
                   } else if (attribute->operation == attribute_operator::greater_than) {
-                     edges[attribute->value].insert(group);
+                     edges[attribute->value].insert(infix_definition.group);
                   }
                }
             }
 
             std::set<std::string> all_groups;
-            for (const auto& child : family.infix_children) {
-               all_groups.insert(precedence_label(classes.at(child)));
+            for (const auto& infix_definition : family.infix_definitions) {
+               all_groups.insert(infix_definition.group);
             }
             for (const auto& edge : edges) {
                all_groups.insert(edge.first);
@@ -397,9 +520,9 @@ namespace cpf {
             }
 
             for (std::size_t i = 0; i < ordered_groups.size(); ++i) {
-               for (const auto& child : family.infix_children) {
-                  if (precedence_label(classes.at(child)) == ordered_groups[i]) {
-                     family.precedence[child] = static_cast<int>(i + 1);
+               for (auto& infix_definition : family.infix_definitions) {
+                  if (infix_definition.group == ordered_groups[i]) {
+                     infix_definition.precedence = static_cast<int>(i + 1);
                   }
                }
             }
@@ -563,6 +686,15 @@ namespace cpf {
          }
          line(source, 1, "}};");
          line(source, 1, "constexpr cpf::detail::grammar_spec grammar_spec{grammar_productions.data(), grammar_productions.size(), " + std::to_string(grammar.rules.size()) + "};");
+          line(source, 1, "constexpr std::array<std::string_view, " + std::to_string(grammar.rules.size()) + "> grammar_rule_names{{");
+          for (std::size_t i = 0; i < grammar.rules.size(); ++i) {
+             auto rendered_name = cpp_string_literal(grammar.rules[i].identifier);
+             if (i + 1 != grammar.rules.size()) {
+                rendered_name += ",";
+             }
+             line(source, 2, rendered_name);
+          }
+          line(source, 1, "}};");
          line(source, 0);
 
          for (const auto& rule : grammar.rules) {
@@ -574,10 +706,27 @@ namespace cpf {
 
             const auto& family = family_it->second;
             line(source, 1, "int precedence_of_" + family.name + "(const " + family.name + "& node) {");
-            for (const auto& child : family.infix_children) {
-               line(source, 2, "if (dynamic_cast<const " + child + "*>(&node) != nullptr) {");
-               line(source, 3, "return " + std::to_string(family.precedence.at(child)) + ";");
+             for (const auto& child : family.direct_children) {
+                std::vector<const infix_definition_info*> child_definitions;
+                for (const auto& infix_definition : family.infix_definitions) {
+                   if (infix_definition.child == child) {
+                      child_definitions.push_back(&infix_definition);
+                   }
+                }
+                if (child_definitions.empty()) {
+                   continue;
+                }
+
+                line(source, 2, "if (auto* value = dynamic_cast<const " + child + "*>(&node)) {");
+                line(source, 3, "switch (value->definition) {");
+                for (const auto* infix_definition : child_definitions) {
+                   line(source, 4, "case " + std::to_string(infix_definition->definition) + ":");
+                   line(source, 5, "return " + std::to_string(infix_definition->precedence) + ";");
+                }
+                line(source, 4, "default:");
+                line(source, 5, "return 0;");
                line(source, 2, "}");
+                line(source, 2, "}");
             }
             line(source, 2, "return 0;");
             line(source, 1, "}");
@@ -604,7 +753,18 @@ namespace cpf {
             if (info.base_rule) {
                continue;
             }
-            auto needs_value = is_infix_rule(info);
+             std::vector<const infix_definition_info*> infix_definitions;
+             if (!info.base.empty()) {
+                if (auto family_it = families.find(info.base); family_it != families.end()) {
+                   for (const auto& infix_definition : family_it->second.infix_definitions) {
+                      if (infix_definition.child == info.name) {
+                         infix_definitions.push_back(&infix_definition);
+                      }
+                   }
+                }
+             }
+
+             auto needs_value = !infix_definitions.empty();
             for (const auto& field : info.fields) {
                if (field.node_pointer) {
                   needs_value = true;
@@ -626,20 +786,24 @@ namespace cpf {
                line(source, 3, "}");
             }
 
-            if (is_infix_rule(info)) {
-               const auto& symbols = info.primary_production->symbols;
-               const auto left_label = symbols[0].label.empty() ? "left" : symbols[0].label;
-               const auto right_label = symbols[2].label.empty() ? "right" : symbols[2].label;
-               const auto& family = families.at(info.base);
-               const auto precedence = std::to_string(family.precedence.at(info.name));
-               const auto left_associative = family.associativity.at(info.name) == "left" ? "true" : "false";
+             if (!infix_definitions.empty()) {
+                line(source, 3, "switch (value->definition) {");
+                for (const auto* infix_definition : infix_definitions) {
+                   const auto precedence = std::to_string(infix_definition->precedence);
+                   const auto left_associative = infix_definition->associativity == "left" ? "true" : "false";
 
-               line(source, 3, "if (value->" + left_label + " && !validate_" + info.base + "_child(*value->" + left_label + ", " + precedence + ", " + left_associative + ", true)) {");
-               line(source, 4, "return false;");
-               line(source, 3, "}");
-               line(source, 3, "if (value->" + right_label + " && !validate_" + info.base + "_child(*value->" + right_label + ", " + precedence + ", " + left_associative + ", false)) {");
-               line(source, 4, "return false;");
-               line(source, 3, "}");
+                   line(source, 4, "case " + std::to_string(infix_definition->definition) + ":");
+                   line(source, 5, "if (value->" + infix_definition->left_label + " && !validate_" + info.base + "_child(*value->" + infix_definition->left_label + ", " + precedence + ", " + left_associative + ", true)) {");
+                   line(source, 6, "return false;");
+                   line(source, 5, "}");
+                   line(source, 5, "if (value->" + infix_definition->right_label + " && !validate_" + info.base + "_child(*value->" + infix_definition->right_label + ", " + precedence + ", " + left_associative + ", false)) {");
+                   line(source, 6, "return false;");
+                   line(source, 5, "}");
+                   line(source, 5, "break;");
+                }
+                line(source, 4, "default:");
+                line(source, 5, "break;");
+                line(source, 3, "}");
             }
 
             line(source, 3, "return true;");
@@ -660,16 +824,18 @@ namespace cpf {
                   line(source, 4, "return build_node(std::get<parse_node_ptr>(tree->children.front()));");
                } else {
                   line(source, 4, "auto node = std::make_unique<" + info.name + ">();");
+                  line(source, 4, "node->definition = " + std::to_string(production.definition) + ";");
                   for (std::size_t i = 0; i < production.symbols.size(); ++i) {
                      const auto& symbol = production.symbols[i];
                      if (symbol.kind == symbol_kind::reference) {
                         if (symbol.has_label()) {
+                           const auto& field = fields_by_rule.at(info.name).at(symbol.label);
                            line(source, 4, "auto child_" + std::to_string(i) + " = build_node(std::get<parse_node_ptr>(tree->children[" + std::to_string(i) + "]));");
-                           line(source, 4, "node->" + symbol.label + " = std::unique_ptr<" + symbol.value + ">{static_cast<" + symbol.value + "*>(child_" + std::to_string(i) + ".release())};");
+                           line(source, 4, "node->" + symbol.label + " = std::unique_ptr<" + field.resolved_rule + ">{static_cast<" + field.resolved_rule + "*>(child_" + std::to_string(i) + ".release())};");
                         }
                      } else if (symbol.has_label()) {
                         line(source, 4, "node->" + symbol.label + " = std::get<std::string>(tree->children[" + std::to_string(i) + "]); ");
-                     } else if (info.implicit_value) {
+                     } else if (is_single_unlabeled_terminal(production)) {
                         line(source, 4, "node->value = std::get<std::string>(tree->children[" + std::to_string(i) + "]); ");
                      }
                   }
@@ -709,7 +875,7 @@ namespace cpf {
          line(source, 2, "}");
          line(source, 2, "result.error.expected.push_back(\"valid parse tree\");");
          line(source, 2, "result.error.found = \"<filtered parse>\";");
-         line(source, 2, "result.error.notes.push_back(std::string{\"completed Earley parses for rule '\"} + std::string{grammar_spec.productions[root_rule].lhs_name} + \"' were rejected by precedence/associativity constraints\");");
+         line(source, 2, "result.error.notes.push_back(std::string{\"completed Earley parses for rule '\"} + std::string{grammar_rule_names[root_rule]} + \"' were rejected by precedence/associativity constraints\");");
          line(source, 2, "cpf::detail::error_tracker::finalize(result.error);");
          line(source, 2, "return result;");
          line(source, 1, "}");
@@ -766,6 +932,7 @@ namespace cpf {
             if (!info.base_rule) {
                line(source, 0, "std::unique_ptr<cpf::node> " + info.name + "::clone_node() const {");
                line(source, 1, "auto copy = std::make_unique<" + info.name + ">();");
+               line(source, 1, "copy->definition = definition;");
                for (const auto& field : info.fields) {
                   if (field.node_pointer) {
                      line(source, 1, render_child_clone_expression(field));

@@ -58,6 +58,24 @@ number -> r'[0-9]+';
 
 parses `1 + 2 * 3` as `1 + (2 * 3)` even though no explicit attributes are written.
 
+Rules may also be declared multiple times. CPF merges every production for the same identifier into one generated node type while keeping per-production attributes and defaults intact.
+
+```text
+message -> greeting | farewell;
+greeting -> 'hello':text;
+farewell -> 'bye':text;
+
+wrapper -> message:payload '!':suffix;
+wrapper -> greeting:payload '?':suffix;
+```
+
+The generated `wrapper` node still appears only once. Shared labels are merged across all definitions:
+
+- terminal labels stay `std::string`
+- reference labels resolve to the nearest common generated base type when possible
+- incompatible merges fail during generation with a descriptive error
+- repeated infix definitions keep separate default precedence groups, so source-order defaults still work after merging; use explicit `lbl` values when you want to reference those groups relatively
+
 ## Generated API shape
 
 For the calculator grammar above, CPF generates a model like this:
@@ -103,6 +121,8 @@ Each generated rule also gets:
 - `visit(...)`
 - `visit_recursive(...)`
 
+Every generated node also inherits `std::size_t definition` from `cpf::node`. It is the zero-based merged production index that matched when the node was built.
+
 ## Error handling
 
 Every parse entry point returns `cpf::parse_result<T>`.
@@ -115,7 +135,7 @@ Every parse entry point returns `cpf::parse_result<T>`.
 
 - ambiguous grammars can therefore return more than one tree in `forest`
 - precedence and associativity attributes are applied as disambiguation constraints over expression-family parses
-- ambiguous concrete rules with multiple productions are still rejected during code generation because the generated AST layout is one concrete struct per rule
+- ambiguous concrete rules with repeated definitions now produce multiple trees of the same generated type, distinguished by `node::definition`
 
 For unambiguous grammars, the current tests still expect a single parse tree per successful parse.
 

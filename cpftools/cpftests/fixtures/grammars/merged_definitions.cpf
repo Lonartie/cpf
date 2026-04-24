@@ -1,0 +1,15 @@
+merged_message -> merged_greeting | merged_farewell;
+merged_greeting -> 'hello':text;
+merged_farewell -> 'bye':text;
+
+merged_wrapper -> merged_message:payload '!':suffix;
+merged_wrapper -> merged_greeting:payload '?':suffix;
+
+repeated_token -> 'x':text;
+repeated_token -> r'x':text;
+
+merged_expr -> merged_binary | merged_number;
+merged_binary -> merged_expr:left '+':op merged_expr:right;
+merged_binary -> merged_expr:left '*':op merged_expr:right;
+merged_number -> r'[0-9]+';
+

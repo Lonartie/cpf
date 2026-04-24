@@ -17,6 +17,10 @@ namespace cpf {
             while (!eof()) {
                auto parsed_rule = parse_rule();
                if (auto* existing = result.find_rule(parsed_rule.identifier); existing != nullptr) {
+                  const auto definition_offset = existing->productions.size();
+                  for (auto& production : parsed_rule.productions) {
+                     production.definition += definition_offset;
+                  }
                   existing->productions.insert(existing->productions.end(), parsed_rule.productions.begin(), parsed_rule.productions.end());
                } else {
                   result.rules.push_back(std::move(parsed_rule));
@@ -254,7 +258,9 @@ namespace cpf {
             auto attributes = parse_attributes();
             expect("->");
             do {
-               parsed_rule.productions.push_back(parse_production(attributes, line));
+               auto parsed_production = parse_production(attributes, line);
+               parsed_production.definition = parsed_rule.productions.size();
+               parsed_rule.productions.push_back(std::move(parsed_production));
             } while (take("|"));
             expect(";");
             current_rule_.clear();
