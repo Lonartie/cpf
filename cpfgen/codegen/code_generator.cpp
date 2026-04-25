@@ -1106,7 +1106,7 @@ namespace cpf {
             }
             line(header, 1, "~" + info.name + "() override = default;");
              line(header, 1, "static std::array<cpf::complexity, " + std::to_string(definition_count) + "> Complexity;");
-            line(header, 1, "static parse_result parse(std::string_view input);");
+            line(header, 1, "static parse_result parse(std::string_view input, const cpf::parse_options& options = {});");
              line(header, 1, "static auto complexity_inputs(std::size_t rule_id) -> std::span<const std::string_view>;");
              line(header, 1, "static auto recompute_complexity(std::size_t rule_id) -> const cpf::complexity&;");
             line(header, 1, "std::size_t rule_id() const override;");
@@ -1854,8 +1854,23 @@ namespace cpf {
          line(source, 0);
 
          line(source, 1, "template<typename T>");
-         line(source, 1, "cpf::parse_result<T> parse_generated(std::string_view input, std::size_t root_rule) {");
+         line(source, 1, "cpf::parse_result<T> parse_generated(std::string_view input, std::size_t root_rule, const cpf::parse_options& options) {");
          line(source, 2, "cpf::parse_result<T> result;");
+         line(source, 2, "if (!options.build_ast || options.error_on_ambiguity) {");
+         line(source, 3, "auto inspected = cpf::detail::earley_inspect(input, grammar_spec, root_rule);");
+         line(source, 3, "if (!inspected.success) {");
+         line(source, 4, "result.error = std::move(inspected.error);");
+         line(source, 4, "return result;");
+         line(source, 3, "}");
+         line(source, 3, "if (options.error_on_ambiguity && inspected.ambiguous) {");
+         line(source, 4, "result.error = cpf::detail::make_ambiguity_error(grammar_rule_names[root_rule]);");
+         line(source, 4, "return result;");
+         line(source, 3, "}");
+         line(source, 3, "if (!options.build_ast) {");
+         line(source, 4, "result.success = true;");
+         line(source, 4, "return result;");
+         line(source, 3, "}");
+         line(source, 2, "}");
          line(source, 2, "auto forest = cpf::detail::earley_parse(input, grammar_spec, root_rule);");
          line(source, 2, "if (!forest.success) {");
          line(source, 3, "result.error = std::move(forest.error);");
@@ -1890,19 +1905,29 @@ namespace cpf {
             }
             const auto& info = classes.at(rule.identifier);
              const auto definition_count = rule.productions.size();
-            line(source, 0, info.name + "::parse_result " + info.name + "::parse(std::string_view input) {");
+            line(source, 0, info.name + "::parse_result " + info.name + "::parse(std::string_view input, const cpf::parse_options& options) {");
             if (info.base_rule) {
                line(source, 1, "parse_result result;");
                line(source, 1, "cpf::parse_error best_error;");
                line(source, 1, "auto have_error = false;");
+                line(source, 1, "auto successful_children = std::size_t{0};");
                for (const auto& child : families.at(info.name).direct_children) {
                   line(source, 1, "{");
-                  line(source, 2, "auto child_result = " + child + "::parse(input);");
+                   line(source, 2, "auto child_result = " + child + "::parse(input, options);");
                   line(source, 2, "if (child_result.success) {");
+                   line(source, 3, "++successful_children;");
+                   line(source, 3, "if (options.error_on_ambiguity && successful_children > 1) {");
+                   line(source, 4, "result.success = false;");
+                   line(source, 4, "result.forest.clear();");
+                   line(source, 4, "result.error = cpf::detail::make_ambiguity_error(" + cpp_string_literal(info.name) + ");");
+                   line(source, 4, "return result;");
+                   line(source, 3, "}");
                   line(source, 3, "result.success = true;");
-                  line(source, 3, "for (auto& tree : child_result.forest) {");
-                  line(source, 4, "result.forest.push_back(std::unique_ptr<" + info.name + ">{static_cast<" + info.name + "*>(tree.release())});");
-                  line(source, 3, "}");
+                   line(source, 3, "if (options.build_ast) {");
+                   line(source, 4, "for (auto& tree : child_result.forest) {");
+                   line(source, 5, "result.forest.push_back(std::unique_ptr<" + info.name + ">{static_cast<" + info.name + "*>(tree.release())});");
+                   line(source, 4, "}");
+                   line(source, 3, "}");
                   line(source, 2, "} else if (!have_error) {");
                   line(source, 3, "best_error = child_result.error;");
                   line(source, 3, "have_error = true;");
@@ -1911,7 +1936,7 @@ namespace cpf {
                   line(source, 2, "}");
                   line(source, 1, "}");
                }
-               line(source, 1, "if (!result.forest.empty()) {");
+                line(source, 1, "if (result.success) {");
                line(source, 2, "return result;");
                line(source, 1, "}");
                line(source, 1, "if (have_error) {");
@@ -1921,7 +1946,7 @@ namespace cpf {
                line(source, 1, "}");
                line(source, 1, "return result;");
             } else {
-               line(source, 1, "return parse_generated<" + info.name + ">(input, " + std::to_string(rule_indices.at(info.name)) + ");");
+               line(source, 1, "return parse_generated<" + info.name + ">(input, " + std::to_string(rule_indices.at(info.name)) + ", options);");
             }
             line(source, 0, "}");
             line(source, 0);

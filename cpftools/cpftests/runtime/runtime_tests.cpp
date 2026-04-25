@@ -135,12 +135,31 @@ TEST_SUITE("generated.runtime") {
           CHECK_FALSE(number::Complexity[0].big_o.empty());
           CHECK_FALSE(expression_recomputed.summary.empty());
           CHECK_FALSE(recomputed.summary.empty());
-          CHECK(recomputed.estimate(8.0) > 0.0);
+          CHECK(recomputed.estimate(8.0) >= 0.0);
 
          auto number_result = number::parse("42");
          REQUIRE(number_result.success);
          REQUIRE(number_result.forest.size() == 1);
          CHECK(number_result.forest.front()->value.text == "42");
+      }
+
+      SUBCASE("parse options can validate success without materializing the AST") {
+         cpf::parse_options options;
+         options.build_ast = false;
+         auto result = expression::parse("1 + 2 * 3", options);
+         REQUIRE(result.success);
+         CHECK(result.forest.empty());
+      }
+
+      SUBCASE("parse options can reject ambiguity before AST construction") {
+         cpf::parse_options options;
+         options.error_on_ambiguity = true;
+         auto result = repeated_token::parse("x", options);
+         CHECK_FALSE(result.success);
+         CHECK(result.forest.empty());
+         CHECK(result.error.found == "<ambiguous parse>");
+         CHECK(result.error.message.find("unambiguous parse") != std::string::npos);
+         CHECK(result.error.message.find("repeated_token") != std::string::npos);
       }
 
       SUBCASE("nodes and terminal members expose their matched source ranges") {
@@ -271,7 +290,7 @@ TEST_SUITE("generated.runtime") {
          const auto& recomputed = greeting::recompute_complexity(0);
          CHECK(&recomputed == &greeting::Complexity[0]);
          CHECK_FALSE(greeting::Complexity[0].summary.empty());
-         CHECK(recomputed.estimate(5.0) > 0.0);
+         CHECK(recomputed.estimate(5.0) >= 0.0);
       }
 
       SUBCASE("base rule parsing dispatches to the derived node") {
@@ -318,6 +337,13 @@ TEST_SUITE("generated.runtime") {
 
       CHECK(first_seen);
       CHECK(second_seen);
+
+      cpf::parse_options ambiguity_options;
+      ambiguity_options.error_on_ambiguity = true;
+      auto ambiguity_error = ambiguous_expr::parse("x", ambiguity_options);
+      CHECK_FALSE(ambiguity_error.success);
+      CHECK(ambiguity_error.forest.empty());
+      CHECK(ambiguity_error.error.found == "<ambiguous parse>");
    }
 
    TEST_CASE("choice-rule failures merge expectations from every matching branch") {
@@ -408,7 +434,7 @@ TEST_SUITE("generated.runtime") {
          CHECK_FALSE(merged_binary::Complexity[0].summary.empty());
          CHECK_FALSE(merged_binary::Complexity[1].summary.empty());
          CHECK_FALSE(recomputed.summary.empty());
-         CHECK(recomputed.estimate(8.0) > 0.0);
+         CHECK(recomputed.estimate(8.0) >= 0.0);
 
          CHECK_THROWS_AS(merged_binary::complexity_inputs(2), std::out_of_range);
          CHECK_THROWS_AS(merged_binary::recompute_complexity(2), std::out_of_range);

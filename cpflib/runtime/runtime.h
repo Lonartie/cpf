@@ -48,6 +48,14 @@ namespace cpf {
       parse_error error;
    };
 
+   /// @brief Options that control generated parser behavior.
+   struct parse_options {
+      /// @brief When false, parsing validates syntax and constraints without materializing the AST forest.
+      bool build_ast = true;
+      /// @brief When true, parsing fails as soon as multiple valid derivations are detected.
+      bool error_on_ambiguity = false;
+   };
+
    /// @brief One position within an input source.
    struct source_position {
       /// @brief Zero-based byte offset in the original input.
@@ -245,6 +253,15 @@ namespace cpf {
             append_unique(target.notes, note);
          }
          error_tracker::finalize(target);
+      }
+
+      inline auto make_ambiguity_error(std::string_view rule_name) -> parse_error {
+         parse_error error;
+         error.expected.push_back("unambiguous parse");
+         error.found = "<ambiguous parse>";
+         error.notes.push_back("multiple valid derivations were detected while parsing rule '" + std::string{rule_name} + "'");
+         error_tracker::finalize(error);
+         return error;
       }
 
       inline bool starts_with(std::string_view input, std::size_t position, std::string_view literal) {
@@ -459,45 +476,80 @@ namespace cpf {
          return std::nullopt;
       }
 
-      inline parse_forest earley_parse(std::string_view input, const grammar_spec& grammar, std::size_t root_rule) {
-         parse_forest result;
-         error_tracker tracker;
+      struct inspect_result {
+         bool success = false;
+         bool ambiguous = false;
+         parse_error error;
+      };
 
-         struct chart_column {
-            std::vector<chart_item_key> items;
-            std::unordered_set<chart_item_key, chart_item_key_hash> indices;
+      struct chart_column {
+         std::vector<chart_item_key> items;
+         std::unordered_set<chart_item_key, chart_item_key_hash> indices;
 
-            bool add(std::size_t production, std::size_t dot, std::size_t start) {
-               auto key = chart_item_key{production, dot, start};
-               if (!indices.insert(key).second) {
-                  return false;
-               }
-               items.push_back(key);
-               return true;
+         bool add(std::size_t production, std::size_t dot, std::size_t start) {
+            auto key = chart_item_key{production, dot, start};
+            if (!indices.insert(key).second) {
+               return false;
             }
-         };
+            items.push_back(key);
+            return true;
+         }
+      };
 
-         std::vector<chart_column> chart(input.size() + 1);
-         auto has_root_production = false;
-          const auto root_begin = grammar.rule_production_offsets[root_rule];
-          const auto root_count = grammar.rule_production_counts[root_rule];
-          for (std::size_t offset = 0; offset < root_count; ++offset) {
-             chart.front().add(grammar.rule_production_indices[root_begin + offset], 0, 0);
-             has_root_production = true;
+      struct prepared_parse {
+         bool has_root_production = false;
+         std::vector<chart_column> chart;
+         std::unordered_map<span_key, std::vector<std::size_t>, span_key_hash> completed_rules;
+         std::unordered_set<span_key, span_key_hash> completed_productions;
+         std::unordered_map<rule_start_key, std::vector<std::size_t>, rule_start_key_hash> rule_ends;
+         parse_error error;
+      };
+
+      inline auto capped_add(std::size_t left, std::size_t right, std::size_t limit) -> std::size_t {
+         if (left >= limit || right >= limit) {
+            return limit;
+         }
+         auto remaining = limit - left;
+         return left + std::min(right, remaining);
+      }
+
+      inline auto capped_mul(std::size_t left, std::size_t right, std::size_t limit) -> std::size_t {
+         if (left == 0 || right == 0) {
+            return 0;
+         }
+         if (left >= limit || right >= limit) {
+            return limit;
+         }
+         if (left > (limit / right)) {
+            return limit;
+         }
+         return std::min(limit, left * right);
+      }
+
+      inline auto prepare_earley_parse(std::string_view input, const grammar_spec& grammar, std::size_t root_rule) -> prepared_parse {
+         prepared_parse prepared;
+         error_tracker tracker;
+         prepared.chart.resize(input.size() + 1);
+
+         const auto root_begin = grammar.rule_production_offsets[root_rule];
+         const auto root_count = grammar.rule_production_counts[root_rule];
+         for (std::size_t offset = 0; offset < root_count; ++offset) {
+            prepared.chart.front().add(grammar.rule_production_indices[root_begin + offset], 0, 0);
+            prepared.has_root_production = true;
          }
 
-         if (!has_root_production) {
-            result.error.message = "Parse error: root rule has no productions";
-            return result;
+         if (!prepared.has_root_production) {
+            prepared.error.message = "Parse error: root rule has no productions";
+            return prepared;
          }
 
-         for (std::size_t position = 0; position < chart.size(); ++position) {
-            for (std::size_t index = 0; index < chart[position].items.size(); ++index) {
-               const auto [production_index, dot, start] = chart[position].items[index];
+         for (std::size_t position = 0; position < prepared.chart.size(); ++position) {
+            for (std::size_t index = 0; index < prepared.chart[position].items.size(); ++index) {
+               const auto [production_index, dot, start] = prepared.chart[position].items[index];
                const auto& production = grammar.productions[production_index];
 
                if (dot == production.symbol_count) {
-                  for (const auto& parent_item : chart[start].items) {
+                  for (const auto& parent_item : prepared.chart[start].items) {
                      const auto [parent_index, parent_dot, parent_start] = parent_item;
                      const auto& parent = grammar.productions[parent_index];
                      if (parent_dot >= parent.symbol_count) {
@@ -505,7 +557,7 @@ namespace cpf {
                      }
                      const auto& next = parent.symbols[parent_dot];
                      if (next.kind == parser_symbol_kind::nonterminal && next.value == production.lhs) {
-                        chart[position].add(parent_index, parent_dot + 1, parent_start);
+                        prepared.chart[position].add(parent_index, parent_dot + 1, parent_start);
                      }
                   }
                   continue;
@@ -515,7 +567,7 @@ namespace cpf {
                if (next.kind == parser_symbol_kind::nonterminal) {
                   for (std::size_t candidate = 0; candidate < grammar.production_count; ++candidate) {
                      if (grammar.productions[candidate].lhs == next.value) {
-                        chart[position].add(candidate, 0, position);
+                        prepared.chart[position].add(candidate, 0, position);
                      }
                   }
                   continue;
@@ -526,30 +578,59 @@ namespace cpf {
                   tracker.record(skip_space_position(input, position), describe_expected_symbol(next), describe_progress(production, dot));
                   continue;
                }
-               chart[match->end].add(production_index, dot + 1, start);
+               prepared.chart[match->end].add(production_index, dot + 1, start);
             }
          }
 
-         std::unordered_map<span_key, std::vector<std::size_t>, span_key_hash> completed_rules;
-         std::unordered_set<span_key, span_key_hash> completed_productions;
-         std::unordered_map<rule_start_key, std::vector<std::size_t>, rule_start_key_hash> rule_ends;
-
-         for (std::size_t end = 0; end < chart.size(); ++end) {
-            for (const auto& item : chart[end].items) {
+         for (std::size_t end = 0; end < prepared.chart.size(); ++end) {
+            for (const auto& item : prepared.chart[end].items) {
                const auto [production_index, dot, start] = item;
                const auto& production = grammar.productions[production_index];
                if (dot != production.symbol_count) {
                   continue;
                }
-               completed_productions.insert(span_key{production_index, start, end});
-               completed_rules[span_key{production.lhs, start, end}].push_back(production_index);
-               rule_ends[rule_start_key{production.lhs, start}].push_back(end);
+               prepared.completed_productions.insert(span_key{production_index, start, end});
+               prepared.completed_rules[span_key{production.lhs, start, end}].push_back(production_index);
+               prepared.rule_ends[rule_start_key{production.lhs, start}].push_back(end);
             }
          }
 
-         for (auto& [key, ends] : rule_ends) {
+         for (auto& [key, ends] : prepared.rule_ends) {
             std::sort(ends.begin(), ends.end());
             ends.erase(std::unique(ends.begin(), ends.end()), ends.end());
+         }
+
+         auto success = false;
+         for (std::size_t end = 0; end < prepared.chart.size(); ++end) {
+            if (skip_space_position(input, end) != input.size()) {
+               continue;
+            }
+            if (prepared.completed_rules.contains(span_key{root_rule, 0, end})) {
+               success = true;
+               break;
+            }
+         }
+
+         if (!success) {
+            for (std::size_t end = 0; end < prepared.chart.size(); ++end) {
+               auto completed = prepared.completed_rules.find(span_key{root_rule, 0, end});
+               if (completed != prepared.completed_rules.end()) {
+                  auto failure_position = skip_space_position(input, end);
+                  tracker.record(failure_position, "<end of input>", "after completing rule '" + std::string{grammar.productions[completed->second.front()].lhs_name} + "'");
+               }
+            }
+            prepared.error = tracker.build(input);
+         }
+
+         return prepared;
+      }
+
+      inline parse_forest earley_parse(std::string_view input, const grammar_spec& grammar, std::size_t root_rule) {
+         parse_forest result;
+         auto prepared = prepare_earley_parse(input, grammar, root_rule);
+         if (!prepared.has_root_production) {
+            result.error = prepared.error;
+            return result;
          }
 
          using node_list = std::vector<parse_node_ptr>;
@@ -574,7 +655,7 @@ namespace cpf {
 
             rule_in_progress.insert(key);
             auto& nodes = rule_cache[key];
-            if (auto completed = completed_rules.find(key); completed != completed_rules.end()) {
+            if (auto completed = prepared.completed_rules.find(key); completed != prepared.completed_rules.end()) {
                for (auto production_index : completed->second) {
                   const auto& produced = build_production(production_index, start, end);
                   nodes.insert(nodes.end(), produced.begin(), produced.end());
@@ -586,7 +667,7 @@ namespace cpf {
 
          build_production = [&](std::size_t production_index, std::size_t start, std::size_t end) -> const node_list& {
             auto key = span_key{production_index, start, end};
-            if (production_in_progress.contains(key) || !completed_productions.contains(key)) {
+            if (production_in_progress.contains(key) || !prepared.completed_productions.contains(key)) {
                return empty_nodes;
             }
             if (auto cache = production_cache.find(key); cache != production_cache.end()) {
@@ -613,8 +694,8 @@ namespace cpf {
 
                const auto& symbol = production.symbols[symbol_index];
                if (symbol.kind == parser_symbol_kind::nonterminal) {
-                   auto end_it = rule_ends.find(rule_start_key{symbol.value, position});
-                  if (end_it == rule_ends.end()) {
+                  auto end_it = prepared.rule_ends.find(rule_start_key{symbol.value, position});
+                  if (end_it == prepared.rule_ends.end()) {
                      return;
                   }
 
@@ -646,7 +727,7 @@ namespace cpf {
             return nodes;
          };
 
-         for (std::size_t end = 0; end < chart.size(); ++end) {
+         for (std::size_t end = 0; end < prepared.chart.size(); ++end) {
             if (skip_space_position(input, end) != input.size()) {
                continue;
             }
@@ -659,117 +740,146 @@ namespace cpf {
             return result;
          }
 
-         for (std::size_t end = 0; end < chart.size(); ++end) {
-            auto completed = completed_rules.find(span_key{root_rule, 0, end});
-            if (completed != completed_rules.end()) {
-               auto failure_position = skip_space_position(input, end);
-               tracker.record(failure_position, "<end of input>", "after completing rule '" + std::string{grammar.productions[completed->second.front()].lhs_name} + "'");
-            }
-         }
-
-         result.error = tracker.build(input);
+         result.error = prepared.error;
          return result;
       }
 
       inline recognize_result earley_recognize(std::string_view input, const grammar_spec& grammar, std::size_t root_rule) {
          recognize_result result;
-         error_tracker tracker;
-
-         struct chart_column {
-            std::vector<chart_item_key> items;
-            std::unordered_set<chart_item_key, chart_item_key_hash> indices;
-
-            bool add(std::size_t production, std::size_t dot, std::size_t start) {
-               auto key = chart_item_key{production, dot, start};
-               if (!indices.insert(key).second) {
-                  return false;
-               }
-               items.push_back(key);
-               return true;
-            }
-         };
-
-         std::vector<chart_column> chart(input.size() + 1);
-         auto has_root_production = false;
-         const auto root_begin = grammar.rule_production_offsets[root_rule];
-         const auto root_count = grammar.rule_production_counts[root_rule];
-         for (std::size_t offset = 0; offset < root_count; ++offset) {
-            chart.front().add(grammar.rule_production_indices[root_begin + offset], 0, 0);
-            has_root_production = true;
-         }
-
-         if (!has_root_production) {
-            result.error.message = "Parse error: root rule has no productions";
+         auto prepared = prepare_earley_parse(input, grammar, root_rule);
+         if (!prepared.has_root_production) {
+            result.error = prepared.error;
             return result;
          }
 
-         for (std::size_t position = 0; position < chart.size(); ++position) {
-            for (std::size_t index = 0; index < chart[position].items.size(); ++index) {
-               const auto [production_index, dot, start] = chart[position].items[index];
-               const auto& production = grammar.productions[production_index];
-
-               if (dot == production.symbol_count) {
-                  for (const auto& parent_item : chart[start].items) {
-                     const auto [parent_index, parent_dot, parent_start] = parent_item;
-                     const auto& parent = grammar.productions[parent_index];
-                     if (parent_dot >= parent.symbol_count) {
-                        continue;
-                     }
-                     const auto& next = parent.symbols[parent_dot];
-                     if (next.kind == parser_symbol_kind::nonterminal && next.value == production.lhs) {
-                        chart[position].add(parent_index, parent_dot + 1, parent_start);
-                     }
-                  }
-                  continue;
-               }
-
-               const auto& next = production.symbols[dot];
-               if (next.kind == parser_symbol_kind::nonterminal) {
-                  for (std::size_t candidate = 0; candidate < grammar.production_count; ++candidate) {
-                     if (grammar.productions[candidate].lhs == next.value) {
-                        chart[position].add(candidate, 0, position);
-                     }
-                  }
-                  continue;
-               }
-
-               auto match = match_terminal(input, position, next);
-               if (!match.has_value()) {
-                  tracker.record(skip_space_position(input, position), describe_expected_symbol(next), describe_progress(production, dot));
-                  continue;
-               }
-               chart[match->end].add(production_index, dot + 1, start);
-            }
-         }
-
-         for (std::size_t end = 0; end < chart.size(); ++end) {
+         for (std::size_t end = 0; end < prepared.chart.size(); ++end) {
             if (skip_space_position(input, end) != input.size()) {
                continue;
             }
 
-            for (const auto& item : chart[end].items) {
-               const auto [production_index, dot, start] = item;
-               const auto& production = grammar.productions[production_index];
-               if (start == 0 && production.lhs == root_rule && dot == production.symbol_count) {
+            if (prepared.completed_rules.contains(span_key{root_rule, 0, end})) {
                   result.success = true;
                   return result;
-               }
             }
          }
 
-         for (std::size_t end = 0; end < chart.size(); ++end) {
-            for (const auto& item : chart[end].items) {
-               const auto [production_index, dot, start] = item;
-               const auto& production = grammar.productions[production_index];
-               if (start != 0 || production.lhs != root_rule || dot != production.symbol_count) {
-                  continue;
-               }
-               auto failure_position = skip_space_position(input, end);
-               tracker.record(failure_position, "<end of input>", "after completing rule '" + std::string{production.lhs_name} + "'");
+         result.error = prepared.error;
+         return result;
+      }
+
+      inline inspect_result earley_inspect(std::string_view input, const grammar_spec& grammar, std::size_t root_rule, std::size_t ambiguity_limit = 2) {
+         inspect_result result;
+         auto prepared = prepare_earley_parse(input, grammar, root_rule);
+         if (!prepared.has_root_production) {
+            result.error = prepared.error;
+            return result;
+         }
+
+         std::size_t accepted_end = input.size() + 1;
+         for (std::size_t end = 0; end < prepared.chart.size(); ++end) {
+            if (skip_space_position(input, end) != input.size()) {
+               continue;
+            }
+            if (prepared.completed_rules.contains(span_key{root_rule, 0, end})) {
+               accepted_end = end;
+               result.success = true;
+               break;
             }
          }
 
-         result.error = tracker.build(input);
+         if (!result.success) {
+            result.error = prepared.error;
+            return result;
+         }
+
+         std::unordered_map<span_key, std::size_t, span_key_hash> rule_count_cache;
+         std::unordered_map<span_key, std::size_t, span_key_hash> production_count_cache;
+         std::unordered_set<span_key, span_key_hash> rule_in_progress;
+         std::unordered_set<span_key, span_key_hash> production_in_progress;
+
+         std::function<std::size_t(std::size_t, std::size_t, std::size_t)> count_rule;
+         std::function<std::size_t(std::size_t, std::size_t, std::size_t)> count_production;
+
+         count_rule = [&](std::size_t rule, std::size_t start, std::size_t end) -> std::size_t {
+            auto key = span_key{rule, start, end};
+            if (rule_in_progress.contains(key)) {
+               return 0;
+            }
+            if (auto cache = rule_count_cache.find(key); cache != rule_count_cache.end()) {
+               return cache->second;
+            }
+
+            rule_in_progress.insert(key);
+            auto total = std::size_t{0};
+            if (auto completed = prepared.completed_rules.find(key); completed != prepared.completed_rules.end()) {
+               for (const auto production_index : completed->second) {
+                  total = capped_add(total, count_production(production_index, start, end), ambiguity_limit);
+                  if (total >= ambiguity_limit) {
+                     break;
+                  }
+               }
+            }
+            rule_in_progress.erase(key);
+            rule_count_cache.emplace(key, total);
+            return total;
+         };
+
+         count_production = [&](std::size_t production_index, std::size_t start, std::size_t end) -> std::size_t {
+            auto key = span_key{production_index, start, end};
+            if (production_in_progress.contains(key) || !prepared.completed_productions.contains(key)) {
+               return 0;
+            }
+            if (auto cache = production_count_cache.find(key); cache != production_count_cache.end()) {
+               return cache->second;
+            }
+
+            production_in_progress.insert(key);
+            const auto& production = grammar.productions[production_index];
+            std::function<std::size_t(std::size_t, std::size_t)> enumerate = [&](std::size_t symbol_index, std::size_t position) -> std::size_t {
+               if (symbol_index == production.symbol_count) {
+                  return position == end ? 1 : 0;
+               }
+
+               const auto& symbol = production.symbols[symbol_index];
+               if (symbol.kind == parser_symbol_kind::nonterminal) {
+                  auto end_it = prepared.rule_ends.find(rule_start_key{symbol.value, position});
+                  if (end_it == prepared.rule_ends.end()) {
+                     return 0;
+                  }
+
+                  auto total = std::size_t{0};
+                  for (const auto child_end : end_it->second) {
+                     if (child_end > end) {
+                        break;
+                     }
+                     auto left = count_rule(symbol.value, position, child_end);
+                     if (left == 0) {
+                        continue;
+                     }
+                     auto right = enumerate(symbol_index + 1, child_end);
+                     total = capped_add(total, capped_mul(left, right, ambiguity_limit), ambiguity_limit);
+                     if (total >= ambiguity_limit) {
+                        break;
+                     }
+                  }
+                  return total;
+               }
+
+               auto match = match_terminal(input, position, symbol);
+               if (!match.has_value() || match->end > end) {
+                  return 0;
+               }
+               return enumerate(symbol_index + 1, match->end);
+            };
+
+            auto total = enumerate(0, start);
+            production_in_progress.erase(key);
+            production_count_cache.emplace(key, total);
+            return total;
+         };
+
+         auto derivation_count = count_rule(root_rule, 0, accepted_end);
+         result.ambiguous = derivation_count >= ambiguity_limit;
          return result;
       }
    } // namespace detail

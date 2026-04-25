@@ -146,7 +146,7 @@ struct expression : cpf::node {
     static std::array<cpf::complexity, 5> Complexity;
 
     ~expression() override = default;
-    static parse_result parse(std::string_view input);
+    static parse_result parse(std::string_view input, const cpf::parse_options& options = {});
     static auto complexity_inputs(std::size_t rule_id) -> std::span<const std::string_view>;
     static auto recompute_complexity(std::size_t rule_id) -> const cpf::complexity&;
     std::size_t rule_id() const override;
@@ -166,7 +166,7 @@ struct addition : expression {
     std::unique_ptr<expression> right;
 
     ~addition() override = default;
-    static parse_result parse(std::string_view input);
+    static parse_result parse(std::string_view input, const cpf::parse_options& options = {});
     static auto complexity_inputs(std::size_t rule_id) -> std::span<const std::string_view>;
     static auto recompute_complexity(std::size_t rule_id) -> const cpf::complexity&;
     std::size_t rule_id() const override;
@@ -191,6 +191,20 @@ Every generated node also exposes a stable `RuleId` constant and implements `cpf
 Every generated node also exposes `ReductionCount`, a mutable `Complexity` array, and the helpers `complexity_inputs(rule_id)` / `recompute_complexity(rule_id)`. Here `rule_id` is the zero-based production `definition` stored on parsed nodes, so merged generated node classes can keep separate complexity estimates per reduction rule.
 
 `Complexity[rule_id]` is intentionally populated lazily. CPF always generates the deterministic sample inputs up front, but it only fits and stores the corresponding `cpf::complexity` object when `recompute_complexity(rule_id)` is called. This keeps parser startup bounded even when one binary links many generated grammars.
+
+Generated parse entry points also accept an optional `cpf::parse_options` value:
+
+```c++
+struct parse_options {
+    bool build_ast = true;
+    bool error_on_ambiguity = false;
+};
+```
+
+- `build_ast = false` validates the input and grammar constraints without materializing the AST forest
+- `error_on_ambiguity = true` turns ambiguous parses into a parse failure before forest/AST expansion
+
+When `build_ast = false`, `parse_result<T>::success` still reports whether parsing succeeded, while `parse_result<T>::forest` stays empty by design.
 
 Captured terminals are stored as `cpf::matched_string`, which includes both the matched text and its exact source span.
 

@@ -26,6 +26,7 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(generated.header.find("static constexpr std::size_t RuleId = ") != std::string::npos);
          CHECK(generated.header.find("static constexpr std::size_t ReductionCount = 5;") != std::string::npos);
          CHECK(generated.header.find("static std::array<cpf::complexity, 5> Complexity;") != std::string::npos);
+         CHECK(generated.header.find("static parse_result parse(std::string_view input, const cpf::parse_options& options = {});") != std::string::npos);
          CHECK(generated.header.find("static auto complexity_inputs(std::size_t rule_id) -> std::span<const std::string_view>;") != std::string::npos);
          CHECK(generated.header.find("static auto recompute_complexity(std::size_t rule_id) -> const cpf::complexity&;") != std::string::npos);
          CHECK(generated.header.find("cpf::matched_string value;") != std::string::npos);
@@ -40,6 +41,11 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(generated.source.find("expression_complexity_inputs_0{{") != std::string::npos);
          CHECK(generated.source.find("compute_generated_rule_complexity<expression>(expression_complexity_inputs_0") != std::string::npos);
          CHECK(generated.source.find("std::array<cpf::complexity, 5> expression::Complexity{};") != std::string::npos);
+         CHECK(generated.source.find("cpf::parse_result<T> parse_generated(std::string_view input, std::size_t root_rule, const cpf::parse_options& options)") != std::string::npos);
+         CHECK(generated.source.find("auto inspected = cpf::detail::earley_inspect(input, grammar_spec, root_rule);") != std::string::npos);
+         CHECK(generated.source.find("if (options.error_on_ambiguity && inspected.ambiguous)") != std::string::npos);
+         CHECK(generated.source.find("result.error = cpf::detail::make_ambiguity_error(grammar_rule_names[root_rule]);") != std::string::npos);
+         CHECK(generated.source.find("if (!options.build_ast)") != std::string::npos);
          CHECK(generated.source.find("auto expression::complexity_inputs(std::size_t rule_id) -> std::span<const std::string_view>") != std::string::npos);
          CHECK(generated.source.find("auto expression::recompute_complexity(std::size_t rule_id) -> const cpf::complexity&") != std::string::npos);
          CHECK(generated.source.find("cpf::detail::earley_parse(input, grammar_spec,") != std::string::npos);
@@ -134,6 +140,7 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(generated.source.find("merged_binary_complexity_inputs_1{{") != std::string::npos);
          CHECK(generated.source.find("compute_generated_rule_complexity<merged_binary>(merged_binary_complexity_inputs_1") != std::string::npos);
          CHECK(generated.source.find("std::array<cpf::complexity, 2> merged_binary::Complexity{};") != std::string::npos);
+         CHECK(generated.source.find("auto child_result = merged_greeting::parse(input, options);") != std::string::npos);
       }
    }
 
@@ -280,7 +287,7 @@ TEST_SUITE("cpflib.code_generator") {
       CHECK(generated.header.find("} // namespace generated::fixtures") != std::string::npos);
 
       CHECK(generated.source.find("namespace generated::fixtures {") != std::string::npos);
-      CHECK(generated.source.find("expression::parse_result expression::parse(std::string_view input)") != std::string::npos);
+      CHECK(generated.source.find("expression::parse_result expression::parse(std::string_view input, const cpf::parse_options& options)") != std::string::npos);
       CHECK(generated.source.find("std::ostream& operator<<(std::ostream& os, const addition& node)") != std::string::npos);
       CHECK(generated.source.find("} // namespace generated::fixtures") != std::string::npos);
    }
