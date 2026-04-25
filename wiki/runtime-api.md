@@ -16,6 +16,7 @@ struct expression : cpf::node {
 
     ~expression() override = default;
     static parse_result parse(std::string_view input, const cpf::parse_options& options = {});
+    static cpf::recognize_result recognize(std::string_view input);
     static auto complexity_inputs(std::size_t rule_id) -> std::span<const std::string_view>;
     static auto recompute_complexity(std::size_t rule_id) -> const cpf::complexity&;
     std::size_t rule_id() const override;
@@ -29,6 +30,8 @@ Each generated rule also gets:
 - `operator<<`
 - `visit(...)`
 - `visit_recursive(...)`
+
+Generated rules also expose `recognize(...)` for syntax-only validation without building a forest of lazy parse trees.
 
 Every generated node inherits:
 

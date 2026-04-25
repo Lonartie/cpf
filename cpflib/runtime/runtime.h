@@ -49,6 +49,14 @@ namespace cpf {
       bool allow_partial = false;
    };
 
+   /// @brief Result of validating whether an input matches a generated grammar rule without building an AST.
+    struct recognize_result {
+      /// @brief True when the input was fully recognized.
+      bool success = false;
+      /// @brief Optional failure details when recognition did not succeed.
+      std::optional<parse_error> error;
+   };
+
    /// @brief One position within an input source.
    struct source_position {
       /// @brief Zero-based byte offset in the original input.
@@ -560,11 +568,6 @@ namespace cpf {
          std::vector<parse_node_ptr> forest;
          std::vector<bool> tree_partial;
          std::vector<std::vector<node_damage>> tree_damage;
-         parse_error error;
-      };
-
-      struct recognize_result {
-         bool success = false;
          parse_error error;
       };
 

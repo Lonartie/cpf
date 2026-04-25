@@ -151,6 +151,17 @@ TEST_SUITE("generated.runtime") {
          CHECK(result.forest.empty());
       }
 
+      SUBCASE("recognize can validate syntax without building a parse forest") {
+         auto success = expression::recognize("1 + 2 * 3");
+         CHECK(success.success);
+         CHECK_FALSE(success.error.has_value());
+
+         auto failure = expression::recognize("1 +");
+         CHECK_FALSE(failure.success);
+         REQUIRE(failure.error.has_value());
+         CHECK(failure.error->message.find("expected") != std::string::npos);
+      }
+
       SUBCASE("parse options can reject ambiguity before AST construction") {
          cpf::parse_options options;
          options.error_on_ambiguity = true;

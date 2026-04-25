@@ -30,6 +30,8 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(generated.header.find(
                      "static parse_result parse(std::string_view input, const cpf::parse_options& options = {});") !=
                std::string::npos);
+         CHECK(generated.header.find("static cpf::recognize_result recognize(std::string_view input);") !=
+               std::string::npos);
          CHECK(generated.header.find(
                      "static auto complexity_inputs(std::size_t rule_id) -> std::span<const std::string_view>;") !=
                std::string::npos);
@@ -50,6 +52,8 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(generated.source.find("compute_generated_rule_complexity<expression>(expression_complexity_inputs_0") !=
                std::string::npos);
          CHECK(generated.source.find("std::array<cpf::complexity, 5> expression::Complexity{};") != std::string::npos);
+         CHECK(generated.source.find("cpf::recognize_result recognize_generated(std::string_view input, std::size_t root_rule)") !=
+               std::string::npos);
          CHECK(generated.source.find("cpf::parse_result<T> parse_generated(std::string_view input, std::size_t "
                                      "root_rule, const cpf::parse_options& options)") != std::string::npos);
           CHECK(generated.source.find("options.allow_partial") != std::string::npos);
@@ -85,6 +89,8 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(generated.source.find("bool validate_generated_tree(const parse_node_ptr& tree)") != std::string::npos);
          CHECK(generated.source.find("rejected by precedence/associativity constraints") != std::string::npos);
          CHECK(generated.source.find("definition_of_generated_tree(const parse_node_ptr& tree)") != std::string::npos);
+         CHECK(generated.source.find("cpf::recognize_result expression::recognize(std::string_view input)") !=
+               std::string::npos);
          CHECK(generated.source.find("std::unique_ptr<expression> expression::clone() const") != std::string::npos);
          CHECK(generated.source.find("std::unique_ptr<cpf::node> number::clone_node() const") != std::string::npos);
           CHECK(generated.source.find("copy_damage_to(*copy);") != std::string::npos);

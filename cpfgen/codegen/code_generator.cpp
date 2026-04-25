@@ -1151,6 +1151,7 @@ namespace cpf {
             line(header, 1, "static std::array<cpf::complexity, " + std::to_string(definition_count) + "> Complexity;");
             line(header, 1,
                  "static parse_result parse(std::string_view input, const cpf::parse_options& options = {});");
+            line(header, 1, "static cpf::recognize_result recognize(std::string_view input);");
             line(header, 1, "static auto complexity_inputs(std::size_t rule_id) -> std::span<const std::string_view>;");
             line(header, 1, "static auto recompute_complexity(std::size_t rule_id) -> const cpf::complexity&;");
             line(header, 1, "std::size_t rule_id() const override;");
@@ -1560,7 +1561,8 @@ namespace cpf {
          line(source, 4, "if (!result.success) {");
          line(source, 5,
               "throw std::runtime_error{\"Generated complexity sample for rule '\" + std::string{rule_name} + \"' "
-              "definition \" + std::to_string(rule_id) + \" failed to parse input: \" + result.error.message};");
+              "definition \" + std::to_string(rule_id) + \" failed to parse input: \" + "
+              "(result.error.has_value() ? result.error->message : std::string{\"unknown parse failure\"})};");
          line(source, 4, "}");
          line(source, 4, "return static_cast<std::size_t>(result.success);");
          line(source, 3, "},");
@@ -2131,6 +2133,18 @@ namespace cpf {
          line(source, 0);
 
          line(source, 1, "template<typename T>");
+         line(source, 1, "cpf::recognize_result recognize_generated(std::string_view input, std::size_t root_rule) {");
+         line(source, 2, "cpf::recognize_result result;");
+         line(source, 2, "auto recognized = cpf::detail::earley_recognize(input, grammar_spec, root_rule);");
+         line(source, 2, "result.success = recognized.success;");
+         line(source, 2, "if (!recognized.success) {");
+         line(source, 3, "result.error = std::move(recognized.error);");
+         line(source, 2, "}");
+         line(source, 2, "return result;");
+         line(source, 1, "}");
+         line(source, 0);
+
+         line(source, 1, "template<typename T>");
          line(source, 1,
               "cpf::parse_result<T> parse_generated(std::string_view input, std::size_t root_rule, const "
               "cpf::parse_options& options) {");
@@ -2299,6 +2313,43 @@ namespace cpf {
                line(source, 1,
                     "return parse_generated<" + info.name + ">(input, " + std::to_string(rule_indices.at(info.name)) +
                           ", options);");
+            }
+            line(source, 0, "}");
+            line(source, 0);
+            line(source, 0, "cpf::recognize_result " + info.name + "::recognize(std::string_view input) {");
+            if (info.base_rule) {
+               line(source, 1, "cpf::recognize_result result;");
+               line(source, 1, "cpf::parse_error best_error;");
+               line(source, 1, "auto have_error = false;");
+               for (const auto& child: families.at(info.name).direct_children) {
+                  line(source, 1, "{");
+                  line(source, 2, "auto child_result = " + child + "::recognize(input);");
+                  line(source, 2, "if (child_result.success) {");
+                  line(source, 3, "result.success = true;");
+                  line(source, 3, "result.error.reset();");
+                  line(source, 3, "return result;");
+                  line(source, 2, "}");
+                  line(source, 2, "if (child_result.error.has_value()) {");
+                  line(source, 3, "if (!have_error) {");
+                  line(source, 4, "best_error = *child_result.error;");
+                  line(source, 4, "have_error = true;");
+                  line(source, 3, "} else {");
+                  line(source, 4, "cpf::detail::merge_parse_error(best_error, *child_result.error);");
+                  line(source, 3, "}");
+                  line(source, 2, "}");
+                  line(source, 1, "}");
+               }
+               line(source, 1, "if (have_error) {");
+               line(source, 2,
+                    "cpf::detail::append_unique(best_error.notes, " +
+                          cpp_string_literal("while matching base rule '" + info.name + "'") + ");");
+               line(source, 2, "cpf::detail::error_tracker::finalize(best_error);");
+               line(source, 2, "result.error = best_error;");
+               line(source, 1, "}");
+               line(source, 1, "return result;");
+            } else {
+               line(source, 1,
+                    "return recognize_generated<" + info.name + ">(input, " + std::to_string(rule_indices.at(info.name)) + ");");
             }
             line(source, 0, "}");
             line(source, 0);

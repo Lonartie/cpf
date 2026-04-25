@@ -77,24 +77,7 @@ Generated `visit(...)`, `visit_recursive(...)`, and `operator<<` fit the rest of
 
 ## Biggest redesign candidates
 
-## 1. Promote recognition to a first-class public API
-
-The system already has internal recognition support, but the public generated API only exposes `parse(...)` plus `parse_options{ .build_ast = false }`.
-
-### Why this is odd
-
-"Parse but do not build AST" is really a distinct operation. It is not intuitive that `parse(...)` can succeed while intentionally returning an empty forest.
-
-### Recommendation
-
-Expose generated entry points such as:
-
-- `recognize(std::string_view input)`
-- optionally `inspect(std::string_view input)`
-
-That would better align public API shape with the existing internal capabilities.
-
-## 2. Stop exposing so much of `cpf::detail`
+## 1. Stop exposing so much of `cpf::detail`
 
 `cpflib/runtime/runtime.h` currently exposes a large amount of parser-engine and generated-code plumbing:
 
@@ -131,7 +114,7 @@ Even if the project stays header-only, these layers should not all live in the s
 
 ## Consistency and usability issues
 
-## 3. `definition` is too vague a public name
+## 2. `definition` is too vague a public name
 
 `cpf::node` exposes public field:
 
@@ -153,7 +136,7 @@ Rename to something clearer, such as:
 
 `production_index` is probably the clearest.
 
-## 4. Complexity APIs use misleading parameter names
+## 3. Complexity APIs use misleading parameter names
 
 Generated node APIs expose:
 
@@ -175,7 +158,7 @@ Rename the parameter and probably the conceptual model:
 
 or introduce more explicit function names like `complexity_inputs_for_definition(...)`.
 
-## 5. `parse_tree<T>` exposes mutable metadata fields publicly
+## 4. `parse_tree<T>` exposes mutable metadata fields publicly
 
 Public fields today:
 
@@ -197,7 +180,7 @@ Prefer accessor methods instead:
 
 The same general concern applies to public mutable metadata on `cpf::node`.
 
-## 6. `parse_tree<T>` copy semantics are surprising
+## 5. `parse_tree<T>` copy semantics are surprising
 
 The type is copyable, but copying behaves differently depending on when it happens:
 
@@ -215,7 +198,7 @@ Choose a more explicit model:
 - make the handle move-only
 - or store all lazy state in shared state so copies behave uniformly
 
-## 7. `root_damage()` looks like public plumbing, not consumer API
+## 6. `root_damage()` looks like public plumbing, not consumer API
 
 `parse_tree<T>::root_damage()` appears to exist for generated-code plumbing, not for ordinary users.
 
@@ -223,7 +206,7 @@ Choose a more explicit model:
 
 Remove it from the public consumer API surface or make it internal-only.
 
-## 8. `node::add_damage(...)` probably should not be public
+## 7. `node::add_damage(...)` probably should not be public
 
 Consumers can currently mutate parser-generated damage metadata directly.
 
@@ -235,7 +218,7 @@ That makes it harder to distinguish parser-produced damage from user-authored an
 
 Make `add_damage(...)` protected or internal-only unless user-authored damage annotations are an intentional public feature.
 
-## 9. `type()` is likely redundant
+## 8. `type()` is likely redundant
 
 `cpf::node` currently requires:
 
@@ -248,7 +231,7 @@ But the runtime already has RTTI via a polymorphic base, and the generated API m
 
 Consider removing `type()` unless there is a strong documented use case for it.
 
-## 10. `parse_error` does not align well with `source_position`
+## 9. `parse_error` does not align well with `source_position`
 
 `parse_error` stores:
 
@@ -266,7 +249,7 @@ Prefer:
 
 This would make error positions align with the rest of the API.
 
-## 11. `parse_error.found` is too stringly typed
+## 10. `parse_error.found` is too stringly typed
 
 Examples of values currently include:
 
@@ -283,7 +266,7 @@ Consumers have to string-match sentinel values to understand the kind of failure
 
 Introduce structured error kinds and keep `message` as the display string.
 
-## 12. `repaired_input(...)` has a slightly misleading name
+## 11. `repaired_input(...)` has a slightly misleading name
 
 The method is useful, but it is not a simple accessor. It reconstructs a repaired form of caller-provided input and may fail if the provided text no longer structurally matches the tree.
 
@@ -299,7 +282,7 @@ My recommendation would be `try_repair_input(...)`
 
 ## Generated API oddities
 
-## 13. `Complexity` as public mutable static state is awkward
+## 12. `Complexity` as public mutable static state is awkward
 
 Generated nodes expose:
 
@@ -315,7 +298,7 @@ This exposes global mutable state directly in the public API and likely complica
 
 Hide the cache and expose accessor-based APIs instead.
 
-## 14. `RuleId`, `ReductionCount`, and `definition` do not read as one coherent naming system
+## 13. `RuleId`, `ReductionCount`, and `definition` do not read as one coherent naming system
 
 These concepts are related, but the naming family is inconsistent.
 
@@ -329,7 +312,7 @@ If a rename pass happens, make them read as one set of concepts, for example:
 
 or normalize them more aggressively to project-wide naming.
 
-## 15. Group-capture `std::variant<std::unique_ptr<...>>` payloads may be awkward to consume
+## 14. Group-capture `std::variant<std::unique_ptr<...>>` payloads may be awkward to consume
 
 These are type-safe, but less ergonomic than the rest of the inheritance-and-visitor-oriented API.
 
@@ -337,7 +320,7 @@ These are type-safe, but less ergonomic than the rest of the inheritance-and-vis
 
 Consider generating helper visitor functions for such payload members, or prefer a common generated base type when possible.
 
-## 16. `visit_recursive(...)` is read-only only
+## 15. `visit_recursive(...)` is read-only only
 
 The generated traversal helpers operate on const nodes.
 
@@ -347,7 +330,7 @@ If AST rewriting is a goal, consider adding non-const traversal helpers as an ad
 
 ## Structural recommendation
 
-## 17. Split the runtime into explicit layers
+## 16. Split the runtime into explicit layers
 
 If only one architectural cleanup happens, it should probably be this.
 
@@ -386,12 +369,11 @@ Move here:
 
 This would improve API quality even before any semantic redesign.
 
-## If only two things change
+## If only one thing changes
 
 These are the top recommendations, in order:
 
-1. add first-class recognition APIs instead of relying on `build_ast = false`
-2. hide generated-runtime plumbing and parser internals from the public runtime header
+1. hide generated-runtime plumbing and parser internals from the public runtime header
 
 ## Overall assessment
 
