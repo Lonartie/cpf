@@ -1,5 +1,7 @@
 #include "code_generator.h"
 
+#include "analysis/rule_complexity.h"
+
 #include <algorithm>
 #include <cctype>
 #include <functional>
@@ -1054,14 +1056,18 @@ namespace cpf {
             emitted_rule_names.push_back(rule.identifier);
          }
 
+         auto complexity_samples = generate_rule_complexity_samples(grammar);
+
          std::ostringstream header;
          emit_file_complexity_comment(header, base_name, ordered_public_rule_names.size(), grammar.rules.size() - ordered_public_rule_names.size(), recursive_public_rules, repeated_storage_rules);
          line(header, 0, "#pragma once");
          line(header, 0);
+          line(header, 0, "#include <array>");
          line(header, 0, "#include <cpflib>");
          line(header, 0, "#include <iosfwd>");
          line(header, 0, "#include <memory>");
          line(header, 0, "#include <optional>");
+          line(header, 0, "#include <span>");
          line(header, 0, "#include <string>");
          line(header, 0, "#include <string_view>");
          line(header, 0, "#include <typeinfo>");
@@ -1085,11 +1091,13 @@ namespace cpf {
 
          for (const auto& rule_name : ordered_public_rule_names) {
             const auto& info = classes.at(rule_name);
+             const auto definition_count = rules_by_name.at(info.name)->productions.size();
             auto base = info.base.empty() ? "cpf::node" : info.base;
             emit_rule_complexity_comment(header, info, analyze_class_complexity(info), recursive_public_rule_set.contains(info.name));
             line(header, 0, "struct " + info.name + " : " + base + " {");
             line(header, 1, "using parse_result = cpf::parse_result<" + info.name + ">;");
             line(header, 1, "static constexpr std::size_t RuleId = " + std::to_string(rule_indices.at(info.name)) + ";");
+             line(header, 1, "static constexpr std::size_t ReductionCount = " + std::to_string(definition_count) + ";");
             for (const auto& field : info.fields) {
                line(header, 1, render_field_declaration(field));
             }
@@ -1097,7 +1105,10 @@ namespace cpf {
                line(header, 0);
             }
             line(header, 1, "~" + info.name + "() override = default;");
+             line(header, 1, "static std::array<cpf::complexity, " + std::to_string(definition_count) + "> Complexity;");
             line(header, 1, "static parse_result parse(std::string_view input);");
+             line(header, 1, "static auto complexity_inputs(std::size_t rule_id) -> std::span<const std::string_view>;");
+             line(header, 1, "static auto recompute_complexity(std::size_t rule_id) -> const cpf::complexity&;");
             line(header, 1, "std::size_t rule_id() const override;");
             line(header, 1, "const std::type_info& type() const override;");
             line(header, 1, "std::unique_ptr<" + info.name + "> clone();");
@@ -1360,6 +1371,21 @@ namespace cpf {
           for (std::size_t regex_index = 0; regex_index < regex_patterns.size(); ++regex_index) {
              line(source, 1, "const std::regex regex_" + std::to_string(regex_index) + "{" + cpp_string_literal(regex_patterns[regex_index]) + ", std::regex_constants::optimize};");
           }
+          for (const auto& rule_name : ordered_public_rule_names) {
+             const auto& inputs_by_definition = complexity_samples.inputs_by_rule.at(rule_name);
+             for (std::size_t definition = 0; definition < inputs_by_definition.size(); ++definition) {
+                const auto& inputs = inputs_by_definition[definition];
+                line(source, 1, "constexpr std::array<std::string_view, " + std::to_string(inputs.size()) + "> " + rule_name + "_complexity_inputs_" + std::to_string(definition) + "{{");
+                for (std::size_t index = 0; index < inputs.size(); ++index) {
+                   auto rendered_input = cpp_string_literal(inputs[index]);
+                   if (index + 1 != inputs.size()) {
+                      rendered_input += ",";
+                   }
+                   line(source, 2, rendered_input);
+                }
+                line(source, 1, "}};");
+             }
+          }
          line(source, 0, "} // namespace");
          line(source, 0);
 
@@ -1442,6 +1468,28 @@ namespace cpf {
             line(source, 2, rendered_name);
          }
          line(source, 1, "}};");
+          line(source, 0);
+          line(source, 1, "template<typename Rule, std::size_t SampleCount>");
+          line(source, 1, "cpf::complexity compute_generated_rule_complexity(const std::array<std::string_view, SampleCount>& inputs, std::string_view rule_name, std::size_t rule_id, std::size_t root_rule) {");
+          line(source, 2, "std::vector<std::tuple<std::string_view>> args;");
+          line(source, 2, "args.reserve(inputs.size());");
+          line(source, 2, "std::vector<double> arg_sizes;");
+          line(source, 2, "arg_sizes.reserve(inputs.size());");
+          line(source, 2, "for (const auto input : inputs) {");
+          line(source, 3, "args.emplace_back(input);");
+          line(source, 3, "arg_sizes.push_back(static_cast<double>(input.size()));");
+          line(source, 2, "}");
+          line(source, 2, "return cpf::complexity_of(");
+          line(source, 3, "[rule_name, rule_id, root_rule](std::string_view input) {");
+          line(source, 4, "auto result = cpf::detail::earley_recognize(input, grammar_spec, root_rule);");
+          line(source, 4, "if (!result.success) {");
+          line(source, 5, "throw std::runtime_error{\"Generated complexity sample for rule '\" + std::string{rule_name} + \"' definition \" + std::to_string(rule_id) + \" failed to parse input: \" + result.error.message};");
+          line(source, 4, "}");
+          line(source, 4, "return static_cast<std::size_t>(result.success);");
+          line(source, 3, "},");
+          line(source, 3, "std::move(args),");
+          line(source, 3, "std::move(arg_sizes));");
+          line(source, 1, "}");
          line(source, 1, "std::unique_ptr<cpf::node> build_node(const parse_node_ptr& tree);");
          line(source, 0);
 
@@ -1841,6 +1889,7 @@ namespace cpf {
                continue;
             }
             const auto& info = classes.at(rule.identifier);
+             const auto definition_count = rule.productions.size();
             line(source, 0, info.name + "::parse_result " + info.name + "::parse(std::string_view input) {");
             if (info.base_rule) {
                line(source, 1, "parse_result result;");
@@ -1876,6 +1925,31 @@ namespace cpf {
             }
             line(source, 0, "}");
             line(source, 0);
+             line(source, 0, "auto " + info.name + "::complexity_inputs(std::size_t rule_id) -> std::span<const std::string_view> {");
+             line(source, 1, "switch (rule_id) {");
+             for (std::size_t definition = 0; definition < definition_count; ++definition) {
+                line(source, 2, "case " + std::to_string(definition) + ":");
+                line(source, 3, "return std::span<const std::string_view>{" + info.name + "_complexity_inputs_" + std::to_string(definition) + ".data(), " + info.name + "_complexity_inputs_" + std::to_string(definition) + ".size()};");
+             }
+             line(source, 2, "default:");
+             line(source, 3, "throw std::out_of_range{\"Unknown complexity rule id \" + std::to_string(rule_id) + \" for rule '" + info.name + "'\"};");
+             line(source, 1, "}");
+             line(source, 0, "}");
+             line(source, 0);
+             line(source, 0, "auto " + info.name + "::recompute_complexity(std::size_t rule_id) -> const cpf::complexity& {");
+             line(source, 1, "switch (rule_id) {");
+             for (std::size_t definition = 0; definition < definition_count; ++definition) {
+                line(source, 2, "case " + std::to_string(definition) + ":");
+                line(source, 3, "Complexity[" + std::to_string(definition) + "] = compute_generated_rule_complexity<" + info.name + ">(" + info.name + "_complexity_inputs_" + std::to_string(definition) + ", " + cpp_string_literal(info.name) + ", " + std::to_string(definition) + ", " + std::to_string(rule_indices.at(info.name)) + ");");
+                line(source, 3, "return Complexity[" + std::to_string(definition) + "];");
+             }
+             line(source, 2, "default:");
+             line(source, 3, "throw std::out_of_range{\"Unknown complexity rule id \" + std::to_string(rule_id) + \" for rule '" + info.name + "'\"};");
+             line(source, 1, "}");
+             line(source, 0, "}");
+             line(source, 0);
+             line(source, 0, "std::array<cpf::complexity, " + std::to_string(definition_count) + "> " + info.name + "::Complexity{};");
+             line(source, 0);
             line(source, 0, "std::size_t " + info.name + "::rule_id() const {");
             line(source, 1, "return RuleId;");
             line(source, 0, "}");

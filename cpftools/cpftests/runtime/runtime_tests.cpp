@@ -11,6 +11,7 @@
 #include "support/doctest.h"
 
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <type_traits>
 #include <variant>
@@ -122,6 +123,19 @@ TEST_SUITE("generated.runtime") {
          CHECK(evaluate("8 / 2 / 2") == 2);
          CHECK(evaluate("10 - 3 - 2") == 5);
          CHECK(evaluate(" 6 + 4 ") == 10);
+
+          CHECK(expression::complexity_inputs(0).size() >= 2);
+          CHECK(number::complexity_inputs(0).size() >= 2);
+
+          const auto& expression_recomputed = expression::recompute_complexity(0);
+          const auto& recomputed = number::recompute_complexity(0);
+          CHECK(&expression_recomputed == &expression::Complexity[0]);
+          CHECK(&recomputed == &number::Complexity[0]);
+          CHECK_FALSE(expression::Complexity[0].summary.empty());
+          CHECK_FALSE(number::Complexity[0].big_o.empty());
+          CHECK_FALSE(expression_recomputed.summary.empty());
+          CHECK_FALSE(recomputed.summary.empty());
+          CHECK(recomputed.estimate(8.0) > 0.0);
 
          auto number_result = number::parse("42");
          REQUIRE(number_result.success);
@@ -254,6 +268,10 @@ TEST_SUITE("generated.runtime") {
          REQUIRE(greeting_result.success);
          REQUIRE(greeting_result.forest.size() == 1);
          CHECK(greeting_result.forest.front()->text.text == "hello");
+         const auto& recomputed = greeting::recompute_complexity(0);
+         CHECK(&recomputed == &greeting::Complexity[0]);
+         CHECK_FALSE(greeting::Complexity[0].summary.empty());
+         CHECK(recomputed.estimate(5.0) > 0.0);
       }
 
       SUBCASE("base rule parsing dispatches to the derived node") {
@@ -372,6 +390,28 @@ TEST_SUITE("generated.runtime") {
          auto* right = dynamic_cast<const merged_binary*>(root->right.get());
          REQUIRE(right != nullptr);
          CHECK(right->definition == 1);
+      }
+
+      SUBCASE("complexity samples and stored estimates are tracked per merged definition") {
+         REQUIRE(merged_binary::Complexity.size() == 2);
+         auto plus_inputs = merged_binary::complexity_inputs(0);
+         auto multiply_inputs = merged_binary::complexity_inputs(1);
+         REQUIRE(plus_inputs.size() >= 2);
+         REQUIRE(multiply_inputs.size() >= 2);
+         CHECK(std::string{plus_inputs.back()}.find('+') != std::string::npos);
+         CHECK(std::string{multiply_inputs.back()}.find('*') != std::string::npos);
+
+         const auto& recomputed_plus = merged_binary::recompute_complexity(0);
+         const auto& recomputed = merged_binary::recompute_complexity(1);
+         CHECK(&recomputed_plus == &merged_binary::Complexity[0]);
+         CHECK(&recomputed == &merged_binary::Complexity[1]);
+         CHECK_FALSE(merged_binary::Complexity[0].summary.empty());
+         CHECK_FALSE(merged_binary::Complexity[1].summary.empty());
+         CHECK_FALSE(recomputed.summary.empty());
+         CHECK(recomputed.estimate(8.0) > 0.0);
+
+         CHECK_THROWS_AS(merged_binary::complexity_inputs(2), std::out_of_range);
+         CHECK_THROWS_AS(merged_binary::recompute_complexity(2), std::out_of_range);
       }
    }
 

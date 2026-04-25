@@ -1,4 +1,5 @@
 add_library(cpfgenlib STATIC
+        analysis/rule_complexity.cpp
         codegen/code_generator.cpp
         parser/grammar_loader.cpp
         parser/grammar_parser.cpp

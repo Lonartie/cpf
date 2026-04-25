@@ -24,6 +24,10 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(generated.header.find("struct expression : cpf::node") != std::string::npos);
          CHECK(generated.header.find("struct number : expression") != std::string::npos);
          CHECK(generated.header.find("static constexpr std::size_t RuleId = ") != std::string::npos);
+         CHECK(generated.header.find("static constexpr std::size_t ReductionCount = 5;") != std::string::npos);
+         CHECK(generated.header.find("static std::array<cpf::complexity, 5> Complexity;") != std::string::npos);
+         CHECK(generated.header.find("static auto complexity_inputs(std::size_t rule_id) -> std::span<const std::string_view>;") != std::string::npos);
+         CHECK(generated.header.find("static auto recompute_complexity(std::size_t rule_id) -> const cpf::complexity&;") != std::string::npos);
          CHECK(generated.header.find("cpf::matched_string value;") != std::string::npos);
          CHECK(generated.header.find("std::unique_ptr<expression> left;") != std::string::npos);
          CHECK(generated.header.find("template<typename Visitor>") != std::string::npos);
@@ -33,6 +37,11 @@ TEST_SUITE("cpflib.code_generator") {
       SUBCASE("source output wires parser, errors, and cloning") {
          CHECK(generated.source.find("grammar_productions{{") != std::string::npos);
           CHECK(generated.source.find("grammar_rule_production_indices{{") != std::string::npos);
+         CHECK(generated.source.find("expression_complexity_inputs_0{{") != std::string::npos);
+         CHECK(generated.source.find("compute_generated_rule_complexity<expression>(expression_complexity_inputs_0") != std::string::npos);
+         CHECK(generated.source.find("std::array<cpf::complexity, 5> expression::Complexity{};") != std::string::npos);
+         CHECK(generated.source.find("auto expression::complexity_inputs(std::size_t rule_id) -> std::span<const std::string_view>") != std::string::npos);
+         CHECK(generated.source.find("auto expression::recompute_complexity(std::size_t rule_id) -> const cpf::complexity&") != std::string::npos);
          CHECK(generated.source.find("cpf::detail::earley_parse(input, grammar_spec,") != std::string::npos);
          CHECK(generated.source.find("expression -> addition") != std::string::npos);
           CHECK(generated.source.find("const std::regex regex_0{") != std::string::npos);
@@ -114,11 +123,17 @@ TEST_SUITE("cpflib.code_generator") {
       }
 
       SUBCASE("generated source stamps and preserves matched definitions") {
+         CHECK(generated.header.find("static constexpr std::size_t ReductionCount = 2;") != std::string::npos);
+         CHECK(generated.header.find("static std::array<cpf::complexity, 2> Complexity;") != std::string::npos);
          CHECK(generated.source.find("node->definition = 0;") != std::string::npos);
          CHECK(generated.source.find("node->definition = 1;") != std::string::npos);
          CHECK(generated.source.find("copy->definition = definition;") != std::string::npos);
          CHECK(generated.source.find("switch (value.definition)") != std::string::npos);
          CHECK(generated.source.find("std::unique_ptr<merged_message>{static_cast<merged_message*>(child_0.release())}") != std::string::npos);
+         CHECK(generated.source.find("merged_binary_complexity_inputs_0{{") != std::string::npos);
+         CHECK(generated.source.find("merged_binary_complexity_inputs_1{{") != std::string::npos);
+         CHECK(generated.source.find("compute_generated_rule_complexity<merged_binary>(merged_binary_complexity_inputs_1") != std::string::npos);
+         CHECK(generated.source.find("std::array<cpf::complexity, 2> merged_binary::Complexity{};") != std::string::npos);
       }
    }
 

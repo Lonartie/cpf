@@ -2,6 +2,7 @@ add_executable(cpflibtests
         codegen/generator_tests.cpp
         parser/grammar_tests.cpp
         main.cpp
+        runtime/complexity_tests.cpp
         runtime/runtime_tests.cpp
 )
 

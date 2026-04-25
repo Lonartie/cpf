@@ -12,6 +12,7 @@ Generated code includes:
 
 - AST node types
 - parse entry points for each rule
+- per-reduction complexity samples and fitted complexity estimates
 - `operator<<` helpers
 - `visit(...)` and `visit_recursive(...)`
 - deep-clone support
@@ -141,9 +142,13 @@ struct expression : cpf::node {
     using parse_result = cpf::parse_result<expression>;
 
     static constexpr std::size_t RuleId = 0;
+    static constexpr std::size_t ReductionCount = 5;
+    static std::array<cpf::complexity, 5> Complexity;
 
     ~expression() override = default;
     static parse_result parse(std::string_view input);
+    static auto complexity_inputs(std::size_t rule_id) -> std::span<const std::string_view>;
+    static auto recompute_complexity(std::size_t rule_id) -> const cpf::complexity&;
     std::size_t rule_id() const override;
     const std::type_info& type() const override;
     std::unique_ptr<expression> clone();
@@ -153,6 +158,8 @@ struct addition : expression {
     using parse_result = cpf::parse_result<addition>;
 
     static constexpr std::size_t RuleId = 1;
+    static constexpr std::size_t ReductionCount = 1;
+    static std::array<cpf::complexity, 1> Complexity;
 
     std::unique_ptr<expression> left;
     cpf::matched_string op;
@@ -160,6 +167,8 @@ struct addition : expression {
 
     ~addition() override = default;
     static parse_result parse(std::string_view input);
+    static auto complexity_inputs(std::size_t rule_id) -> std::span<const std::string_view>;
+    static auto recompute_complexity(std::size_t rule_id) -> const cpf::complexity&;
     std::size_t rule_id() const override;
     const std::type_info& type() const override;
     std::unique_ptr<addition> clone();
@@ -178,6 +187,10 @@ Every generated node inherits:
 - `cpf::source_range range`
 
 Every generated node also exposes a stable `RuleId` constant and implements `cpf::node::rule_id()`, which CPF uses for constant-time generated visitor, printing, and validation dispatch.
+
+Every generated node also exposes `ReductionCount`, a mutable `Complexity` array, and the helpers `complexity_inputs(rule_id)` / `recompute_complexity(rule_id)`. Here `rule_id` is the zero-based production `definition` stored on parsed nodes, so merged generated node classes can keep separate complexity estimates per reduction rule.
+
+`Complexity[rule_id]` is intentionally populated lazily. CPF always generates the deterministic sample inputs up front, but it only fits and stores the corresponding `cpf::complexity` object when `recompute_complexity(rule_id)` is called. This keeps parser startup bounded even when one binary links many generated grammars.
 
 Captured terminals are stored as `cpf::matched_string`, which includes both the matched text and its exact source span.
 
@@ -229,6 +242,34 @@ Typical Earley complexity bounds apply:
 - grammars close to LR behavior can approach `O(n)` time in practice
 
 CPF returns a parse forest, so highly ambiguous grammars can also increase practical memory use and result size beyond the core chart data structure.
+
+`cpflib` also provides a general-purpose complexity fitting API for measured callables. It fits practical models across constant, logarithmic, root, polynomial, mixed polynomial-logarithmic, exponential, and factorial families such as `O(1)`, `O(log N)`, `O(sqrt N)`, `O(N)`, `O(N log N)`, `O(N^2 log N)`, `O(N^3)`, `O(2^N)`, and `O(N!)`, while still including lower-order terms in the fitted expression.
+
+```c++
+#include <cpflib>
+
+auto analysis = cpf::complexity_of(
+    [](std::size_t n) {
+        volatile std::size_t total = 0;
+        for (std::size_t i = 0; i < n * 1000; ++i) {
+            total = total + (i & 7U);
+        }
+        return total;
+    },
+    std::vector<std::tuple<std::size_t>>{{32}, {64}, {128}, {256}},
+    std::vector<double>{32.0, 64.0, 128.0, 256.0});
+
+std::cout << analysis.summary << std::endl;
+std::cout << "Estimated time at n=512: " << analysis.estimate(512.0) << " ns\n";
+```
+
+The returned `cpf::complexity` contains:
+
+- `big_o`: the selected asymptotic family
+- `expression`: the fitted practical expression in nanoseconds
+- `summary`: a human-readable description
+- `estimator`: a `std::function<double(double)>` returning estimated nanoseconds for a given input size
+- `relative_root_mean_square_error`, `coefficients`, and the observed samples for inspection/debugging
 
 ## Example usage
 

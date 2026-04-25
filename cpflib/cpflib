@@ -1,5 +1,6 @@
 #pragma once
 
 /// Public umbrella header for the CPF runtime APIs.
+#include "analysis/complexity.h"
 #include "runtime/runtime.h"
 #include "utils/traits.h"
