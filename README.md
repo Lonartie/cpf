@@ -140,8 +140,11 @@ For the calculator grammar, CPF generates node types like:
 struct expression : cpf::node {
     using parse_result = cpf::parse_result<expression>;
 
+    static constexpr std::size_t RuleId = 0;
+
     ~expression() override = default;
     static parse_result parse(std::string_view input);
+    std::size_t rule_id() const override;
     const std::type_info& type() const override;
     std::unique_ptr<expression> clone();
 };
@@ -149,12 +152,15 @@ struct expression : cpf::node {
 struct addition : expression {
     using parse_result = cpf::parse_result<addition>;
 
+    static constexpr std::size_t RuleId = 1;
+
     std::unique_ptr<expression> left;
     cpf::matched_string op;
     std::unique_ptr<expression> right;
 
     ~addition() override = default;
     static parse_result parse(std::string_view input);
+    std::size_t rule_id() const override;
     const std::type_info& type() const override;
     std::unique_ptr<addition> clone();
 };
@@ -170,6 +176,8 @@ Every generated node inherits:
 
 - `std::size_t definition`
 - `cpf::source_range range`
+
+Every generated node also exposes a stable `RuleId` constant and implements `cpf::node::rule_id()`, which CPF uses for constant-time generated visitor, printing, and validation dispatch.
 
 Captured terminals are stored as `cpf::matched_string`, which includes both the matched text and its exact source span.
 

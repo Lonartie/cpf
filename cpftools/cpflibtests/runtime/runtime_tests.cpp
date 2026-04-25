@@ -8,11 +8,17 @@
 
 namespace {
    struct fake_node final : cpf::node {
+      static constexpr std::size_t RuleId = 7;
+
       explicit fake_node(std::string value)
          : value{std::move(value)} {
       }
 
       std::string value;
+
+      [[nodiscard]] std::size_t rule_id() const override {
+         return RuleId;
+      }
 
       [[nodiscard]] const std::type_info& type() const override {
          return typeid(fake_node);
@@ -35,6 +41,7 @@ TEST_SUITE("cpflib.runtime") {
       REQUIRE(result.forest.size() == 2);
       CHECK(result.forest[0]->value == "first");
       CHECK(result.forest[1]->value == "second");
+      CHECK(result.forest[0]->rule_id() == fake_node::RuleId);
    }
 
    TEST_CASE("matched strings keep both text and source ranges") {

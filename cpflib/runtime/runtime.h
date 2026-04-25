@@ -14,7 +14,8 @@
 #include <string_view>
 #include <tuple>
 #include <typeinfo>
-#include <map>
+#include <unordered_map>
+#include <unordered_set>
 #include <variant>
 #include <vector>
 
@@ -77,6 +78,10 @@ namespace cpf {
       source_range range;
 
       virtual ~node() = default;
+
+      /// @brief Returns the generated rule identifier of the concrete node.
+      /// @return Stable rule id used for constant-time dispatch in generated visitors.
+      [[nodiscard]] virtual std::size_t rule_id() const = 0;
 
       /// @brief Returns the dynamic type of the concrete node.
       /// @return The type information of the concrete node instance.
@@ -285,6 +290,7 @@ namespace cpf {
          parser_symbol_kind kind = parser_symbol_kind::literal;
          std::size_t value = 0;
          std::string_view text;
+         const std::regex* compiled_regex = nullptr;
       };
 
       struct production_spec {
@@ -299,6 +305,9 @@ namespace cpf {
          const production_spec* productions = nullptr;
          std::size_t production_count = 0;
          std::size_t rule_count = 0;
+         const std::size_t* rule_production_indices = nullptr;
+         const std::size_t* rule_production_offsets = nullptr;
+         const std::size_t* rule_production_counts = nullptr;
       };
 
       struct parse_node;
@@ -318,6 +327,62 @@ namespace cpf {
          bool success = false;
          std::vector<parse_node_ptr> forest;
          parse_error error;
+      };
+
+      struct chart_item_key {
+         std::size_t production = 0;
+         std::size_t dot = 0;
+         std::size_t start = 0;
+
+         [[nodiscard]] bool operator==(const chart_item_key&) const = default;
+      };
+
+      struct span_key {
+         std::size_t symbol = 0;
+         std::size_t start = 0;
+         std::size_t end = 0;
+
+         [[nodiscard]] bool operator==(const span_key&) const = default;
+      };
+
+      struct rule_start_key {
+         std::size_t rule = 0;
+         std::size_t start = 0;
+
+         [[nodiscard]] bool operator==(const rule_start_key&) const = default;
+      };
+
+      inline void hash_combine(std::size_t& seed, std::size_t value) {
+         seed ^= value + 0x9e3779b97f4a7c15ULL + (seed << 6U) + (seed >> 2U);
+      }
+
+      struct chart_item_key_hash {
+         [[nodiscard]] auto operator()(const chart_item_key& key) const noexcept -> std::size_t {
+            auto seed = std::size_t{0};
+            hash_combine(seed, key.production);
+            hash_combine(seed, key.dot);
+            hash_combine(seed, key.start);
+            return seed;
+         }
+      };
+
+      struct span_key_hash {
+         [[nodiscard]] auto operator()(const span_key& key) const noexcept -> std::size_t {
+            auto seed = std::size_t{0};
+            hash_combine(seed, key.symbol);
+            hash_combine(seed, key.start);
+            hash_combine(seed, key.end);
+            return seed;
+         }
+      };
+
+      struct rule_start_key_hash {
+         [[nodiscard]] auto operator()(const rule_start_key& key) const noexcept -> std::size_t {
+            auto seed = std::size_t{0};
+            hash_combine(seed, key.rule);
+            hash_combine(seed, key.start);
+            return seed;
+         }
       };
 
       struct terminal_match {
@@ -370,10 +435,16 @@ namespace cpf {
             return match;
          }
          if (symbol.kind == parser_symbol_kind::regex) {
-            const std::regex regex{std::string{symbol.text}};
             std::string matched_text;
-            if (!try_regex(input, current, regex, &matched_text)) {
-               return std::nullopt;
+            if (symbol.compiled_regex != nullptr) {
+               if (!try_regex(input, current, *symbol.compiled_regex, &matched_text)) {
+                  return std::nullopt;
+               }
+            } else {
+               const std::regex regex{std::string{symbol.text}};
+               if (!try_regex(input, current, regex, &matched_text)) {
+                  return std::nullopt;
+               }
             }
             match.end = current;
             match.text.text = std::move(matched_text);
@@ -388,15 +459,14 @@ namespace cpf {
          error_tracker tracker;
 
          struct chart_column {
-            std::vector<std::tuple<std::size_t, std::size_t, std::size_t>> items;
-            std::map<std::tuple<std::size_t, std::size_t, std::size_t>, std::size_t> indices;
+            std::vector<chart_item_key> items;
+            std::unordered_set<chart_item_key, chart_item_key_hash> indices;
 
             bool add(std::size_t production, std::size_t dot, std::size_t start) {
-               auto key = std::make_tuple(production, dot, start);
-               if (indices.contains(key)) {
+               auto key = chart_item_key{production, dot, start};
+               if (!indices.insert(key).second) {
                   return false;
                }
-               indices.emplace(key, items.size());
                items.push_back(key);
                return true;
             }
@@ -404,11 +474,11 @@ namespace cpf {
 
          std::vector<chart_column> chart(input.size() + 1);
          auto has_root_production = false;
-         for (std::size_t production = 0; production < grammar.production_count; ++production) {
-            if (grammar.productions[production].lhs == root_rule) {
-               chart.front().add(production, 0, 0);
-               has_root_production = true;
-            }
+          const auto root_begin = grammar.rule_production_offsets[root_rule];
+          const auto root_count = grammar.rule_production_counts[root_rule];
+          for (std::size_t offset = 0; offset < root_count; ++offset) {
+             chart.front().add(grammar.rule_production_indices[root_begin + offset], 0, 0);
+             has_root_production = true;
          }
 
          if (!has_root_production) {
@@ -455,9 +525,9 @@ namespace cpf {
             }
          }
 
-         std::map<std::tuple<std::size_t, std::size_t, std::size_t>, std::vector<std::size_t>> completed_rules;
-         std::map<std::tuple<std::size_t, std::size_t, std::size_t>, bool> completed_productions;
-         std::map<std::tuple<std::size_t, std::size_t>, std::vector<std::size_t>> rule_ends;
+         std::unordered_map<span_key, std::vector<std::size_t>, span_key_hash> completed_rules;
+         std::unordered_set<span_key, span_key_hash> completed_productions;
+         std::unordered_map<rule_start_key, std::vector<std::size_t>, rule_start_key_hash> rule_ends;
 
          for (std::size_t end = 0; end < chart.size(); ++end) {
             for (const auto& item : chart[end].items) {
@@ -466,9 +536,9 @@ namespace cpf {
                if (dot != production.symbol_count) {
                   continue;
                }
-               completed_productions[std::make_tuple(production_index, start, end)] = true;
-               completed_rules[std::make_tuple(production.lhs, start, end)].push_back(production_index);
-               rule_ends[std::make_tuple(production.lhs, start)].push_back(end);
+               completed_productions.insert(span_key{production_index, start, end});
+               completed_rules[span_key{production.lhs, start, end}].push_back(production_index);
+               rule_ends[rule_start_key{production.lhs, start}].push_back(end);
             }
          }
 
@@ -477,48 +547,50 @@ namespace cpf {
             ends.erase(std::unique(ends.begin(), ends.end()), ends.end());
          }
 
-         std::map<std::tuple<std::size_t, std::size_t, std::size_t>, std::vector<parse_node_ptr>> rule_cache;
-         std::map<std::tuple<std::size_t, std::size_t, std::size_t>, std::vector<parse_node_ptr>> production_cache;
-         std::set<std::tuple<std::size_t, std::size_t, std::size_t>> rule_in_progress;
-         std::set<std::tuple<std::size_t, std::size_t, std::size_t>> production_in_progress;
+         using node_list = std::vector<parse_node_ptr>;
 
-         std::function<std::vector<parse_node_ptr>(std::size_t, std::size_t, std::size_t)> build_rule;
-         std::function<std::vector<parse_node_ptr>(std::size_t, std::size_t, std::size_t)> build_production;
+         const auto empty_nodes = node_list{};
+         std::unordered_map<span_key, node_list, span_key_hash> rule_cache;
+         std::unordered_map<span_key, node_list, span_key_hash> production_cache;
+         std::unordered_set<span_key, span_key_hash> rule_in_progress;
+         std::unordered_set<span_key, span_key_hash> production_in_progress;
 
-         build_rule = [&](std::size_t rule, std::size_t start, std::size_t end) -> std::vector<parse_node_ptr> {
-            auto key = std::make_tuple(rule, start, end);
+         std::function<const node_list&(std::size_t, std::size_t, std::size_t)> build_rule;
+         std::function<const node_list&(std::size_t, std::size_t, std::size_t)> build_production;
+
+         build_rule = [&](std::size_t rule, std::size_t start, std::size_t end) -> const node_list& {
+            auto key = span_key{rule, start, end};
+            if (rule_in_progress.contains(key)) {
+               return empty_nodes;
+            }
             if (auto cache = rule_cache.find(key); cache != rule_cache.end()) {
                return cache->second;
             }
-            if (rule_in_progress.contains(key)) {
-               return {};
-            }
 
             rule_in_progress.insert(key);
-            std::vector<parse_node_ptr> nodes;
+            auto& nodes = rule_cache[key];
             if (auto completed = completed_rules.find(key); completed != completed_rules.end()) {
                for (auto production_index : completed->second) {
-                  auto produced = build_production(production_index, start, end);
+                  const auto& produced = build_production(production_index, start, end);
                   nodes.insert(nodes.end(), produced.begin(), produced.end());
                }
             }
             rule_in_progress.erase(key);
-            rule_cache.emplace(key, nodes);
             return nodes;
          };
 
-         build_production = [&](std::size_t production_index, std::size_t start, std::size_t end) -> std::vector<parse_node_ptr> {
-            auto key = std::make_tuple(production_index, start, end);
+         build_production = [&](std::size_t production_index, std::size_t start, std::size_t end) -> const node_list& {
+            auto key = span_key{production_index, start, end};
+            if (production_in_progress.contains(key) || !completed_productions.contains(key)) {
+               return empty_nodes;
+            }
             if (auto cache = production_cache.find(key); cache != production_cache.end()) {
                return cache->second;
-            }
-            if (production_in_progress.contains(key) || !completed_productions.contains(key)) {
-               return {};
             }
 
             production_in_progress.insert(key);
             const auto& production = grammar.productions[production_index];
-            std::vector<parse_node_ptr> nodes;
+            auto& nodes = production_cache[key];
             std::vector<parse_value> children;
 
             std::function<void(std::size_t, std::size_t)> enumerate = [&](std::size_t symbol_index, std::size_t position) {
@@ -536,7 +608,7 @@ namespace cpf {
 
                const auto& symbol = production.symbols[symbol_index];
                if (symbol.kind == parser_symbol_kind::nonterminal) {
-                  auto end_it = rule_ends.find(std::make_tuple(symbol.value, position));
+                   auto end_it = rule_ends.find(rule_start_key{symbol.value, position});
                   if (end_it == rule_ends.end()) {
                      return;
                   }
@@ -545,7 +617,7 @@ namespace cpf {
                      if (child_end > end) {
                         break;
                      }
-                     auto child_nodes = build_rule(symbol.value, position, child_end);
+                      const auto& child_nodes = build_rule(symbol.value, position, child_end);
                      for (const auto& child : child_nodes) {
                         children.emplace_back(child);
                         enumerate(symbol_index + 1, child_end);
@@ -566,7 +638,6 @@ namespace cpf {
 
             enumerate(0, start);
             production_in_progress.erase(key);
-            production_cache.emplace(key, nodes);
             return nodes;
          };
 
@@ -574,7 +645,7 @@ namespace cpf {
             if (skip_space_position(input, end) != input.size()) {
                continue;
             }
-            auto trees = build_rule(root_rule, 0, end);
+            const auto& trees = build_rule(root_rule, 0, end);
             result.forest.insert(result.forest.end(), trees.begin(), trees.end());
          }
 
@@ -584,7 +655,7 @@ namespace cpf {
          }
 
          for (std::size_t end = 0; end < chart.size(); ++end) {
-            auto completed = completed_rules.find(std::make_tuple(root_rule, 0, end));
+            auto completed = completed_rules.find(span_key{root_rule, 0, end});
             if (completed != completed_rules.end()) {
                auto failure_position = skip_space_position(input, end);
                tracker.record(failure_position, "<end of input>", "after completing rule '" + std::string{grammar.productions[completed->second.front()].lhs_name} + "'");

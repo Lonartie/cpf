@@ -23,20 +23,24 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(generated.header.find("Exclusive node storage is O(1).") != std::string::npos);
          CHECK(generated.header.find("struct expression : cpf::node") != std::string::npos);
          CHECK(generated.header.find("struct number : expression") != std::string::npos);
+         CHECK(generated.header.find("static constexpr std::size_t RuleId = ") != std::string::npos);
          CHECK(generated.header.find("cpf::matched_string value;") != std::string::npos);
          CHECK(generated.header.find("std::unique_ptr<expression> left;") != std::string::npos);
          CHECK(generated.header.find("template<typename Visitor>") != std::string::npos);
-         CHECK(generated.header.find("auto visit(const expression& node, Visitor&& visitor)") != std::string::npos);
+         CHECK(generated.header.find("switch (node.rule_id())") != std::string::npos);
       }
 
       SUBCASE("source output wires parser, errors, and cloning") {
          CHECK(generated.source.find("grammar_productions{{") != std::string::npos);
+          CHECK(generated.source.find("grammar_rule_production_indices{{") != std::string::npos);
          CHECK(generated.source.find("cpf::detail::earley_parse(input, grammar_spec,") != std::string::npos);
          CHECK(generated.source.find("expression -> addition") != std::string::npos);
+          CHECK(generated.source.find("const std::regex regex_0{") != std::string::npos);
          CHECK(generated.source.find("std::unique_ptr<cpf::node> build_node(const parse_node_ptr& tree)") != std::string::npos);
          CHECK(generated.source.find("bool validate_generated_node(const cpf::node& node)") != std::string::npos);
          CHECK(generated.source.find("rejected by precedence/associativity constraints") != std::string::npos);
          CHECK(generated.source.find("result.forest.push_back(std::unique_ptr<T>{static_cast<T*>(built.release())});") != std::string::npos);
+          CHECK(generated.source.find("if (built->rule_id() != T::RuleId)") != std::string::npos);
          CHECK(generated.source.find("std::unique_ptr<cpf::node> number::clone_node() const") != std::string::npos);
       }
    }
@@ -54,15 +58,16 @@ TEST_SUITE("cpflib.code_generator") {
 
       SUBCASE("default precedence follows source order for infix rules") {
          CHECK(generated.source.find("int precedence_of_default_expr(const default_expr& node)") != std::string::npos);
-         CHECK(generated.source.find("if (auto* value = dynamic_cast<const default_add*>(&node))") != std::string::npos);
-         CHECK(generated.source.find("if (auto* value = dynamic_cast<const default_subtract*>(&node))") != std::string::npos);
-         CHECK(generated.source.find("if (auto* value = dynamic_cast<const default_multiply*>(&node))") != std::string::npos);
-         CHECK(generated.source.find("validate_default_expr_child(*value->left, 1, true, true)") != std::string::npos);
-         CHECK(generated.source.find("validate_default_expr_child(*value->right, 3, true, false)") != std::string::npos);
+         CHECK(generated.source.find("switch (node.rule_id())") != std::string::npos);
+         CHECK(generated.source.find("case default_add::RuleId:") != std::string::npos);
+         CHECK(generated.source.find("case default_subtract::RuleId:") != std::string::npos);
+         CHECK(generated.source.find("case default_multiply::RuleId:") != std::string::npos);
+         CHECK(generated.source.find("validate_default_expr_child(*value.left, 1, true, true)") != std::string::npos);
+         CHECK(generated.source.find("validate_default_expr_child(*value.right, 3, true, false)") != std::string::npos);
       }
 
       SUBCASE("default associativity is left and explicit labels generate matched_string fields") {
-         CHECK(generated.source.find("validate_default_expr_child(*value->right, 2, true, false)") != std::string::npos);
+         CHECK(generated.source.find("validate_default_expr_child(*value.right, 2, true, false)") != std::string::npos);
          CHECK(generated.header.find("struct default_number : default_expr") != std::string::npos);
          CHECK(generated.header.find("cpf::matched_string value;") != std::string::npos);
       }
@@ -79,10 +84,10 @@ TEST_SUITE("cpflib.code_generator") {
       auto generated = cpf::generate_code(grammar, "default_labels");
 
       CHECK(generated.source.find("int precedence_of_default_label_expr(const default_label_expr& node)") != std::string::npos);
-      CHECK(generated.source.find("if (auto* value = dynamic_cast<const default_label_add*>(&node))") != std::string::npos);
-      CHECK(generated.source.find("if (auto* value = dynamic_cast<const default_label_multiply*>(&node))") != std::string::npos);
-      CHECK(generated.source.find("validate_default_label_expr_child(*value->right, 1, true, false)") != std::string::npos);
-      CHECK(generated.source.find("validate_default_label_expr_child(*value->right, 2, true, false)") != std::string::npos);
+      CHECK(generated.source.find("case default_label_add::RuleId:") != std::string::npos);
+      CHECK(generated.source.find("case default_label_multiply::RuleId:") != std::string::npos);
+      CHECK(generated.source.find("validate_default_label_expr_child(*value.right, 1, true, false)") != std::string::npos);
+      CHECK(generated.source.find("validate_default_label_expr_child(*value.right, 2, true, false)") != std::string::npos);
    }
 
    TEST_CASE("duplicate concrete rule declarations generate one merged node type") {
@@ -112,7 +117,7 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(generated.source.find("node->definition = 0;") != std::string::npos);
          CHECK(generated.source.find("node->definition = 1;") != std::string::npos);
          CHECK(generated.source.find("copy->definition = definition;") != std::string::npos);
-         CHECK(generated.source.find("switch (value->definition)") != std::string::npos);
+         CHECK(generated.source.find("switch (value.definition)") != std::string::npos);
          CHECK(generated.source.find("std::unique_ptr<merged_message>{static_cast<merged_message*>(child_0.release())}") != std::string::npos);
       }
    }
