@@ -1109,6 +1109,7 @@ namespace cpf {
          line(header, 0, "#include <memory>");
          line(header, 0, "#include <optional>");
          line(header, 0, "#include <span>");
+         line(header, 0, "#include <stdexcept>");
          line(header, 0, "#include <string>");
          line(header, 0, "#include <string_view>");
          line(header, 0, "#include <typeinfo>");
@@ -1163,6 +1164,36 @@ namespace cpf {
             }
             line(header, 0, "};");
             line(header, 0, "std::ostream& operator<<(std::ostream& os, const " + info.name + "& node);");
+            for (const auto& field: info.fields) {
+               if (field.shape != field_shape::capture_variant) {
+                  continue;
+               }
+               line(header, 0);
+               line(header, 0, "template<typename Visitor>");
+               line(header, 0, "auto visit_" + field.name + "(const " + info.name + "& node, Visitor&& visitor) {");
+               line(header, 1, "return std::visit([&](const auto& value) -> decltype(auto) {");
+               line(header, 2, "using value_t = std::decay_t<decltype(value)>;");
+               auto first_alternative = true;
+               for (const auto& alternative: field.variant_alternatives) {
+                  line(header, 2, std::string{first_alternative ? "if constexpr" : "else if constexpr"} +
+                                        " (std::is_same_v<value_t, " + alternative.type + ">) {");
+                  if (alternative.node) {
+                     line(header, 3, "if (!value) {");
+                     line(header, 4, "throw std::runtime_error{\"Generated variant field '" + field.name + "' is null\"};");
+                     line(header, 3, "}");
+                     line(header, 3, "return std::forward<Visitor>(visitor)(*value);");
+                  } else {
+                     line(header, 3, "return std::forward<Visitor>(visitor)(value);");
+                  }
+                  line(header, 2, "}");
+                  first_alternative = false;
+               }
+               line(header, 2, "else {");
+               line(header, 3, "throw std::runtime_error{\"Unknown variant capture alternative\"};");
+               line(header, 2, "}");
+               line(header, 1, "}, node." + field.name + ");");
+               line(header, 0, "}");
+            }
             line(header, 0);
          }
 

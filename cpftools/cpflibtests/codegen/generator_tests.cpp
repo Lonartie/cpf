@@ -329,6 +329,8 @@ TEST_SUITE("cpflib.code_generator") {
       CHECK(generated.header.find("cpf::matched_string value;") != std::string::npos);
       CHECK(generated.header.find("std::variant<std::unique_ptr<grouped_choice_greeting>, "
                                   "std::unique_ptr<grouped_choice_farewell>> payload;") != std::string::npos);
+      CHECK(generated.header.find("auto visit_payload(const grouped_choice_payload& node, Visitor&& visitor)") !=
+            std::string::npos);
       CHECK(generated.header.find("$cpf_group_") == std::string::npos);
 
       CHECK(generated.source.find("extract_group_capture_") != std::string::npos);

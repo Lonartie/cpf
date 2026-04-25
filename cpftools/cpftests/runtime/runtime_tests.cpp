@@ -748,6 +748,7 @@ TEST_SUITE("generated.runtime") {
          const auto& greeting = std::get<std::unique_ptr<grouped_choice_greeting>>(hello.forest.front()->payload);
          REQUIRE(greeting != nullptr);
          CHECK(greeting->production_index == 0);
+         CHECK(visit_payload(*hello.forest.front(), [](const auto& node) { return node.text.text; }) == "hello");
 
          auto bye = grouped_choice_payload::parse("bye");
          REQUIRE(bye.success);
@@ -755,6 +756,7 @@ TEST_SUITE("generated.runtime") {
          CHECK(std::holds_alternative<std::unique_ptr<grouped_choice_farewell>>(bye.forest.front()->payload));
          const auto& farewell = std::get<std::unique_ptr<grouped_choice_farewell>>(bye.forest.front()->payload);
          REQUIRE(farewell != nullptr);
+         CHECK(visit_payload(*bye.forest.front(), [](const auto& node) { return node.text.text; }) == "bye");
       }
 
       SUBCASE("quantifiers apply to groups as parse-shaping constructs") {
