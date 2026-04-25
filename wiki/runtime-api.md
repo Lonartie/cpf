@@ -26,7 +26,7 @@ struct expression : cpf::node {
 Each generated rule also gets:
 
 - `operator<<`
-- `visit(...)`
+- `visit(...)` for both const dispatch and in-place mutation of the selected concrete node
 - `visit_recursive(...)` for both const traversal and in-place mutation
 
 Generated rules also expose `recognize(...)` for syntax-only validation without building a forest of lazy parse trees.

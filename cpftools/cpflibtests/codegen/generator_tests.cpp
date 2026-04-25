@@ -44,6 +44,7 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(generated.header.find("std::unique_ptr<expression> left;") != std::string::npos);
          CHECK(generated.header.find("template<typename Visitor>") != std::string::npos);
          CHECK(generated.header.find("switch (node.rule_id())") != std::string::npos);
+          CHECK(generated.header.find("auto visit(expression& node, Visitor&& visitor)") != std::string::npos);
          CHECK(generated.header.find("void visit_recursive(expression& node, Visitor&& visitor)") != std::string::npos);
       }
 
@@ -332,6 +333,8 @@ TEST_SUITE("cpflib.code_generator") {
                                   "std::unique_ptr<grouped_choice_farewell>> payload;") != std::string::npos);
       CHECK(generated.header.find("auto visit_payload(const grouped_choice_payload& node, Visitor&& visitor)") !=
             std::string::npos);
+       CHECK(generated.header.find("auto visit_payload(grouped_choice_payload& node, Visitor&& visitor)") !=
+             std::string::npos);
       CHECK(generated.header.find("$cpf_group_") == std::string::npos);
 
       CHECK(generated.source.find("extract_group_capture_") != std::string::npos);
@@ -353,6 +356,7 @@ TEST_SUITE("cpflib.code_generator") {
       CHECK(generated.header.find("namespace generated::fixtures {") != std::string::npos);
       CHECK(generated.header.find("struct expression : cpf::node") != std::string::npos);
       CHECK(generated.header.find("auto visit(const expression& node, Visitor&& visitor)") != std::string::npos);
+       CHECK(generated.header.find("auto visit(expression& node, Visitor&& visitor)") != std::string::npos);
       CHECK(generated.header.find("} // namespace generated::fixtures") != std::string::npos);
 
       CHECK(generated.source.find("namespace generated::fixtures {") != std::string::npos);

@@ -411,6 +411,23 @@ TEST_SUITE("generated.runtime") {
          CHECK(visit(*result.forest.front(), calculator_visitor{}) == 2);
       }
 
+      SUBCASE("mutable visit dispatch can rewrite the selected concrete node in place") {
+         auto result = expression::parse("1 + 2");
+         REQUIRE(result.success);
+         REQUIRE(result.forest.size() == 1);
+
+         visit(*result.forest.front(), [](auto& node) {
+            using node_t = std::decay_t<decltype(node)>;
+            if constexpr (std::is_same_v<node_t, addition>) {
+               auto replacement = std::make_unique<number>();
+               replacement->value.text = "10";
+               node.left = std::move(replacement);
+            }
+         });
+
+         CHECK(visit(*result.forest.front(), calculator_visitor{}) == 12);
+      }
+
       SUBCASE("parse failures expose structured error details") {
          auto result = expression::parse("1 +");
 
@@ -772,6 +789,21 @@ TEST_SUITE("generated.runtime") {
          const auto& farewell = std::get<std::unique_ptr<grouped_choice_farewell>>(bye.forest.front()->payload);
          REQUIRE(farewell != nullptr);
          CHECK(visit_payload(*bye.forest.front(), [](const auto& node) { return node.text.text; }) == "bye");
+      }
+
+      SUBCASE("mutable variant visitors can rewrite grouped capture payloads in place") {
+         auto hello = grouped_choice_payload::parse("hello");
+         REQUIRE(hello.success);
+         REQUIRE(hello.forest.size() == 1);
+
+         CHECK(visit_payload(*hello.forest.front(), [](auto& node) {
+            node.text.text = "hola";
+            return node.text.text;
+         }) == "hola");
+
+         const auto& greeting = std::get<std::unique_ptr<grouped_choice_greeting>>(hello.forest.front()->payload);
+         REQUIRE(greeting != nullptr);
+         CHECK(greeting->text.text == "hola");
       }
 
       SUBCASE("quantifiers apply to groups as parse-shaping constructs") {
