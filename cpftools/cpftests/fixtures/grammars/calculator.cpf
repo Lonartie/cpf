@@ -4,5 +4,5 @@ addition        [prec = 'sub']              -> expression:left '+':op expression
 subtraction     [prec < 'div', lbl = 'sub'] -> expression:left '-':op expression:right;
 multiplication  [prec = 'div']              -> expression:left '*':op expression:right;
 division        [prec < 'num', lbl = 'div'] -> expression:left '/':op expression:right;
-number          [lbl = 'num']               -> r'[0-9]+';
+number          [lbl = 'num']               -> r'[0-9]+':value;
 

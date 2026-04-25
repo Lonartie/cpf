@@ -14,12 +14,12 @@ namespace {
 
       std::string value;
 
-      const std::type_info& type() const override {
+      [[nodiscard]] const std::type_info& type() const override {
          return typeid(fake_node);
       }
 
    protected:
-      std::unique_ptr<cpf::node> clone_node() const override {
+      [[nodiscard]] std::unique_ptr<cpf::node> clone_node() const override {
          return std::make_unique<fake_node>(*this);
       }
    };
@@ -35,6 +35,24 @@ TEST_SUITE("cpflib.runtime") {
       REQUIRE(result.forest.size() == 2);
       CHECK(result.forest[0]->value == "first");
       CHECK(result.forest[1]->value == "second");
+   }
+
+   TEST_CASE("matched strings keep both text and source ranges") {
+      cpf::matched_string match;
+      match.text = "hello";
+      match.range.begin.offset = 3;
+      match.range.begin.line = 2;
+      match.range.begin.column = 4;
+      match.range.end.offset = 8;
+      match.range.end.line = 2;
+      match.range.end.column = 9;
+
+      CHECK(match.text == "hello");
+      CHECK(match.range.begin.offset == 3);
+      CHECK(match.range.begin.line == 2);
+      CHECK(match.range.begin.column == 4);
+      CHECK(match.range.end.offset == 8);
+      CHECK(match.range.end.column == 9);
    }
 
    TEST_CASE("error tracker reports furthest failures with context notes") {

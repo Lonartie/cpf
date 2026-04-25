@@ -12,7 +12,7 @@ namespace {
    struct numeric_visitor {
       int operator()(const numeric_plus& node) const { return visit(*node.left, *this) + visit(*node.right, *this); }
       int operator()(const numeric_times& node) const { return visit(*node.left, *this) * visit(*node.right, *this); }
-      int operator()(const numeric_number& node) const { return std::stoi(node.value); }
+      int operator()(const numeric_number& node) const { return std::stoi(node.value.text); }
    };
 
    struct label_visitor {
@@ -20,7 +20,7 @@ namespace {
       int operator()(const label_minus& node) const { return visit(*node.left, *this) - visit(*node.right, *this); }
       int operator()(const label_times& node) const { return visit(*node.left, *this) * visit(*node.right, *this); }
       int operator()(const label_divide& node) const { return visit(*node.left, *this) / visit(*node.right, *this); }
-      int operator()(const label_number& node) const { return std::stoi(node.value); }
+      int operator()(const label_number& node) const { return std::stoi(node.value.text); }
    };
 
    struct assoc_visitor {
@@ -34,20 +34,20 @@ namespace {
          return result;
       }
       int operator()(const assoc_subtract& node) const { return visit(*node.left, *this) - visit(*node.right, *this); }
-      int operator()(const assoc_number& node) const { return std::stoi(node.value); }
+      int operator()(const assoc_number& node) const { return std::stoi(node.value.text); }
    };
 
    struct default_visitor {
       int operator()(const default_add& node) const { return visit(*node.left, *this) + visit(*node.right, *this); }
       int operator()(const default_subtract& node) const { return visit(*node.left, *this) - visit(*node.right, *this); }
       int operator()(const default_multiply& node) const { return visit(*node.left, *this) * visit(*node.right, *this); }
-      int operator()(const default_number& node) const { return std::stoi(node.value); }
+      int operator()(const default_number& node) const { return std::stoi(node.value.text); }
    };
 
    struct default_label_visitor {
       int operator()(const default_label_add& node) const { return visit(*node.left, *this) + visit(*node.right, *this); }
       int operator()(const default_label_multiply& node) const { return visit(*node.left, *this) * visit(*node.right, *this); }
-      int operator()(const default_label_number& node) const { return std::stoi(node.value); }
+      int operator()(const default_label_number& node) const { return std::stoi(node.value.text); }
    };
 
    int evaluate_numeric(std::string_view input) {
@@ -156,7 +156,7 @@ TEST_SUITE("generated.attributes") {
          auto number_result = default_number::parse("42");
          REQUIRE(number_result.success);
          REQUIRE(number_result.forest.size() == 1);
-         CHECK(number_result.forest.front()->value == "42");
+         CHECK(number_result.forest.front()->value.text == "42");
 
          auto expr_result = default_expr::parse("8 - 3 - 2");
          REQUIRE(expr_result.success);

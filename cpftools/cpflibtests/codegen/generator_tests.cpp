@@ -10,7 +10,7 @@ TEST_SUITE("cpflib.code_generator") {
          subtraction     [prec < 'div', lbl = 'sub'] -> expression:left '-':op expression:right;
          multiplication  [prec = 'div']              -> expression:left '*':op expression:right;
          division        [prec < 'num', lbl = 'div'] -> expression:left '/':op expression:right;
-         number          [lbl = 'num']               -> r'[0-9]+';
+         number          [lbl = 'num']               -> r'[0-9]+':value;
       )");
 
       auto generated = cpf::generate_code(grammar, "calculator");
@@ -18,7 +18,7 @@ TEST_SUITE("cpflib.code_generator") {
       SUBCASE("header output exposes node types and visitors") {
          CHECK(generated.header.find("struct expression : cpf::node") != std::string::npos);
          CHECK(generated.header.find("struct number : expression") != std::string::npos);
-         CHECK(generated.header.find("std::string value;") != std::string::npos);
+         CHECK(generated.header.find("cpf::matched_string value;") != std::string::npos);
          CHECK(generated.header.find("std::unique_ptr<expression> left;") != std::string::npos);
          CHECK(generated.header.find("template<typename Visitor>") != std::string::npos);
          CHECK(generated.header.find("auto visit(const expression& node, Visitor&& visitor)") != std::string::npos);
@@ -42,7 +42,7 @@ TEST_SUITE("cpflib.code_generator") {
          default_add -> default_expr:left '+':op default_expr:right;
          default_subtract -> default_expr:left '-':op default_expr:right;
          default_multiply -> default_expr:left '*':op default_expr:right;
-         default_number -> r'[0-9]+';
+         default_number -> r'[0-9]+':value;
       )");
 
       auto generated = cpf::generate_code(grammar, "default_attrs");
@@ -56,10 +56,10 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(generated.source.find("validate_default_expr_child(*value->right, 3, true, false)") != std::string::npos);
       }
 
-      SUBCASE("default associativity is left and unlabeled terminals become value fields") {
+      SUBCASE("default associativity is left and explicit labels generate matched_string fields") {
          CHECK(generated.source.find("validate_default_expr_child(*value->right, 2, true, false)") != std::string::npos);
          CHECK(generated.header.find("struct default_number : default_expr") != std::string::npos);
-         CHECK(generated.header.find("std::string value;") != std::string::npos);
+         CHECK(generated.header.find("cpf::matched_string value;") != std::string::npos);
       }
    }
 
@@ -68,7 +68,7 @@ TEST_SUITE("cpflib.code_generator") {
          default_label_expr -> default_label_add | default_label_multiply | default_label_number;
          default_label_add [prec < default_label_multiply] -> default_label_expr:left '+':op default_label_expr:right;
          default_label_multiply -> default_label_expr:left '*':op default_label_expr:right;
-         default_label_number -> r'[0-9]+';
+         default_label_number -> r'[0-9]+':value;
       )");
 
       auto generated = cpf::generate_code(grammar, "default_labels");
@@ -92,7 +92,7 @@ TEST_SUITE("cpflib.code_generator") {
          merged_expr -> merged_binary | merged_number;
          merged_binary -> merged_expr:left '+':op merged_expr:right;
          merged_binary -> merged_expr:left '*':op merged_expr:right;
-         merged_number -> r'[0-9]+';
+         merged_number -> r'[0-9]+':value;
       )");
 
       auto generated = cpf::generate_code(grammar, "merged_defs");
@@ -100,7 +100,7 @@ TEST_SUITE("cpflib.code_generator") {
       SUBCASE("merged fields resolve to a common node base") {
          CHECK(generated.header.find("struct merged_wrapper : cpf::node") != std::string::npos);
          CHECK(generated.header.find("std::unique_ptr<merged_message> payload;") != std::string::npos);
-         CHECK(generated.header.find("std::string suffix;") != std::string::npos);
+         CHECK(generated.header.find("cpf::matched_string suffix;") != std::string::npos);
       }
 
       SUBCASE("generated source stamps and preserves matched definitions") {
@@ -168,8 +168,18 @@ TEST_SUITE("cpflib.code_generator") {
       SUBCASE("header output exposes the expected quantified member types") {
          CHECK(generated.header.find("std::unique_ptr<quant_choice> value;") != std::string::npos);
          CHECK(generated.header.find("std::vector<std::unique_ptr<quant_choice>> values;") != std::string::npos);
-         CHECK(generated.header.find("std::vector<std::string> digits;") != std::string::npos);
-         CHECK(generated.header.find("std::optional<std::string> marker;") != std::string::npos);
+         CHECK(generated.header.find("std::vector<cpf::matched_string> digits;") != std::string::npos);
+         CHECK(generated.header.find("std::optional<cpf::matched_string> marker;") != std::string::npos);
+      }
+
+      SUBCASE("unlabeled terminals are not captured into implicit fields") {
+         auto silent_grammar = cpf::parse_grammar(R"(
+            silent -> 'x';
+         )");
+
+         auto silent_generated = cpf::generate_code(silent_grammar, "silent");
+         CHECK(silent_generated.header.find("struct silent : cpf::node") != std::string::npos);
+         CHECK(silent_generated.header.find("value;") == std::string::npos);
       }
 
       SUBCASE("source output lowers quantified syntax through helper extractors") {

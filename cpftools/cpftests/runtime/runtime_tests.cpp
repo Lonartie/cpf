@@ -19,7 +19,7 @@ namespace {
       int operator()(const subtraction& node) const { return visit(*node.left) - visit(*node.right); }
       int operator()(const multiplication& node) const { return visit(*node.left) * visit(*node.right); }
       int operator()(const division& node) const { return visit(*node.left) / visit(*node.right); }
-      int operator()(const number& node) const { return std::stoi(node.value); }
+      int operator()(const number& node) const { return std::stoi(node.value.text); }
    };
 
    struct merged_expr_visitor {
@@ -28,20 +28,20 @@ namespace {
       int operator()(const merged_binary& node) const {
          auto left = visit(*node.left);
          auto right = visit(*node.right);
-         if (node.op == "+") {
+         if (node.op.text == "+") {
             return left + right;
          }
          return left * right;
       }
 
       int operator()(const merged_number& node) const {
-         return std::stoi(node.value);
+         return std::stoi(node.value.text);
       }
    };
 
    struct quant_choice_visitor {
-      std::string operator()(const quant_alpha& node) const { return node.text; }
-      std::string operator()(const quant_digit& node) const { return node.text; }
+      std::string operator()(const quant_alpha& node) const { return node.text.text; }
+      std::string operator()(const quant_digit& node) const { return node.text.text; }
    };
 
    int evaluate(std::string_view input) {
@@ -85,7 +85,7 @@ TEST_SUITE("generated.runtime") {
          CHECK(stream.str().find("multiplication(") != std::string::npos);
       }
 
-      SUBCASE("left associativity and implicit values are preserved") {
+      SUBCASE("left associativity and explicit terminal captures are preserved") {
          CHECK(evaluate("8 / 2 / 2") == 2);
          CHECK(evaluate("10 - 3 - 2") == 5);
          CHECK(evaluate(" 6 + 4 ") == 10);
@@ -93,7 +93,34 @@ TEST_SUITE("generated.runtime") {
          auto number_result = number::parse("42");
          REQUIRE(number_result.success);
          REQUIRE(number_result.forest.size() == 1);
-         CHECK(number_result.forest.front()->value == "42");
+         CHECK(number_result.forest.front()->value.text == "42");
+      }
+
+      SUBCASE("nodes and terminal members expose their matched source ranges") {
+         auto result = expression::parse(" 1 + 23 ");
+         REQUIRE(result.success);
+         REQUIRE(result.forest.size() == 1);
+
+         auto* root = dynamic_cast<const addition*>(result.forest.front().get());
+         REQUIRE(root != nullptr);
+         CHECK(root->range.begin.offset == 1);
+         CHECK(root->range.begin.column == 2);
+         CHECK(root->range.end.offset == 7);
+         CHECK(root->range.end.column == 8);
+         CHECK(root->op.text == "+");
+         CHECK(root->op.range.begin.offset == 3);
+         CHECK(root->op.range.begin.column == 4);
+         CHECK(root->op.range.end.offset == 4);
+         CHECK(root->op.range.end.column == 5);
+
+         REQUIRE(root->right != nullptr);
+         auto* rhs = dynamic_cast<const number*>(root->right.get());
+         REQUIRE(rhs != nullptr);
+         CHECK(rhs->value.text == "23");
+         CHECK(rhs->value.range.begin.offset == 5);
+         CHECK(rhs->value.range.end.offset == 7);
+         CHECK(rhs->range.begin.offset == 5);
+         CHECK(rhs->range.end.offset == 7);
       }
 
       SUBCASE("cloning and recursive visiting traverse the full tree") {
@@ -158,7 +185,7 @@ TEST_SUITE("generated.runtime") {
          auto greeting_result = greeting::parse("hello");
          REQUIRE(greeting_result.success);
          REQUIRE(greeting_result.forest.size() == 1);
-         CHECK(greeting_result.forest.front()->text == "hello");
+         CHECK(greeting_result.forest.front()->text.text == "hello");
       }
 
       SUBCASE("base rule parsing dispatches to the derived node") {
@@ -167,7 +194,7 @@ TEST_SUITE("generated.runtime") {
          REQUIRE(message_result.forest.size() == 1);
 
          auto text = visit(*message_result.forest.front(), [](const greeting& node) {
-            return node.text;
+            return node.text.text;
          });
          CHECK(text == "hello");
 
@@ -181,12 +208,12 @@ TEST_SUITE("generated.runtime") {
       auto first_result = ambiguous_first::parse("x");
       REQUIRE(first_result.success);
       REQUIRE(first_result.forest.size() == 1);
-      CHECK(first_result.forest.front()->text == "x");
+      CHECK(first_result.forest.front()->text.text == "x");
 
       auto second_result = ambiguous_second::parse("x");
       REQUIRE(second_result.success);
       REQUIRE(second_result.forest.size() == 1);
-      CHECK(second_result.forest.front()->text == "x");
+      CHECK(second_result.forest.front()->text.text == "x");
 
       auto ambiguous_result = ambiguous_expr::parse("x");
       REQUIRE(ambiguous_result.success);
@@ -231,7 +258,7 @@ TEST_SUITE("generated.runtime") {
          std::vector<std::size_t> definitions;
          for (const auto& tree : result.forest) {
             definitions.push_back(tree->definition);
-            CHECK(tree->text == "x");
+            CHECK(tree->text.text == "x");
          }
 
          CHECK(definitions == std::vector<std::size_t>{0, 1});
@@ -242,7 +269,7 @@ TEST_SUITE("generated.runtime") {
          REQUIRE(exclamation.success);
          REQUIRE(exclamation.forest.size() == 1);
          CHECK(exclamation.forest.front()->definition == 0);
-         CHECK(exclamation.forest.front()->suffix == "!");
+         CHECK(exclamation.forest.front()->suffix.text == "!");
          REQUIRE(exclamation.forest.front()->payload != nullptr);
          CHECK(dynamic_cast<const merged_farewell*>(exclamation.forest.front()->payload.get()) != nullptr);
 
@@ -250,7 +277,7 @@ TEST_SUITE("generated.runtime") {
          REQUIRE(question.success);
          REQUIRE(question.forest.size() == 1);
          CHECK(question.forest.front()->definition == 1);
-         CHECK(question.forest.front()->suffix == "?");
+         CHECK(question.forest.front()->suffix.text == "?");
          REQUIRE(question.forest.front()->payload != nullptr);
          CHECK(dynamic_cast<const merged_greeting*>(question.forest.front()->payload.get()) != nullptr);
 
@@ -320,7 +347,10 @@ TEST_SUITE("generated.runtime") {
          auto digits = exact_digit_triplet::parse("123");
          REQUIRE(digits.success);
          REQUIRE(digits.forest.size() == 1);
-         CHECK(digits.forest.front()->digits == std::vector<std::string>{"1", "2", "3"});
+         REQUIRE(digits.forest.front()->digits.size() == 3);
+         CHECK(digits.forest.front()->digits[0].text == "1");
+         CHECK(digits.forest.front()->digits[1].text == "2");
+         CHECK(digits.forest.front()->digits[2].text == "3");
 
          auto missing_terminal = optional_terminal::parse("");
          REQUIRE(missing_terminal.success);
@@ -331,7 +361,7 @@ TEST_SUITE("generated.runtime") {
          REQUIRE(present_terminal.success);
          REQUIRE(present_terminal.forest.size() == 1);
          REQUIRE(present_terminal.forest.front()->marker.has_value());
-         CHECK(*present_terminal.forest.front()->marker == "go");
+         CHECK(present_terminal.forest.front()->marker->text == "go");
       }
    }
 }

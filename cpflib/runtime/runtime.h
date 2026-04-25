@@ -47,31 +47,53 @@ namespace cpf {
       parse_error error;
    };
 
+   /// @brief One position within an input source.
+   struct source_position {
+      /// @brief Zero-based byte offset in the original input.
+      std::size_t offset = 0;
+      /// @brief One-based line number.
+      std::size_t line = 1;
+      /// @brief One-based column number.
+      std::size_t column = 1;
+   };
+
+   /// @brief Half-open source range covering a parsed match.
+   struct source_range {
+      source_position begin;
+      source_position end;
+   };
+
+   /// @brief Captured terminal text together with the source range it matched.
+   struct matched_string {
+      std::string text;
+      source_range range;
+   };
+
    /// @brief Base class for all generated model nodes.
    struct node {
       /// @brief Zero-based production index within the rule that created this node.
       std::size_t definition = 0;
+      /// @brief Source range that produced this node.
+      source_range range;
 
       virtual ~node() = default;
 
       /// @brief Returns the dynamic type of the concrete node.
       /// @return The type information of the concrete node instance.
-      virtual const std::type_info& type() const = 0;
+      [[nodiscard]] virtual const std::type_info& type() const = 0;
 
    protected:
       /// @brief Clones the concrete node through the base interface.
       /// @return A newly allocated deep copy of the node.
-      virtual std::unique_ptr<node> clone_node() const = 0;
+      [[nodiscard]] virtual std::unique_ptr<node> clone_node() const = 0;
    };
 
    namespace detail {
-      struct source_location {
-         std::size_t line = 1;
-         std::size_t column = 1;
-      };
+      using source_location = source_position;
 
       inline source_location locate(std::string_view input, std::size_t offset) {
          source_location location;
+         location.offset = std::min(offset, input.size());
          auto limit = std::min(offset, input.size());
          for (std::size_t i = 0; i < limit; ++i) {
             if (input[i] == '\n') {
@@ -82,6 +104,10 @@ namespace cpf {
             }
          }
          return location;
+      }
+
+      inline source_range make_source_range(std::string_view input, std::size_t begin_offset, std::size_t end_offset) {
+         return source_range{locate(input, begin_offset), locate(input, end_offset)};
       }
 
       inline std::string escape_string(std::string_view value) {
@@ -158,7 +184,7 @@ namespace cpf {
             }
          }
 
-         parse_error build(std::string_view input) const {
+         [[nodiscard]] parse_error build(std::string_view input) const {
             parse_error error;
             auto location = locate(input, furthest_);
             error.line = location.line;
@@ -277,13 +303,14 @@ namespace cpf {
 
       struct parse_node;
       using parse_node_ptr = std::shared_ptr<const parse_node>;
-      using parse_value = std::variant<std::string, parse_node_ptr>;
+      using parse_value = std::variant<matched_string, parse_node_ptr>;
 
       struct parse_node {
          std::size_t rule = 0;
          std::size_t production = 0;
          std::size_t start = 0;
          std::size_t end = 0;
+         source_range range;
          std::vector<parse_value> children;
       };
 
@@ -295,8 +322,15 @@ namespace cpf {
 
       struct terminal_match {
          std::size_t end = 0;
-         std::string text;
+         matched_string text;
       };
+
+      inline source_range range_of(const parse_value& value) {
+         if (std::holds_alternative<matched_string>(value)) {
+            return std::get<matched_string>(value).range;
+         }
+         return std::get<parse_node_ptr>(value)->range;
+      }
 
       inline std::size_t skip_space_position(std::string_view input, std::size_t position) {
          skip_space(input, position);
@@ -322,20 +356,28 @@ namespace cpf {
 
       inline std::optional<terminal_match> match_terminal(std::string_view input, std::size_t position, const parser_symbol& symbol) {
          terminal_match match;
+         auto token_start = position;
+         skip_space(input, token_start);
          auto current = position;
          if (symbol.kind == parser_symbol_kind::literal) {
-            if (!try_literal(input, current, symbol.text, &match.text)) {
+            std::string matched_text;
+            if (!try_literal(input, current, symbol.text, &matched_text)) {
                return std::nullopt;
             }
             match.end = current;
+            match.text.text = std::move(matched_text);
+            match.text.range = make_source_range(input, token_start, current);
             return match;
          }
          if (symbol.kind == parser_symbol_kind::regex) {
             const std::regex regex{std::string{symbol.text}};
-            if (!try_regex(input, current, regex, &match.text)) {
+            std::string matched_text;
+            if (!try_regex(input, current, regex, &matched_text)) {
                return std::nullopt;
             }
             match.end = current;
+            match.text.text = std::move(matched_text);
+            match.text.range = make_source_range(input, token_start, current);
             return match;
          }
          return std::nullopt;
@@ -482,7 +524,12 @@ namespace cpf {
             std::function<void(std::size_t, std::size_t)> enumerate = [&](std::size_t symbol_index, std::size_t position) {
                if (symbol_index == production.symbol_count) {
                   if (position == end) {
-                     nodes.push_back(std::make_shared<parse_node>(parse_node{production.lhs, production_index, start, end, children}));
+                     auto range = make_source_range(input, start, end);
+                     if (!children.empty()) {
+                        range.begin = range_of(children.front()).begin;
+                        range.end = range_of(children.back()).end;
+                     }
+                     nodes.push_back(std::make_shared<parse_node>(parse_node{production.lhs, production_index, start, end, range, children}));
                   }
                   return;
                }
@@ -500,7 +547,7 @@ namespace cpf {
                      }
                      auto child_nodes = build_rule(symbol.value, position, child_end);
                      for (const auto& child : child_nodes) {
-                        children.push_back(child);
+                        children.emplace_back(child);
                         enumerate(symbol_index + 1, child_end);
                         children.pop_back();
                      }
@@ -512,7 +559,7 @@ namespace cpf {
                if (!match.has_value() || match->end > end) {
                   return;
                }
-               children.push_back(match->text);
+               children.emplace_back(match->text);
                enumerate(symbol_index + 1, match->end);
                children.pop_back();
             };

@@ -183,13 +183,6 @@ namespace cpf {
          return rank;
       }
 
-      [[nodiscard]] bool is_single_unlabeled_terminal(const production& production) {
-         return production.symbols.size() == 1
-             && production.symbols.front().is_single()
-             && production.symbols.front().kind != symbol_kind::reference
-             && !production.symbols.front().has_label();
-      }
-
       [[nodiscard]] std::vector<std::string> collect_concrete_descendants(
          std::string_view base,
          const std::unordered_map<std::string, std::vector<std::string>>& children,
@@ -249,13 +242,13 @@ namespace cpf {
 
          if (symbol.is_repeated()) {
             field.shape = field_shape::terminal_vector;
-            field.type = "std::vector<std::string>";
+            field.type = "std::vector<cpf::matched_string>";
          } else if (symbol.is_optional()) {
             field.shape = field_shape::terminal_optional;
-            field.type = "std::optional<std::string>";
+            field.type = "std::optional<cpf::matched_string>";
          } else {
             field.shape = field_shape::terminal_scalar;
-            field.type = "std::string";
+            field.type = "cpf::matched_string";
          }
          return field;
       }
@@ -279,11 +272,11 @@ namespace cpf {
       [[nodiscard]] std::string merged_field_type(const field_info& field) {
          switch (field.shape) {
             case field_shape::terminal_scalar:
-               return "std::string";
+               return "cpf::matched_string";
             case field_shape::terminal_optional:
-               return "std::optional<std::string>";
+               return "std::optional<cpf::matched_string>";
             case field_shape::terminal_vector:
-               return "std::vector<std::string>";
+               return "std::vector<cpf::matched_string>";
             case field_shape::node_scalar:
                return "std::unique_ptr<" + field.resolved_rule + ">";
             case field_shape::node_vector:
@@ -295,11 +288,11 @@ namespace cpf {
       [[nodiscard]] std::string describe_field_type(const field_info& field) {
          switch (field.shape) {
             case field_shape::terminal_scalar:
-               return "std::string";
+               return "cpf::matched_string";
             case field_shape::terminal_optional:
-               return "std::optional<std::string>";
+               return "std::optional<cpf::matched_string>";
             case field_shape::terminal_vector:
-               return "std::vector<std::string>";
+               return "std::vector<cpf::matched_string>";
             case field_shape::node_scalar:
                return field.resolved_rule;
             case field_shape::node_vector:
@@ -497,9 +490,6 @@ namespace cpf {
                      merge_field(std::move(field));
                   }
 
-                  if (is_single_unlabeled_terminal(production)) {
-                     merge_field(field_info{"value", "std::string", {}, field_shape::terminal_scalar});
-                  }
                }
 
                for (const auto& field_name : field_order) {
@@ -1031,38 +1021,38 @@ namespace cpf {
                   line(source, 1, "}");
                }
             } else if (helper.kind == helper_kind::optional) {
-               line(source, 1, "std::optional<std::string> extract_" + helper_name + "(const parse_node_ptr& tree) {");
+               line(source, 1, "std::optional<cpf::matched_string> extract_" + helper_name + "(const parse_node_ptr& tree) {");
                line(source, 2, "switch (tree->production) {");
                line(source, 3, "case " + std::to_string(helper.production_indices[0]) + ":");
                line(source, 4, "return std::nullopt;");
                line(source, 3, "case " + std::to_string(helper.production_indices[1]) + ":");
-               line(source, 4, "return std::get<std::string>(tree->children.front());");
+               line(source, 4, "return std::get<cpf::matched_string>(tree->children.front());");
                line(source, 3, "default:");
                line(source, 4, "throw std::runtime_error{\"Unknown quantified helper production\"};");
                line(source, 2, "}");
                line(source, 1, "}");
             } else {
-               line(source, 1, "void collect_" + helper_name + "(const parse_node_ptr& tree, std::vector<std::string>& values) {");
+               line(source, 1, "void collect_" + helper_name + "(const parse_node_ptr& tree, std::vector<cpf::matched_string>& values) {");
                line(source, 2, "switch (tree->production) {");
                if (helper.kind == helper_kind::zero_or_more) {
                   line(source, 3, "case " + std::to_string(helper.production_indices[0]) + ":");
                   line(source, 4, "return;");
                   line(source, 3, "case " + std::to_string(helper.production_indices[1]) + ":");
-                  line(source, 4, "values.push_back(std::get<std::string>(tree->children[0]));");
+                  line(source, 4, "values.push_back(std::get<cpf::matched_string>(tree->children[0]));");
                   line(source, 4, "collect_" + helper_name + "(std::get<parse_node_ptr>(tree->children[1]), values);");
                   line(source, 4, "return;");
                } else if (helper.kind == helper_kind::one_or_more) {
                   line(source, 3, "case " + std::to_string(helper.production_indices[0]) + ":");
-                  line(source, 4, "values.push_back(std::get<std::string>(tree->children[0]));");
+                  line(source, 4, "values.push_back(std::get<cpf::matched_string>(tree->children[0]));");
                   line(source, 4, "return;");
                   line(source, 3, "case " + std::to_string(helper.production_indices[1]) + ":");
-                  line(source, 4, "values.push_back(std::get<std::string>(tree->children[0]));");
+                  line(source, 4, "values.push_back(std::get<cpf::matched_string>(tree->children[0]));");
                   line(source, 4, "collect_" + helper_name + "(std::get<parse_node_ptr>(tree->children[1]), values);");
                   line(source, 4, "return;");
                } else {
                   line(source, 3, "case " + std::to_string(helper.production_indices[0]) + ":");
                   for (std::size_t i = 0; i < helper.exact_count; ++i) {
-                     line(source, 4, "values.push_back(std::get<std::string>(tree->children[" + std::to_string(i) + "]));");
+                     line(source, 4, "values.push_back(std::get<cpf::matched_string>(tree->children[" + std::to_string(i) + "]));");
                   }
                   line(source, 4, "return;");
                }
@@ -1070,8 +1060,8 @@ namespace cpf {
                line(source, 4, "throw std::runtime_error{\"Unknown quantified helper production\"};");
                line(source, 2, "}");
                line(source, 1, "}");
-               line(source, 1, "std::vector<std::string> extract_" + helper_name + "(const parse_node_ptr& tree) {");
-               line(source, 2, "std::vector<std::string> values;");
+               line(source, 1, "std::vector<cpf::matched_string> extract_" + helper_name + "(const parse_node_ptr& tree) {");
+               line(source, 2, "std::vector<cpf::matched_string> values;");
                line(source, 2, "collect_" + helper_name + "(tree, values);");
                line(source, 2, "return values;");
                line(source, 1, "}");
@@ -1219,6 +1209,7 @@ namespace cpf {
             } else {
                line(source, 4, "auto node = std::make_unique<" + info.name + ">();");
                line(source, 4, "node->definition = " + std::to_string(production.definition) + ";");
+               line(source, 4, "node->range = tree->range;");
                for (std::size_t i = 0; i < emitted_production.lowered_symbols.size(); ++i) {
                   const auto& lowered_symbol = emitted_production.lowered_symbols[i];
                   const auto& symbol = *lowered_symbol.source;
@@ -1243,9 +1234,7 @@ namespace cpf {
                         line(source, 4, "node->" + symbol.label + " = std::unique_ptr<" + field.resolved_rule + ">{static_cast<" + field.resolved_rule + "*>(child_" + std::to_string(i) + ".release())};");
                      }
                   } else if (symbol.has_label()) {
-                     line(source, 4, "node->" + symbol.label + " = std::get<std::string>(tree->children[" + std::to_string(i) + "]); ");
-                  } else if (is_single_unlabeled_terminal(production)) {
-                     line(source, 4, "node->value = std::get<std::string>(tree->children[" + std::to_string(i) + "]); ");
+                     line(source, 4, "node->" + symbol.label + " = std::get<cpf::matched_string>(tree->children[" + std::to_string(i) + "]); ");
                   }
                }
                line(source, 4, "return node;");
@@ -1340,6 +1329,7 @@ namespace cpf {
                line(source, 0, "std::unique_ptr<cpf::node> " + info.name + "::clone_node() const {");
                line(source, 1, "auto copy = std::make_unique<" + info.name + ">();");
                line(source, 1, "copy->definition = definition;");
+               line(source, 1, "copy->range = range;");
                for (const auto& field : info.fields) {
                   if (field.shape == field_shape::node_scalar) {
                      line(source, 1, render_child_clone_expression(field));
@@ -1397,7 +1387,7 @@ namespace cpf {
                      line(source, 1, "os << \"]\";");
                   } else if (field.shape == field_shape::terminal_optional) {
                      line(source, 1, "if (node." + field.name + ") {");
-                     line(source, 2, "os << cpf::detail::quoted(*node." + field.name + ");");
+                     line(source, 2, "os << cpf::detail::quoted(node." + field.name + "->text);");
                      line(source, 1, "} else {");
                      line(source, 2, "os << \"null\";");
                      line(source, 1, "}");
@@ -1407,11 +1397,11 @@ namespace cpf {
                      line(source, 2, "if (item_index != 0) {");
                      line(source, 3, "os << \", \";");
                      line(source, 2, "}");
-                     line(source, 2, "os << cpf::detail::quoted(node." + field.name + "[item_index]);");
+                     line(source, 2, "os << cpf::detail::quoted(node." + field.name + "[item_index].text);");
                      line(source, 1, "}");
                      line(source, 1, "os << \"]\";");
                   } else {
-                     line(source, 1, "os << cpf::detail::quoted(node." + field.name + ");");
+                     line(source, 1, "os << cpf::detail::quoted(node." + field.name + ".text);");
                   }
                }
                line(source, 1, "os << \")\";");

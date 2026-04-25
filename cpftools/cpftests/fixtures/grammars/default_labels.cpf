@@ -1,5 +1,5 @@
 default_label_expr -> default_label_add | default_label_multiply | default_label_number;
 default_label_add [prec < default_label_multiply] -> default_label_expr:left '+':op default_label_expr:right;
 default_label_multiply -> default_label_expr:left '*':op default_label_expr:right;
-default_label_number -> r'[0-9]+';
+default_label_number -> r'[0-9]+':value;
 

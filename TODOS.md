@@ -1,9 +1,8 @@
 # TODO's
 
-* Make label that defines member variables optional
-    * If no label is provided the match should not be captured
-* Nodes should contain information about which source range was matched to generate the node
-    * For string members we'd need to introduce a struct to hold the string value and the source range
+* Allow for '(' and ')' grouping in the grammar. 
+    * Quantifiers should be applicable to groups as well as individual elements
+    * '|' operator should be able to be put inside and outside of groups to allow for more complex alternatives
 * Allow for a grammar to be defined in multiple files
     * Enable the use of `import` statements to include other grammar files
 * Adjust cpf_link_grammars to accept an optional namespace argument

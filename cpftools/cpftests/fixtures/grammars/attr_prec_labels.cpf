@@ -3,5 +3,5 @@ label_times  [prec > 'sum', lbl = 'product'] -> label_expr:left '*':op label_exp
 label_divide [prec = 'product']              -> label_expr:left '/':op label_expr:right;
 label_plus   [prec < 'product', lbl = 'sum'] -> label_expr:left '+':op label_expr:right;
 label_minus  [prec = 'sum']                  -> label_expr:left '-':op label_expr:right;
-label_number [lbl = 'atom']                  -> r'[0-9]+';
+label_number [lbl = 'atom']                  -> r'[0-9]+':value;
 

@@ -11,5 +11,5 @@ repeated_token -> r'x':text;
 merged_expr -> merged_binary | merged_number;
 merged_binary -> merged_expr:left '+':op merged_expr:right;
 merged_binary -> merged_expr:left '*':op merged_expr:right;
-merged_number -> r'[0-9]+';
+merged_number -> r'[0-9]+':value;
 
