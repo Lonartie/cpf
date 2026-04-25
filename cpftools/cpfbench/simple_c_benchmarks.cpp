@@ -64,12 +64,12 @@ namespace {
 
    [[nodiscard]] auto simple_c_case(std::int64_t characters) -> const benchmark_case* {
       static const benchmark_case cases[] = {
-         {"small", &small_program()},
-         {"medium", &medium_program()},
-         {"large", &large_program()},
+            {"small", &small_program()},
+            {"medium", &medium_program()},
+            {"large", &large_program()},
       };
 
-      for (const auto& current_case : cases) {
+      for (const auto& current_case: cases) {
          if (static_cast<std::int64_t>(current_case.input->size()) == characters) {
             return &current_case;
          }
@@ -93,10 +93,8 @@ namespace {
       }
 
       state.SetLabel(selected_case->label);
-      cpfbench::benchmark_parse_to_forest<simple_c::translation_unit>(
-         state,
-         *selected_case->input,
-         "simple_c.parse_to_forest");
+      cpfbench::benchmark_parse_to_forest<simple_c::translation_unit>(state, *selected_case->input,
+                                                                      "simple_c.parse_to_forest");
    }
 
    void simple_c_materialize_ast(benchmark::State& state) {
@@ -107,42 +105,35 @@ namespace {
       }
 
       state.SetLabel(selected_case->label);
-      cpfbench::benchmark_materialize_ast<simple_c::translation_unit>(
-         state,
-         *selected_case->input,
-         "simple_c.materialize_ast");
+      cpfbench::benchmark_materialize_ast<simple_c::translation_unit>(state, *selected_case->input,
+                                                                      "simple_c.materialize_ast");
    }
-}
+} // namespace
 
 BENCHMARK(simple_c_parse_to_forest)
-   ->Name("simple_c/parse_to_forest")
-   ->ArgName("chars")
-   ->Arg(static_cast<std::int64_t>(small_program().size()))
-   ->Arg(static_cast<std::int64_t>(medium_program().size()))
-   ->Arg(static_cast<std::int64_t>(large_program().size()))
-   ->Repetitions(8)
-   ->MinWarmUpTime(0.1)
-   ->ReportAggregatesOnly()
-   ->ComputeStatistics("min", &cpfbench::detail::minimum)
-   ->ComputeStatistics("max", &cpfbench::detail::maximum)
-   ->Complexity()
-   ->Unit(benchmark::kMicrosecond);
+      ->Name("simple_c/parse_to_forest")
+      ->ArgName("chars")
+      ->Arg(static_cast<std::int64_t>(small_program().size()))
+      ->Arg(static_cast<std::int64_t>(medium_program().size()))
+      ->Arg(static_cast<std::int64_t>(large_program().size()))
+      ->Repetitions(8)
+      ->MinWarmUpTime(0.1)
+      ->ReportAggregatesOnly()
+      ->ComputeStatistics("min", &cpfbench::detail::minimum)
+      ->ComputeStatistics("max", &cpfbench::detail::maximum)
+      ->Complexity()
+      ->Unit(benchmark::kMicrosecond);
 
 BENCHMARK(simple_c_materialize_ast)
-   ->Name("simple_c/materialize_ast")
-   ->ArgName("chars")
-   ->Arg(static_cast<std::int64_t>(small_program().size()))
-   ->Arg(static_cast<std::int64_t>(medium_program().size()))
-   ->Arg(static_cast<std::int64_t>(large_program().size()))
-   ->Repetitions(8)
-   ->MinWarmUpTime(0.1)
-   ->ReportAggregatesOnly()
-   ->ComputeStatistics("min", &cpfbench::detail::minimum)
-   ->ComputeStatistics("max", &cpfbench::detail::maximum)
-   ->Complexity()
-   ->Unit(benchmark::kMicrosecond);
-
-
-
-
-
+      ->Name("simple_c/materialize_ast")
+      ->ArgName("chars")
+      ->Arg(static_cast<std::int64_t>(small_program().size()))
+      ->Arg(static_cast<std::int64_t>(medium_program().size()))
+      ->Arg(static_cast<std::int64_t>(large_program().size()))
+      ->Repetitions(8)
+      ->MinWarmUpTime(0.1)
+      ->ReportAggregatesOnly()
+      ->ComputeStatistics("min", &cpfbench::detail::minimum)
+      ->ComputeStatistics("max", &cpfbench::detail::maximum)
+      ->Complexity()
+      ->Unit(benchmark::kMicrosecond);

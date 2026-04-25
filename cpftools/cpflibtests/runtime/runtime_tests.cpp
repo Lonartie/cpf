@@ -10,26 +10,20 @@ namespace {
    struct fake_node final : cpf::node {
       static constexpr std::size_t RuleId = 7;
 
-      explicit fake_node(std::string value)
-         : value{std::move(value)} {
-      }
+      explicit fake_node(std::string value) : value{std::move(value)} {}
 
       std::string value;
 
-      [[nodiscard]] std::size_t rule_id() const override {
-         return RuleId;
-      }
+      [[nodiscard]] std::size_t rule_id() const override { return RuleId; }
 
-      [[nodiscard]] const std::type_info& type() const override {
-         return typeid(fake_node);
-      }
+      [[nodiscard]] const std::type_info& type() const override { return typeid(fake_node); }
 
    protected:
       [[nodiscard]] std::unique_ptr<cpf::node> clone_node() const override {
          return std::make_unique<fake_node>(*this);
       }
    };
-}
+} // namespace
 
 TEST_SUITE("cpflib.runtime") {
    TEST_CASE("parse results can represent ambiguous parses as multiple trees") {
@@ -107,4 +101,3 @@ TEST_SUITE("cpflib.runtime") {
       CHECK(merged.message.find("while parsing rule 'say_world'") != std::string::npos);
    }
 }
-

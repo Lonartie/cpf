@@ -22,4 +22,3 @@ namespace cpf {
    /// @return Parsed grammar only.
    grammar parse_grammar_file(const std::filesystem::path& path);
 } // namespace cpf
-

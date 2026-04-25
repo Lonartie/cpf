@@ -9,9 +9,8 @@
 
 TEST_SUITE("cpflib.complexity") {
    TEST_CASE("synthetic linear samples fit an O(N) model with practical coefficients") {
-      auto result = cpf::detail::analyze_complexity_samples(
-         {1.0, 2.0, 4.0, 8.0, 16.0},
-         {15.0, 25.0, 45.0, 85.0, 165.0});
+      auto result =
+            cpf::detail::analyze_complexity_samples({1.0, 2.0, 4.0, 8.0, 16.0}, {15.0, 25.0, 45.0, 85.0, 165.0});
 
       CHECK(result.big_o == "O(N)");
       CHECK(result.summary.find("O(N)") != std::string::npos);
@@ -24,7 +23,7 @@ TEST_SUITE("cpflib.complexity") {
       std::vector<double> sizes{2.0, 4.0, 8.0, 16.0, 32.0, 64.0};
       std::vector<double> samples;
       samples.reserve(sizes.size());
-      for (const auto size : sizes) {
+      for (const auto size: sizes) {
          samples.push_back((5.0e-7 * size * std::log(size)) + (2.0e-7 * size) + 7.0e-8);
       }
 
@@ -41,7 +40,7 @@ TEST_SUITE("cpflib.complexity") {
       std::vector<double> sizes{1.0, 4.0, 9.0, 16.0, 25.0, 36.0};
       std::vector<double> samples;
       samples.reserve(sizes.size());
-      for (const auto size : sizes) {
+      for (const auto size: sizes) {
          samples.push_back((11.0 * std::sqrt(size)) + (1.5 * std::log(std::max(size, 1.0))) + 3.0);
       }
 
@@ -53,9 +52,7 @@ TEST_SUITE("cpflib.complexity") {
    }
 
    TEST_CASE("synthetic quadratic samples fit an O(N^2) model") {
-      auto result = cpf::detail::analyze_complexity_samples(
-         {1.0, 2.0, 3.0, 4.0, 5.0},
-         {12.0, 23.0, 40.0, 63.0, 92.0});
+      auto result = cpf::detail::analyze_complexity_samples({1.0, 2.0, 3.0, 4.0, 5.0}, {12.0, 23.0, 40.0, 63.0, 92.0});
 
       CHECK(result.big_o == "O(N^2)");
       CHECK(result.expression.find("N^2") != std::string::npos);
@@ -67,7 +64,7 @@ TEST_SUITE("cpflib.complexity") {
       std::vector<double> sizes{2.0, 3.0, 4.0, 6.0, 8.0, 12.0, 16.0};
       std::vector<double> samples;
       samples.reserve(sizes.size());
-      for (const auto size : sizes) {
+      for (const auto size: sizes) {
          samples.push_back((2.5 * size * size * std::log(size)) + (3.0 * size * size) + (4.0 * std::sqrt(size)) + 9.0);
       }
 
@@ -82,7 +79,7 @@ TEST_SUITE("cpflib.complexity") {
       std::vector<double> sizes{1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0};
       std::vector<double> samples;
       samples.reserve(sizes.size());
-      for (const auto size : sizes) {
+      for (const auto size: sizes) {
          samples.push_back((3.0 * std::exp2(size)) + (5.0 * size * size) + 11.0);
       }
 
@@ -98,7 +95,7 @@ TEST_SUITE("cpflib.complexity") {
       std::vector<double> sizes{1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0};
       std::vector<double> samples;
       samples.reserve(sizes.size());
-      for (const auto size : sizes) {
+      for (const auto size: sizes) {
          samples.push_back((0.25 * std::tgamma(size + 1.0)) + (4.0 * std::exp2(size)) + 13.0);
       }
 
@@ -111,17 +108,14 @@ TEST_SUITE("cpflib.complexity") {
    }
 
    TEST_CASE("complexity_of validates the provided input vectors") {
-      auto noop = [](int value) {
-         return value;
-      };
+      auto noop = [](int value) { return value; };
+
+      CHECK_THROWS_AS(cpf::complexity_of(noop, std::vector<std::tuple<int>>{{1}, {2}}, std::vector<double>{1.0}),
+                      std::invalid_argument);
 
       CHECK_THROWS_AS(
-         cpf::complexity_of(noop, std::vector<std::tuple<int>>{{1}, {2}}, std::vector<double>{1.0}),
-         std::invalid_argument);
-
-      CHECK_THROWS_AS(
-         cpf::detail::analyze_complexity_samples(std::vector<double>{1.0, -1.0}, std::vector<double>{10.0, 20.0}),
-         std::invalid_argument);
+            cpf::detail::analyze_complexity_samples(std::vector<double>{1.0, -1.0}, std::vector<double>{10.0, 20.0}),
+            std::invalid_argument);
    }
 
    TEST_CASE("complexity_of measures callable runtime and returns a usable estimator") {
@@ -133,10 +127,8 @@ TEST_SUITE("cpflib.complexity") {
          return total;
       };
 
-      auto result = cpf::complexity_of(
-         linear_work,
-         std::vector<std::tuple<std::size_t>>{{32}, {64}, {128}, {256}},
-         std::vector<double>{32.0, 64.0, 128.0, 256.0});
+      auto result = cpf::complexity_of(linear_work, std::vector<std::tuple<std::size_t>>{{32}, {64}, {128}, {256}},
+                                       std::vector<double>{32.0, 64.0, 128.0, 256.0});
 
       CHECK_FALSE(result.summary.empty());
       CHECK(result.summary.find("O(") != std::string::npos);
@@ -146,4 +138,3 @@ TEST_SUITE("cpflib.complexity") {
       CHECK(result.estimate(256.0) > 0.0);
    }
 }
-

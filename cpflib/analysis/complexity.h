@@ -21,7 +21,7 @@
 #include <vector>
 
 #if defined(_MSC_VER)
-#   include <intrin.h>
+#include <intrin.h>
 #endif
 
 namespace cpf {
@@ -47,9 +47,7 @@ namespace cpf {
       /// @brief Evaluates the fitted model for a specific input size.
       /// @param input_size User-defined size metric of the input.
       /// @return Estimated runtime in seconds.
-      [[nodiscard]] auto estimate(double input_size) const -> double {
-         return estimator ? estimator(input_size) : 0.0;
-      }
+      [[nodiscard]] auto estimate(double input_size) const -> double { return estimator ? estimator(input_size) : 0.0; }
    };
 
    inline auto operator<<(std::ostream& stream, const complexity& value) -> std::ostream& {
@@ -64,30 +62,28 @@ namespace cpf {
       inline constexpr auto complexity_max_terms_per_model = std::size_t{4};
       inline constexpr auto complexity_solver_epsilon = 1e-12;
 
-      inline auto sanitize_measurement_size(double value) -> double {
-         return std::max(value, 0.0);
-      }
+      inline auto sanitize_measurement_size(double value) -> double { return std::max(value, 0.0); }
 
-      inline auto sanitize_log_size(double value) -> double {
-         return std::max(sanitize_measurement_size(value), 1.0);
-      }
+      inline auto sanitize_log_size(double value) -> double { return std::max(sanitize_measurement_size(value), 1.0); }
 
-      inline void validate_complexity_inputs(const std::vector<double>& arg_sizes, const std::vector<double>& sample_times_s) {
+      inline void validate_complexity_inputs(const std::vector<double>& arg_sizes,
+                                             const std::vector<double>& sample_times_s) {
          if (arg_sizes.size() != sample_times_s.size()) {
-            throw std::invalid_argument{"cpf::complexity_of requires the same number of argument tuples and argument sizes"};
+            throw std::invalid_argument{
+                  "cpf::complexity_of requires the same number of argument tuples and argument sizes"};
          }
 
          if (arg_sizes.size() < 2) {
             throw std::invalid_argument{"cpf::complexity_of requires at least two samples"};
          }
 
-         for (const auto size : arg_sizes) {
+         for (const auto size: arg_sizes) {
             if (!std::isfinite(size) || size < 0.0) {
                throw std::invalid_argument{"cpf::complexity_of requires finite, non-negative argument sizes"};
             }
          }
 
-         for (const auto duration_s : sample_times_s) {
+         for (const auto duration_s: sample_times_s) {
             if (!std::isfinite(duration_s) || duration_s < 0.0) {
                throw std::invalid_argument{"cpf::complexity_of requires finite, non-negative timings"};
             }
@@ -99,78 +95,52 @@ namespace cpf {
       }
 
 #if defined(__clang__) || defined(__GNUC__)
-      template<typename T>
-      inline void do_not_optimize(T& value) {
-         asm volatile("" : "+r,m"(value) : : "memory");
-      }
+      template<typename T> inline void do_not_optimize(T& value) { asm volatile("" : "+r,m"(value) : : "memory"); }
 
-      template<typename T>
-      inline void do_not_optimize(const T& value) {
-         asm volatile("" : : "g"(value) : "memory");
-      }
+      template<typename T> inline void do_not_optimize(const T& value) { asm volatile("" : : "g"(value) : "memory"); }
 
-      inline void clobber_memory() {
-         asm volatile("" : : : "memory");
-      }
+      inline void clobber_memory() { asm volatile("" : : : "memory"); }
 #elif defined(_MSC_VER)
-      template<typename T>
-      inline void do_not_optimize(T& value) {
+      template<typename T> inline void do_not_optimize(T& value) {
          auto* volatile sink = &value;
-         (void)sink;
+         (void) sink;
          _ReadWriteBarrier();
       }
 
-      template<typename T>
-      inline void do_not_optimize(const T& value) {
+      template<typename T> inline void do_not_optimize(const T& value) {
          auto const* volatile sink = &value;
-         (void)sink;
+         (void) sink;
          _ReadWriteBarrier();
       }
 
-      inline void clobber_memory() {
-         _ReadWriteBarrier();
-      }
+      inline void clobber_memory() { _ReadWriteBarrier(); }
 #else
-      template<typename T>
-      inline void do_not_optimize(T& value) {
+      template<typename T> inline void do_not_optimize(T& value) {
          std::atomic_signal_fence(std::memory_order_seq_cst);
          auto* volatile sink = &value;
-         (void)sink;
+         (void) sink;
          std::atomic_signal_fence(std::memory_order_seq_cst);
       }
 
-      template<typename T>
-      inline void do_not_optimize(const T& value) {
+      template<typename T> inline void do_not_optimize(const T& value) {
          std::atomic_signal_fence(std::memory_order_seq_cst);
          auto const* volatile sink = &value;
-         (void)sink;
+         (void) sink;
          std::atomic_signal_fence(std::memory_order_seq_cst);
       }
 
-      inline void clobber_memory() {
-         std::atomic_signal_fence(std::memory_order_seq_cst);
-      }
+      inline void clobber_memory() { std::atomic_signal_fence(std::memory_order_seq_cst); }
 #endif
 
-      inline auto basis_constant(double) -> double {
-         return 1.0;
-      }
+      inline auto basis_constant(double) -> double { return 1.0; }
 
-      inline auto basis_log_n(double value) -> double {
-         return std::log(sanitize_log_size(value));
-      }
+      inline auto basis_log_n(double value) -> double { return std::log(sanitize_log_size(value)); }
 
-      inline auto basis_sqrt_n(double value) -> double {
-         return std::sqrt(sanitize_measurement_size(value));
-      }
+      inline auto basis_sqrt_n(double value) -> double { return std::sqrt(sanitize_measurement_size(value)); }
 
-      inline auto basis_sqrt_n_log_n(double value) -> double {
-         return basis_sqrt_n(value) * basis_log_n(value);
-      }
+      inline auto basis_sqrt_n_log_n(double value) -> double { return basis_sqrt_n(value) * basis_log_n(value); }
 
-      inline auto basis_n(double value) -> double {
-         return sanitize_measurement_size(value);
-      }
+      inline auto basis_n(double value) -> double { return sanitize_measurement_size(value); }
 
       inline auto basis_n_log_n(double value) -> double {
          auto size = sanitize_measurement_size(value);
@@ -232,44 +202,37 @@ namespace cpf {
 
       inline auto basis_terms() -> const std::vector<basis_term>& {
          static const auto terms = std::vector<basis_term>{
-            basis_term{"1", &basis_constant},
-            basis_term{"log(N)", &basis_log_n},
-            basis_term{"sqrt(N)", &basis_sqrt_n},
-            basis_term{"sqrt(N)*log(N)", &basis_sqrt_n_log_n},
-            basis_term{"N", &basis_n},
-            basis_term{"N*log(N)", &basis_n_log_n},
-            basis_term{"N^(3/2)", &basis_n_to_three_halves},
-            basis_term{"N^2", &basis_n_squared},
-            basis_term{"N^2*log(N)", &basis_n_squared_log_n},
-            basis_term{"N^3", &basis_n_cubed},
-            basis_term{"2^N", &basis_two_to_n},
-            basis_term{"N!", &basis_factorial_n},
+               basis_term{"1", &basis_constant},
+               basis_term{"log(N)", &basis_log_n},
+               basis_term{"sqrt(N)", &basis_sqrt_n},
+               basis_term{"sqrt(N)*log(N)", &basis_sqrt_n_log_n},
+               basis_term{"N", &basis_n},
+               basis_term{"N*log(N)", &basis_n_log_n},
+               basis_term{"N^(3/2)", &basis_n_to_three_halves},
+               basis_term{"N^2", &basis_n_squared},
+               basis_term{"N^2*log(N)", &basis_n_squared_log_n},
+               basis_term{"N^3", &basis_n_cubed},
+               basis_term{"2^N", &basis_two_to_n},
+               basis_term{"N!", &basis_factorial_n},
          };
          return terms;
       }
 
       inline auto dominant_complexity_families() -> const std::vector<dominant_complexity_family>& {
          static const auto families = std::vector<dominant_complexity_family>{
-            dominant_complexity_family{"O(1)", 0},
-            dominant_complexity_family{"O(log N)", 1},
-            dominant_complexity_family{"O(sqrt N)", 2},
-            dominant_complexity_family{"O(sqrt N log N)", 3},
-            dominant_complexity_family{"O(N)", 4},
-            dominant_complexity_family{"O(N log N)", 5},
-            dominant_complexity_family{"O(N^(3/2))", 6},
-            dominant_complexity_family{"O(N^2)", 7},
-            dominant_complexity_family{"O(N^2 log N)", 8},
-            dominant_complexity_family{"O(N^3)", 9},
-            dominant_complexity_family{"O(2^N)", 10},
-            dominant_complexity_family{"O(N!)", 11},
+               dominant_complexity_family{"O(1)", 0},         dominant_complexity_family{"O(log N)", 1},
+               dominant_complexity_family{"O(sqrt N)", 2},    dominant_complexity_family{"O(sqrt N log N)", 3},
+               dominant_complexity_family{"O(N)", 4},         dominant_complexity_family{"O(N log N)", 5},
+               dominant_complexity_family{"O(N^(3/2))", 6},   dominant_complexity_family{"O(N^2)", 7},
+               dominant_complexity_family{"O(N^2 log N)", 8}, dominant_complexity_family{"O(N^3)", 9},
+               dominant_complexity_family{"O(2^N)", 10},      dominant_complexity_family{"O(N!)", 11},
          };
          return families;
       }
 
-      inline void append_complexity_model(
-         std::vector<complexity_model>& models,
-         const dominant_complexity_family& family,
-         const std::vector<std::size_t>& selected_lower_ranks) {
+      inline void append_complexity_model(std::vector<complexity_model>& models,
+                                          const dominant_complexity_family& family,
+                                          const std::vector<std::size_t>& selected_lower_ranks) {
          complexity_model model;
          model.big_o = family.big_o;
          model.dominant_rank = family.dominant_rank;
@@ -279,19 +242,18 @@ namespace cpf {
 
          auto ordered_lower_ranks = selected_lower_ranks;
          std::sort(ordered_lower_ranks.begin(), ordered_lower_ranks.end(), std::greater<>{});
-         for (const auto lower_rank : ordered_lower_ranks) {
+         for (const auto lower_rank: ordered_lower_ranks) {
             model.basis_functions.push_back(terms[lower_rank].evaluate);
             model.basis_labels.push_back(terms[lower_rank].label);
          }
          models.push_back(std::move(model));
       }
 
-      inline void append_complexity_model_combinations(
-         std::vector<complexity_model>& models,
-         const dominant_complexity_family& family,
-         std::size_t next_lower_rank,
-         std::vector<std::size_t>& selected_lower_ranks,
-         std::size_t remaining_lower_terms) {
+      inline void append_complexity_model_combinations(std::vector<complexity_model>& models,
+                                                       const dominant_complexity_family& family,
+                                                       std::size_t next_lower_rank,
+                                                       std::vector<std::size_t>& selected_lower_ranks,
+                                                       std::size_t remaining_lower_terms) {
          if (remaining_lower_terms == 0 || next_lower_rank >= family.dominant_rank) {
             return;
          }
@@ -299,7 +261,8 @@ namespace cpf {
          for (std::size_t lower_rank = next_lower_rank; lower_rank < family.dominant_rank; ++lower_rank) {
             selected_lower_ranks.push_back(lower_rank);
             append_complexity_model(models, family, selected_lower_ranks);
-            append_complexity_model_combinations(models, family, lower_rank + 1, selected_lower_ranks, remaining_lower_terms - 1);
+            append_complexity_model_combinations(models, family, lower_rank + 1, selected_lower_ranks,
+                                                 remaining_lower_terms - 1);
             selected_lower_ranks.pop_back();
          }
       }
@@ -308,15 +271,11 @@ namespace cpf {
          static const auto models = [] {
             std::vector<complexity_model> generated_models;
             generated_models.reserve(512);
-            for (const auto& family : dominant_complexity_families()) {
+            for (const auto& family: dominant_complexity_families()) {
                std::vector<std::size_t> selected_lower_ranks;
                append_complexity_model(generated_models, family, selected_lower_ranks);
-               append_complexity_model_combinations(
-                  generated_models,
-                  family,
-                  0,
-                  selected_lower_ranks,
-                  complexity_max_terms_per_model - 1);
+               append_complexity_model_combinations(generated_models, family, 0, selected_lower_ranks,
+                                                    complexity_max_terms_per_model - 1);
             }
             return generated_models;
          }();
@@ -360,10 +319,8 @@ namespace cpf {
          return static_cast<double>(value);
       }
 
-      inline auto evaluate_model(
-         const complexity_model& model,
-         const std::vector<double>& coefficients,
-         double input_size) -> double {
+      inline auto evaluate_model(const complexity_model& model, const std::vector<double>& coefficients,
+                                 double input_size) -> double {
          auto estimate = 0.0L;
          for (std::size_t index = 0; index < coefficients.size(); ++index) {
             auto basis_value = model.basis_functions[index](input_size);
@@ -375,7 +332,8 @@ namespace cpf {
          return clamp_non_negative_finite(estimate);
       }
 
-      inline auto render_expression(const complexity_model& model, const std::vector<double>& coefficients) -> std::string {
+      inline auto render_expression(const complexity_model& model, const std::vector<double>& coefficients)
+            -> std::string {
          std::ostringstream stream;
          auto emitted_term = false;
          for (std::size_t index = 0; index < coefficients.size(); ++index) {
@@ -406,9 +364,8 @@ namespace cpf {
          return stream.str();
       }
 
-      inline auto solve_linear_system(
-         std::vector<std::vector<double>> matrix,
-         std::vector<double> right_hand_side) -> std::optional<std::vector<double>> {
+      inline auto solve_linear_system(std::vector<std::vector<double>> matrix, std::vector<double> right_hand_side)
+            -> std::optional<std::vector<double>> {
          auto dimension = matrix.size();
          for (std::size_t row = 0; row < dimension; ++row) {
             matrix[row].push_back(right_hand_side[row]);
@@ -467,10 +424,8 @@ namespace cpf {
          double score = std::numeric_limits<double>::infinity();
       };
 
-      inline auto fit_complexity_model(
-         const complexity_model& model,
-         const std::vector<double>& arg_sizes,
-         const std::vector<double>& sample_times_s) -> std::optional<complexity_fit> {
+      inline auto fit_complexity_model(const complexity_model& model, const std::vector<double>& arg_sizes,
+                                       const std::vector<double>& sample_times_s) -> std::optional<complexity_fit> {
          auto parameter_count = model.basis_functions.size();
          if (arg_sizes.size() < parameter_count) {
             return std::nullopt;
@@ -521,7 +476,8 @@ namespace cpf {
          }
 
          auto squared_error = 0.0;
-         auto mean_time = std::accumulate(sample_times_s.begin(), sample_times_s.end(), 0.0) / static_cast<double>(sample_times_s.size());
+         auto mean_time = std::accumulate(sample_times_s.begin(), sample_times_s.end(), 0.0) /
+                          static_cast<double>(sample_times_s.size());
          auto valid_prediction = true;
          for (std::size_t sample_index = 0; sample_index < arg_sizes.size(); ++sample_index) {
             auto predicted = evaluate_model(model, coefficients, arg_sizes[sample_index]);
@@ -537,17 +493,16 @@ namespace cpf {
             return std::nullopt;
          }
 
-         auto relative_root_mean_square_error = std::sqrt(squared_error / static_cast<double>(sample_times_s.size()))
-            / positive_scale_denominator(mean_time);
+         auto relative_root_mean_square_error = std::sqrt(squared_error / static_cast<double>(sample_times_s.size())) /
+                                                positive_scale_denominator(mean_time);
 
          auto largest_input = *std::max_element(arg_sizes.begin(), arg_sizes.end());
          auto fitted_at_largest_input = evaluate_model(model, coefficients, largest_input);
          auto dominant_component = coefficients.front() * model.basis_functions.front()(largest_input);
          auto dominant_share = std::abs(dominant_component) / positive_scale_denominator(fitted_at_largest_input);
 
-         auto score = (relative_root_mean_square_error * 5.0)
-            + 0.004 * static_cast<double>(parameter_count - 1U)
-            + 0.0005 * static_cast<double>(model.dominant_rank);
+         auto score = (relative_root_mean_square_error * 5.0) + 0.004 * static_cast<double>(parameter_count - 1U) +
+                      0.0005 * static_cast<double>(model.dominant_rank);
          if (coefficients.front() < 0.0) {
             score += 0.25;
          }
@@ -563,22 +518,20 @@ namespace cpf {
          return fit;
       }
 
-      inline auto analyze_complexity_samples(
-         std::vector<double> arg_sizes,
-         std::vector<double> sample_times_s) -> complexity {
+      inline auto analyze_complexity_samples(std::vector<double> arg_sizes, std::vector<double> sample_times_s)
+            -> complexity {
          validate_complexity_inputs(arg_sizes, sample_times_s);
 
          std::optional<complexity_fit> best_fit;
-         for (const auto& model : complexity_models()) {
+         for (const auto& model: complexity_models()) {
             auto fit = fit_complexity_model(model, arg_sizes, sample_times_s);
             if (!fit.has_value()) {
                continue;
             }
 
-            if (!best_fit.has_value()
-             || fit->score < best_fit->score
-             || (std::abs(fit->score - best_fit->score) <= 1e-9
-              && fit->coefficients.size() < best_fit->coefficients.size())) {
+            if (!best_fit.has_value() || fit->score < best_fit->score ||
+                (std::abs(fit->score - best_fit->score) <= 1e-9 &&
+                 fit->coefficients.size() < best_fit->coefficients.size())) {
                best_fit = std::move(fit);
             }
          }
@@ -590,8 +543,8 @@ namespace cpf {
          complexity result;
          result.big_o = std::string{best_fit->model->big_o};
          result.expression = render_expression(*best_fit->model, best_fit->coefficients);
-         result.summary = result.big_o + ": time(s) ~= " + result.expression
-            + " (relative RMSE " + format_percentage(best_fit->relative_root_mean_square_error) + "%)";
+         result.summary = result.big_o + ": time(s) ~= " + result.expression + " (relative RMSE " +
+                          format_percentage(best_fit->relative_root_mean_square_error) + "%)";
          result.relative_root_mean_square_error = best_fit->relative_root_mean_square_error;
          result.coefficients = best_fit->coefficients;
          result.arg_sizes = std::move(arg_sizes);
@@ -605,38 +558,26 @@ namespace cpf {
          return result;
       }
 
-      template<typename Func, typename Tuple>
-      auto invoke_complexity_sample(Func& func, Tuple& arguments) -> void {
+      template<typename Func, typename Tuple> auto invoke_complexity_sample(Func& func, Tuple& arguments) -> void {
          using tuple_type = std::remove_reference_t<Tuple>;
          constexpr auto arity = std::tuple_size_v<tuple_type>;
          using result_type = decltype(std::apply(
-            [&](auto&... unpacked) -> decltype(auto) {
-               return std::invoke(func, unpacked...);
-            },
-            arguments));
+               [&](auto&... unpacked) -> decltype(auto) { return std::invoke(func, unpacked...); }, arguments));
 
          if constexpr (std::is_void_v<result_type>) {
-            std::apply(
-               [&](auto&... unpacked) {
-                  std::invoke(func, unpacked...);
-               },
-               arguments);
+            std::apply([&](auto&... unpacked) { std::invoke(func, unpacked...); }, arguments);
             clobber_memory();
          } else {
             auto result = std::apply(
-               [&](auto&... unpacked) -> decltype(auto) {
-                  return std::invoke(func, unpacked...);
-               },
-               arguments);
+                  [&](auto&... unpacked) -> decltype(auto) { return std::invoke(func, unpacked...); }, arguments);
             do_not_optimize(result);
             clobber_memory();
          }
 
-         (void)arity;
+         (void) arity;
       }
 
-      template<typename Func, typename Tuple>
-      auto measure_complexity_sample_s(Func& func, Tuple& arguments) -> double {
+      template<typename Func, typename Tuple> auto measure_complexity_sample_s(Func& func, Tuple& arguments) -> double {
          std::vector<double> trials;
          trials.reserve(complexity_trial_count);
 
@@ -666,22 +607,19 @@ namespace cpf {
    /// @param arg_sizes User-defined sizes corresponding to each argument tuple.
    /// @return Fitted complexity model whose estimator returns seconds.
    template<typename Func, typename... Args>
-   auto complexity_of(
-      Func&& func,
-      std::vector<std::tuple<Args...>> args,
-      std::vector<double> arg_sizes) -> complexity {
+   auto complexity_of(Func&& func, std::vector<std::tuple<Args...>> args, std::vector<double> arg_sizes) -> complexity {
       if (args.size() != arg_sizes.size()) {
-         throw std::invalid_argument{"cpf::complexity_of requires the same number of argument tuples and argument sizes"};
+         throw std::invalid_argument{
+               "cpf::complexity_of requires the same number of argument tuples and argument sizes"};
       }
 
       auto callable = std::forward<Func>(func);
       std::vector<double> sample_times_s;
       sample_times_s.reserve(args.size());
-      for (auto& argument_tuple : args) {
+      for (auto& argument_tuple: args) {
          sample_times_s.push_back(detail::measure_complexity_sample_s(callable, argument_tuple));
       }
 
       return detail::analyze_complexity_samples(std::move(arg_sizes), std::move(sample_times_s));
    }
 } // namespace cpf
-

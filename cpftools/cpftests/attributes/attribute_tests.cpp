@@ -39,14 +39,22 @@ namespace {
 
    struct default_visitor {
       int operator()(const default_add& node) const { return visit(*node.left, *this) + visit(*node.right, *this); }
-      int operator()(const default_subtract& node) const { return visit(*node.left, *this) - visit(*node.right, *this); }
-      int operator()(const default_multiply& node) const { return visit(*node.left, *this) * visit(*node.right, *this); }
+      int operator()(const default_subtract& node) const {
+         return visit(*node.left, *this) - visit(*node.right, *this);
+      }
+      int operator()(const default_multiply& node) const {
+         return visit(*node.left, *this) * visit(*node.right, *this);
+      }
       int operator()(const default_number& node) const { return std::stoi(node.value.text); }
    };
 
    struct default_label_visitor {
-      int operator()(const default_label_add& node) const { return visit(*node.left, *this) + visit(*node.right, *this); }
-      int operator()(const default_label_multiply& node) const { return visit(*node.left, *this) * visit(*node.right, *this); }
+      int operator()(const default_label_add& node) const {
+         return visit(*node.left, *this) + visit(*node.right, *this);
+      }
+      int operator()(const default_label_multiply& node) const {
+         return visit(*node.left, *this) * visit(*node.right, *this);
+      }
       int operator()(const default_label_number& node) const { return std::stoi(node.value.text); }
    };
 
@@ -84,7 +92,7 @@ namespace {
       REQUIRE(result.forest.size() == 1);
       return visit(*result.forest.front(), default_label_visitor{});
    }
-}
+} // namespace
 
 TEST_SUITE("generated.attributes") {
    TEST_CASE("precedence attributes shape the generated parse tree") {
@@ -177,5 +185,3 @@ TEST_SUITE("generated.attributes") {
       CHECK(dynamic_cast<const default_label_add*>(result.forest.front().get()) != nullptr);
    }
 }
-
-

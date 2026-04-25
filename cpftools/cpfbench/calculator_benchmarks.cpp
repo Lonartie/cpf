@@ -16,21 +16,13 @@ namespace {
    };
 
    struct calculator_visitor {
-      auto visit(auto& node) const {
-         return calculator::visit(node, *this);
-      }
+      auto visit(auto& node) const { return calculator::visit(node, *this); }
 
-      int operator()(const calculator::addition& node) const {
-         return visit(*node.left) + visit(*node.right);
-      }
+      int operator()(const calculator::addition& node) const { return visit(*node.left) + visit(*node.right); }
 
-      int operator()(const calculator::subtraction& node) const {
-         return visit(*node.left) - visit(*node.right);
-      }
+      int operator()(const calculator::subtraction& node) const { return visit(*node.left) - visit(*node.right); }
 
-      int operator()(const calculator::multiplication& node) const {
-         return visit(*node.left) * visit(*node.right);
-      }
+      int operator()(const calculator::multiplication& node) const { return visit(*node.left) * visit(*node.right); }
 
       int operator()(const calculator::division& node) const {
          auto numerator = visit(*node.left);
@@ -38,9 +30,7 @@ namespace {
          return denominator == 0 ? 0 : numerator / denominator;
       }
 
-      int operator()(const calculator::number& node) const {
-         return std::stoi(node.value.text);
-      }
+      int operator()(const calculator::number& node) const { return std::stoi(node.value.text); }
    };
 
    [[nodiscard]] std::string join_terms(std::size_t count, const char* separator) {
@@ -84,12 +74,12 @@ namespace {
 
    [[nodiscard]] auto calculator_case(std::int64_t characters) -> const benchmark_case* {
       static const benchmark_case cases[] = {
-         {"small", &small_expression()},
-         {"medium", &medium_expression()},
-         {"large", &large_expression()},
+            {"small", &small_expression()},
+            {"medium", &medium_expression()},
+            {"large", &large_expression()},
       };
 
-      for (const auto& current_case : cases) {
+      for (const auto& current_case: cases) {
          if (static_cast<std::int64_t>(current_case.input->size()) == characters) {
             return &current_case;
          }
@@ -113,7 +103,8 @@ namespace {
       }
 
       state.SetLabel(selected_case->label);
-      cpfbench::benchmark_parse_to_forest<calculator::expression>(state, *selected_case->input, "calculator.parse_to_forest");
+      cpfbench::benchmark_parse_to_forest<calculator::expression>(state, *selected_case->input,
+                                                                  "calculator.parse_to_forest");
    }
 
    void calculator_materialize_ast(benchmark::State& state) {
@@ -124,7 +115,8 @@ namespace {
       }
 
       state.SetLabel(selected_case->label);
-      cpfbench::benchmark_materialize_ast<calculator::expression>(state, *selected_case->input, "calculator.materialize_ast");
+      cpfbench::benchmark_materialize_ast<calculator::expression>(state, *selected_case->input,
+                                                                  "calculator.materialize_ast");
    }
 
    void calculator_parse_and_evaluate(benchmark::State& state) {
@@ -136,59 +128,49 @@ namespace {
 
       state.SetLabel(selected_case->label);
       cpfbench::benchmark_parse_and_consume<calculator::expression>(
-         state,
-         *selected_case->input,
-         "calculator.parse_and_evaluate",
-         [](const calculator::expression& node) {
-            return calculator::visit(node, calculator_visitor{});
-         });
+            state, *selected_case->input, "calculator.parse_and_evaluate",
+            [](const calculator::expression& node) { return calculator::visit(node, calculator_visitor{}); });
    }
-}
+} // namespace
 
 BENCHMARK(calculator_parse_to_forest)
-   ->Name("calculator/parse_to_forest")
-   ->ArgName("chars")
-   ->Arg(static_cast<std::int64_t>(small_expression().size()))
-   ->Arg(static_cast<std::int64_t>(medium_expression().size()))
-   ->Arg(static_cast<std::int64_t>(large_expression().size()))
-   ->Repetitions(8)
-   ->MinWarmUpTime(0.1)
-   ->ReportAggregatesOnly()
-   ->ComputeStatistics("min", &cpfbench::detail::minimum)
-   ->ComputeStatistics("max", &cpfbench::detail::maximum)
-   ->Complexity()
-   ->Unit(benchmark::kMicrosecond);
+      ->Name("calculator/parse_to_forest")
+      ->ArgName("chars")
+      ->Arg(static_cast<std::int64_t>(small_expression().size()))
+      ->Arg(static_cast<std::int64_t>(medium_expression().size()))
+      ->Arg(static_cast<std::int64_t>(large_expression().size()))
+      ->Repetitions(8)
+      ->MinWarmUpTime(0.1)
+      ->ReportAggregatesOnly()
+      ->ComputeStatistics("min", &cpfbench::detail::minimum)
+      ->ComputeStatistics("max", &cpfbench::detail::maximum)
+      ->Complexity()
+      ->Unit(benchmark::kMicrosecond);
 
 BENCHMARK(calculator_materialize_ast)
-   ->Name("calculator/materialize_ast")
-   ->ArgName("chars")
-   ->Arg(static_cast<std::int64_t>(small_expression().size()))
-   ->Arg(static_cast<std::int64_t>(medium_expression().size()))
-   ->Arg(static_cast<std::int64_t>(large_expression().size()))
-   ->Repetitions(8)
-   ->MinWarmUpTime(0.1)
-   ->ReportAggregatesOnly()
-   ->ComputeStatistics("min", &cpfbench::detail::minimum)
-   ->ComputeStatistics("max", &cpfbench::detail::maximum)
-   ->Complexity()
-   ->Unit(benchmark::kMicrosecond);
+      ->Name("calculator/materialize_ast")
+      ->ArgName("chars")
+      ->Arg(static_cast<std::int64_t>(small_expression().size()))
+      ->Arg(static_cast<std::int64_t>(medium_expression().size()))
+      ->Arg(static_cast<std::int64_t>(large_expression().size()))
+      ->Repetitions(8)
+      ->MinWarmUpTime(0.1)
+      ->ReportAggregatesOnly()
+      ->ComputeStatistics("min", &cpfbench::detail::minimum)
+      ->ComputeStatistics("max", &cpfbench::detail::maximum)
+      ->Complexity()
+      ->Unit(benchmark::kMicrosecond);
 
 BENCHMARK(calculator_parse_and_evaluate)
-   ->Name("calculator/parse_and_evaluate")
-   ->ArgName("chars")
-   ->Arg(static_cast<std::int64_t>(small_expression().size()))
-   ->Arg(static_cast<std::int64_t>(medium_expression().size()))
-   ->Arg(static_cast<std::int64_t>(large_expression().size()))
-   ->Repetitions(8)
-   ->MinWarmUpTime(0.1)
-   ->ReportAggregatesOnly()
-   ->ComputeStatistics("min", &cpfbench::detail::minimum)
-   ->ComputeStatistics("max", &cpfbench::detail::maximum)
-   ->Complexity()
-   ->Unit(benchmark::kMicrosecond);
-
-
-
-
-
-
+      ->Name("calculator/parse_and_evaluate")
+      ->ArgName("chars")
+      ->Arg(static_cast<std::int64_t>(small_expression().size()))
+      ->Arg(static_cast<std::int64_t>(medium_expression().size()))
+      ->Arg(static_cast<std::int64_t>(large_expression().size()))
+      ->Repetitions(8)
+      ->MinWarmUpTime(0.1)
+      ->ReportAggregatesOnly()
+      ->ComputeStatistics("min", &cpfbench::detail::minimum)
+      ->ComputeStatistics("max", &cpfbench::detail::maximum)
+      ->Complexity()
+      ->Unit(benchmark::kMicrosecond);

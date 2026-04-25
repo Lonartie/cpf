@@ -8,27 +8,13 @@
 
 namespace cpf {
    /// @brief Describes the kind of grammar symbol used in a production.
-   enum class symbol_kind {
-      reference,
-      literal,
-      regex
-   };
+   enum class symbol_kind { reference, literal, regex };
 
    /// @brief Postfix repetition applied to a grammar symbol.
-   enum class symbol_quantifier {
-      one,
-      optional,
-      zero_or_more,
-      one_or_more,
-      exact
-   };
+   enum class symbol_quantifier { one, optional, zero_or_more, one_or_more, exact };
 
    /// @brief Operator used by a grammar attribute assignment.
-   enum class attribute_operator {
-      assign,
-      less_than,
-      greater_than
-   };
+   enum class attribute_operator { assign, less_than, greater_than };
 
    /// @brief Parsed representation of a rule attribute.
    struct attribute {
@@ -107,4 +93,3 @@ namespace cpf {
       [[nodiscard]] rule* find_rule(std::string_view identifier);
    };
 } // namespace cpf
-

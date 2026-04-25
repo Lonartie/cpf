@@ -54,4 +54,5 @@ The detailed project documentation now lives under the repository `wiki` folder:
 
 ## Licensing and notices
 
-Third-party dependency attribution for vendored and fetched components lives in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+Third-party dependency attribution for vendored and fetched components lives in [
+`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).

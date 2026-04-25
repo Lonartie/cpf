@@ -37,5 +37,5 @@ target_link_libraries(cpftests PRIVATE
 )
 
 if (BUILD_TESTING)
-   cpf_discover_doctest_tests(cpftests)
+    cpf_discover_doctest_tests(cpftests)
 endif ()

@@ -7,8 +7,8 @@
 #include <memory>
 #include <optional>
 #include <regex>
-#include <span>
 #include <set>
+#include <span>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -89,55 +89,44 @@ namespace cpf {
       [[nodiscard]] virtual std::unique_ptr<node> clone_node() const = 0;
    };
 
-   template<typename T>
-   class parse_tree;
+   template<typename T> class parse_tree;
 
    namespace detail {
       struct parse_node;
       using parse_node_ptr = std::shared_ptr<const parse_node>;
 
-      template<typename T>
-      [[nodiscard]] auto opaque_tree_of(const parse_tree<T>& tree) -> const parse_node_ptr&;
+      template<typename T> [[nodiscard]] auto opaque_tree_of(const parse_tree<T>& tree) -> const parse_node_ptr&;
    } // namespace detail
 
    /// @brief Lazy handle for one parse tree in a returned forest.
    /// @tparam T Root node type materialized from the opaque runtime tree.
-   template<typename T>
-   class parse_tree {
+   template<typename T> class parse_tree {
    public:
       parse_tree() = default;
 
-      parse_tree(std::unique_ptr<T> eager_tree)
-         : definition{eager_tree != nullptr ? eager_tree->definition : 0}
-         , range{eager_tree != nullptr ? eager_tree->range : source_range{}} {
+      parse_tree(std::unique_ptr<T> eager_tree) :
+          definition{eager_tree != nullptr ? eager_tree->definition : 0},
+          range{eager_tree != nullptr ? eager_tree->range : source_range{}} {
          if (eager_tree != nullptr) {
             m_materialized = std::shared_ptr<T>{eager_tree.release()};
          }
       }
 
-      parse_tree(detail::parse_node_ptr opaque_tree, std::size_t tree_definition, source_range tree_range, std::function<std::unique_ptr<T>()> materializer)
-         : definition{tree_definition}
-         , range{std::move(tree_range)}
-         , m_opaque_tree{std::move(opaque_tree)}
-         , m_materialize{std::move(materializer)} {
-      }
+      parse_tree(detail::parse_node_ptr opaque_tree, std::size_t tree_definition, source_range tree_range,
+                 std::function<std::unique_ptr<T>()> materializer) :
+          definition{tree_definition}, range{std::move(tree_range)}, m_opaque_tree{std::move(opaque_tree)},
+          m_materialize{std::move(materializer)} {}
 
       [[nodiscard]] auto get() const -> T* {
          ensure_materialized();
          return m_materialized.get();
       }
 
-      [[nodiscard]] auto operator->() const -> T* {
-         return get();
-      }
+      [[nodiscard]] auto operator->() const -> T* { return get(); }
 
-      [[nodiscard]] auto operator*() const -> T& {
-         return *get();
-      }
+      [[nodiscard]] auto operator*() const -> T& { return *get(); }
 
-      [[nodiscard]] auto has_materialized() const -> bool {
-         return static_cast<bool>(m_materialized);
-      }
+      [[nodiscard]] auto has_materialized() const -> bool { return static_cast<bool>(m_materialized); }
 
       std::size_t definition = 0;
       source_range range;
@@ -163,8 +152,7 @@ namespace cpf {
 
    /// @brief Result of parsing an input string into a forest of lazy parse-tree handles.
    /// @tparam T Root node type produced by the parse entry point.
-   template<typename T>
-   struct parse_result {
+   template<typename T> struct parse_result {
       /// @brief True when parsing consumed the full input successfully.
       bool success = false;
       /// @brief All parse trees produced for the input.
@@ -198,22 +186,32 @@ namespace cpf {
       inline std::string escape_string(std::string_view value) {
          std::string escaped;
          escaped.reserve(value.size() + 4);
-         for (char ch : value) {
+         for (char ch: value) {
             switch (ch) {
-               case '\\': escaped += "\\\\"; break;
-               case '\n': escaped += "\\n"; break;
-               case '\r': escaped += "\\r"; break;
-               case '\t': escaped += "\\t"; break;
-               case '"': escaped += "\\\""; break;
-               default: escaped += ch; break;
+               case '\\':
+                  escaped += "\\\\";
+                  break;
+               case '\n':
+                  escaped += "\\n";
+                  break;
+               case '\r':
+                  escaped += "\\r";
+                  break;
+               case '\t':
+                  escaped += "\\t";
+                  break;
+               case '"':
+                  escaped += "\\\"";
+                  break;
+               default:
+                  escaped += ch;
+                  break;
             }
          }
          return escaped;
       }
 
-      inline std::string quoted(std::string_view value) {
-         return std::string{"\""} + escape_string(value) + "\"";
-      }
+      inline std::string quoted(std::string_view value) { return std::string{"\""} + escape_string(value) + "\""; }
 
       inline std::string found_token(std::string_view input, std::size_t offset) {
          if (offset >= input.size()) {
@@ -282,13 +280,12 @@ namespace cpf {
          }
 
          static void finalize(parse_error& error) {
-            error.message = "Parse error at line " + std::to_string(error.line)
-                          + ", column " + std::to_string(error.column)
-                          + ": expected " + join_expected(error.expected)
-                          + " but found " + error.found;
+            error.message = "Parse error at line " + std::to_string(error.line) + ", column " +
+                            std::to_string(error.column) + ": expected " + join_expected(error.expected) +
+                            " but found " + error.found;
             if (!error.notes.empty()) {
                error.message += "\nNotes:";
-               for (const auto& note : error.notes) {
+               for (const auto& note: error.notes) {
                   error.message += "\n  - " + note;
                }
             }
@@ -318,10 +315,10 @@ namespace cpf {
             return;
          }
 
-         for (const auto& expected : candidate.expected) {
+         for (const auto& expected: candidate.expected) {
             append_unique(target.expected, expected);
          }
-         for (const auto& note : candidate.notes) {
+         for (const auto& note: candidate.notes) {
             append_unique(target.notes, note);
          }
          error_tracker::finalize(target);
@@ -331,7 +328,8 @@ namespace cpf {
          parse_error error;
          error.expected.push_back("unambiguous parse");
          error.found = "<ambiguous parse>";
-         error.notes.push_back("multiple valid derivations were detected while parsing rule '" + std::string{rule_name} + "'");
+         error.notes.push_back("multiple valid derivations were detected while parsing rule '" +
+                               std::string{rule_name} + "'");
          error_tracker::finalize(error);
          return error;
       }
@@ -340,7 +338,8 @@ namespace cpf {
          return input.substr(position, literal.size()) == literal;
       }
 
-      inline bool try_literal(std::string_view input, std::size_t& position, std::string_view literal, std::string* capture = nullptr) {
+      inline bool try_literal(std::string_view input, std::size_t& position, std::string_view literal,
+                              std::string* capture = nullptr) {
          auto checkpoint = position;
          skip_space(input, checkpoint);
          if (!starts_with(input, checkpoint, literal)) {
@@ -353,7 +352,8 @@ namespace cpf {
          return true;
       }
 
-      inline bool try_regex(std::string_view input, std::size_t& position, const std::regex& regex, std::string* capture = nullptr) {
+      inline bool try_regex(std::string_view input, std::size_t& position, const std::regex& regex,
+                            std::string* capture = nullptr) {
          auto checkpoint = position;
          skip_space(input, checkpoint);
          auto begin = input.data() + checkpoint;
@@ -369,11 +369,7 @@ namespace cpf {
          return true;
       }
 
-      enum class parser_symbol_kind {
-         nonterminal,
-         literal,
-         regex
-      };
+      enum class parser_symbol_kind { nonterminal, literal, regex };
 
       struct parser_symbol {
          parser_symbol_kind kind = parser_symbol_kind::literal;
@@ -410,8 +406,7 @@ namespace cpf {
          std::vector<parse_value> children;
       };
 
-      template<typename T>
-      [[nodiscard]] auto opaque_tree_of(const parse_tree<T>& tree) -> const parse_node_ptr& {
+      template<typename T> [[nodiscard]] auto opaque_tree_of(const parse_tree<T>& tree) -> const parse_node_ptr& {
          return tree.m_opaque_tree;
       }
 
@@ -510,13 +505,13 @@ namespace cpf {
       }
 
       inline std::string describe_progress(const production_spec& production, std::size_t dot) {
-         return "while parsing rule '" + std::string{production.lhs_name}
-              + "' via " + std::string{production.debug_text}
-              + " (after symbol " + std::to_string(dot)
-              + " of " + std::to_string(production.symbol_count) + ")";
+         return "while parsing rule '" + std::string{production.lhs_name} + "' via " +
+                std::string{production.debug_text} + " (after symbol " + std::to_string(dot) + " of " +
+                std::to_string(production.symbol_count) + ")";
       }
 
-      inline std::optional<terminal_match> match_terminal(std::string_view input, std::size_t position, const parser_symbol& symbol) {
+      inline std::optional<terminal_match> match_terminal(std::string_view input, std::size_t position,
+                                                          const parser_symbol& symbol) {
          terminal_match match;
          auto token_start = position;
          skip_space(input, token_start);
@@ -601,7 +596,8 @@ namespace cpf {
          return std::min(limit, left * right);
       }
 
-      inline auto prepare_earley_parse(std::string_view input, const grammar_spec& grammar, std::size_t root_rule) -> prepared_parse {
+      inline auto prepare_earley_parse(std::string_view input, const grammar_spec& grammar, std::size_t root_rule)
+            -> prepared_parse {
          prepared_parse prepared;
          error_tracker tracker;
          prepared.chart.resize(input.size() + 1);
@@ -624,7 +620,7 @@ namespace cpf {
                const auto& production = grammar.productions[production_index];
 
                if (dot == production.symbol_count) {
-                  for (const auto& parent_item : prepared.chart[start].items) {
+                  for (const auto& parent_item: prepared.chart[start].items) {
                      const auto [parent_index, parent_dot, parent_start] = parent_item;
                      const auto& parent = grammar.productions[parent_index];
                      if (parent_dot >= parent.symbol_count) {
@@ -650,7 +646,8 @@ namespace cpf {
 
                auto match = match_terminal(input, position, next);
                if (!match.has_value()) {
-                  tracker.record(skip_space_position(input, position), describe_expected_symbol(next), describe_progress(production, dot));
+                  tracker.record(skip_space_position(input, position), describe_expected_symbol(next),
+                                 describe_progress(production, dot));
                   continue;
                }
                prepared.chart[match->end].add(production_index, dot + 1, start);
@@ -658,7 +655,7 @@ namespace cpf {
          }
 
          for (std::size_t end = 0; end < prepared.chart.size(); ++end) {
-            for (const auto& item : prepared.chart[end].items) {
+            for (const auto& item: prepared.chart[end].items) {
                const auto [production_index, dot, start] = item;
                const auto& production = grammar.productions[production_index];
                if (dot != production.symbol_count) {
@@ -670,7 +667,7 @@ namespace cpf {
             }
          }
 
-         for (auto& [key, ends] : prepared.rule_ends) {
+         for (auto& [key, ends]: prepared.rule_ends) {
             std::sort(ends.begin(), ends.end());
             ends.erase(std::unique(ends.begin(), ends.end()), ends.end());
          }
@@ -691,7 +688,9 @@ namespace cpf {
                auto completed = prepared.completed_rules.find(span_key{root_rule, 0, end});
                if (completed != prepared.completed_rules.end()) {
                   auto failure_position = skip_space_position(input, end);
-                  tracker.record(failure_position, "<end of input>", "after completing rule '" + std::string{grammar.productions[completed->second.front()].lhs_name} + "'");
+                  tracker.record(failure_position, "<end of input>",
+                                 "after completing rule '" +
+                                       std::string{grammar.productions[completed->second.front()].lhs_name} + "'");
                }
             }
             prepared.error = tracker.build(input);
@@ -731,7 +730,7 @@ namespace cpf {
             rule_in_progress.insert(key);
             auto& nodes = rule_cache[key];
             if (auto completed = prepared.completed_rules.find(key); completed != prepared.completed_rules.end()) {
-               for (auto production_index : completed->second) {
+               for (auto production_index: completed->second) {
                   const auto& produced = build_production(production_index, start, end);
                   nodes.insert(nodes.end(), produced.begin(), produced.end());
                }
@@ -754,7 +753,8 @@ namespace cpf {
             auto& nodes = production_cache[key];
             std::vector<parse_value> children;
 
-            std::function<void(std::size_t, std::size_t)> enumerate = [&](std::size_t symbol_index, std::size_t position) {
+            std::function<void(std::size_t, std::size_t)> enumerate = [&](std::size_t symbol_index,
+                                                                          std::size_t position) {
                if (symbol_index == production.symbol_count) {
                   if (position == end) {
                      auto range = make_source_range(input, start, end);
@@ -762,7 +762,8 @@ namespace cpf {
                         range.begin = range_of(children.front()).begin;
                         range.end = range_of(children.back()).end;
                      }
-                     nodes.push_back(std::make_shared<parse_node>(parse_node{production.lhs, production_index, start, end, range, children}));
+                     nodes.push_back(std::make_shared<parse_node>(
+                           parse_node{production.lhs, production_index, start, end, range, children}));
                   }
                   return;
                }
@@ -774,12 +775,12 @@ namespace cpf {
                      return;
                   }
 
-                  for (auto child_end : end_it->second) {
+                  for (auto child_end: end_it->second) {
                      if (child_end > end) {
                         break;
                      }
-                      const auto& child_nodes = build_rule(symbol.value, position, child_end);
-                     for (const auto& child : child_nodes) {
+                     const auto& child_nodes = build_rule(symbol.value, position, child_end);
+                     for (const auto& child: child_nodes) {
                         children.emplace_back(child);
                         enumerate(symbol_index + 1, child_end);
                         children.pop_back();
@@ -819,7 +820,8 @@ namespace cpf {
          return result;
       }
 
-      inline recognize_result earley_recognize(std::string_view input, const grammar_spec& grammar, std::size_t root_rule) {
+      inline recognize_result earley_recognize(std::string_view input, const grammar_spec& grammar,
+                                               std::size_t root_rule) {
          recognize_result result;
          auto prepared = prepare_earley_parse(input, grammar, root_rule);
          if (!prepared.has_root_production) {
@@ -833,8 +835,8 @@ namespace cpf {
             }
 
             if (prepared.completed_rules.contains(span_key{root_rule, 0, end})) {
-                  result.success = true;
-                  return result;
+               result.success = true;
+               return result;
             }
          }
 
@@ -842,7 +844,8 @@ namespace cpf {
          return result;
       }
 
-      inline inspect_result earley_inspect(std::string_view input, const grammar_spec& grammar, std::size_t root_rule, std::size_t ambiguity_limit = 2) {
+      inline inspect_result earley_inspect(std::string_view input, const grammar_spec& grammar, std::size_t root_rule,
+                                           std::size_t ambiguity_limit = 2) {
          inspect_result result;
          auto prepared = prepare_earley_parse(input, grammar, root_rule);
          if (!prepared.has_root_production) {
@@ -887,7 +890,7 @@ namespace cpf {
             rule_in_progress.insert(key);
             auto total = std::size_t{0};
             if (auto completed = prepared.completed_rules.find(key); completed != prepared.completed_rules.end()) {
-               for (const auto production_index : completed->second) {
+               for (const auto production_index: completed->second) {
                   total = capped_add(total, count_production(production_index, start, end), ambiguity_limit);
                   if (total >= ambiguity_limit) {
                      break;
@@ -910,7 +913,8 @@ namespace cpf {
 
             production_in_progress.insert(key);
             const auto& production = grammar.productions[production_index];
-            std::function<std::size_t(std::size_t, std::size_t)> enumerate = [&](std::size_t symbol_index, std::size_t position) -> std::size_t {
+            std::function<std::size_t(std::size_t, std::size_t)> enumerate = [&](std::size_t symbol_index,
+                                                                                 std::size_t position) -> std::size_t {
                if (symbol_index == production.symbol_count) {
                   return position == end ? 1 : 0;
                }
@@ -923,7 +927,7 @@ namespace cpf {
                   }
 
                   auto total = std::size_t{0};
-                  for (const auto child_end : end_it->second) {
+                  for (const auto child_end: end_it->second) {
                      if (child_end > end) {
                         break;
                      }
@@ -959,4 +963,3 @@ namespace cpf {
       }
    } // namespace detail
 } // namespace cpf
-

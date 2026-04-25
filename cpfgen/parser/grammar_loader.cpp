@@ -20,9 +20,7 @@ namespace cpf {
          }
 
       private:
-         [[nodiscard]] static bool is_quote(char ch) {
-            return ch == '\'' || ch == '"';
-         }
+         [[nodiscard]] static bool is_quote(char ch) { return ch == '\'' || ch == '"'; }
 
          struct file_content {
             std::string text;
@@ -32,7 +30,8 @@ namespace cpf {
          [[nodiscard]] static std::filesystem::path normalize_existing(const std::filesystem::path& path) {
             auto absolute_path = std::filesystem::absolute(path);
             if (!std::filesystem::exists(absolute_path)) {
-               throw std::runtime_error{"Unable to open grammar file '" + absolute_path.lexically_normal().string() + "'"};
+               throw std::runtime_error{"Unable to open grammar file '" + absolute_path.lexically_normal().string() +
+                                        "'"};
             }
             return std::filesystem::weakly_canonical(absolute_path);
          }
@@ -56,10 +55,11 @@ namespace cpf {
 
             if (auto* existing = target.find_rule(incoming_rule.identifier); existing != nullptr) {
                const auto definition_offset = existing->productions.size();
-               for (auto& production : incoming_rule.productions) {
+               for (auto& production: incoming_rule.productions) {
                   production.definition += definition_offset;
                }
-               existing->productions.insert(existing->productions.end(), incoming_rule.productions.begin(), incoming_rule.productions.end());
+               existing->productions.insert(existing->productions.end(), incoming_rule.productions.begin(),
+                                            incoming_rule.productions.end());
                return;
             }
 
@@ -68,7 +68,7 @@ namespace cpf {
 
          static void rename_synthetic_rules(grammar& parsed_grammar, std::string_view prefix) {
             std::unordered_map<std::string, std::string> renamed_rules;
-            for (auto& rule : parsed_grammar.rules) {
+            for (auto& rule: parsed_grammar.rules) {
                if (!rule.synthetic) {
                   continue;
                }
@@ -81,9 +81,9 @@ namespace cpf {
                return;
             }
 
-            for (auto& rule : parsed_grammar.rules) {
-               for (auto& production : rule.productions) {
-                  for (auto& symbol : production.symbols) {
+            for (auto& rule: parsed_grammar.rules) {
+               for (auto& production: rule.productions) {
+                  for (auto& symbol: production.symbols) {
                      if (symbol.kind != symbol_kind::reference) {
                         continue;
                      }
@@ -127,7 +127,7 @@ namespace cpf {
                try {
                   auto parsed = parse_grammar(prefixed_text);
                   rename_synthetic_rules(parsed, "$cpf_import_" + std::to_string(synthetic_prefix_counter_++) + "_");
-                  for (auto& rule : parsed.rules) {
+                  for (auto& rule: parsed.rules) {
                      merge_rule(result.parsed_grammar, std::move(rule));
                   }
                } catch (const std::runtime_error& error) {
@@ -173,15 +173,14 @@ namespace cpf {
             return std::isspace(next) != 0 || text[end] == '\'' || text[end] == '"';
          }
 
-         [[nodiscard]] static std::filesystem::path parse_import(
-            const std::string& text,
-            std::size_t& position,
-            std::size_t& line,
-            const std::filesystem::path& importer_path) {
+         [[nodiscard]] static std::filesystem::path parse_import(const std::string& text, std::size_t& position,
+                                                                 std::size_t& line,
+                                                                 const std::filesystem::path& importer_path) {
             position += std::string_view{"import"}.size();
             skip_ignored(text, position, line);
             if (position >= text.size() || !is_quote(text[position])) {
-               throw std::runtime_error{"Grammar import error in '" + importer_path.string() + "' at line " + std::to_string(line) + ": expected quoted import path"};
+               throw std::runtime_error{"Grammar import error in '" + importer_path.string() + "' at line " +
+                                        std::to_string(line) + ": expected quoted import path"};
             }
 
             auto quote = text[position];
@@ -192,7 +191,8 @@ namespace cpf {
                if (current == '\\') {
                   ++position;
                   if (position >= text.size()) {
-                     throw std::runtime_error{"Grammar import error in '" + importer_path.string() + "' at line " + std::to_string(line) + ": unexpected end of import path"};
+                     throw std::runtime_error{"Grammar import error in '" + importer_path.string() + "' at line " +
+                                              std::to_string(line) + ": unexpected end of import path"};
                   }
                   import_target += text[position];
                   ++position;
@@ -203,7 +203,8 @@ namespace cpf {
                   break;
                }
                if (current == '\n') {
-                  throw std::runtime_error{"Grammar import error in '" + importer_path.string() + "' at line " + std::to_string(line) + ": unterminated import path"};
+                  throw std::runtime_error{"Grammar import error in '" + importer_path.string() + "' at line " +
+                                           std::to_string(line) + ": unterminated import path"};
                }
                import_target += current;
                ++position;
@@ -211,17 +212,15 @@ namespace cpf {
 
             skip_ignored(text, position, line);
             if (position >= text.size() || text[position] != ';') {
-               throw std::runtime_error{"Grammar import error in '" + importer_path.string() + "' at line " + std::to_string(line) + ": expected ';' after import"};
+               throw std::runtime_error{"Grammar import error in '" + importer_path.string() + "' at line " +
+                                        std::to_string(line) + ": expected ';' after import"};
             }
             ++position;
             return normalize_existing(importer_path.parent_path() / import_target);
          }
 
-         [[nodiscard]] static std::string extract_rule(
-            const std::string& text,
-            std::size_t& position,
-            std::size_t& line,
-            const std::filesystem::path& path) {
+         [[nodiscard]] static std::string extract_rule(const std::string& text, std::size_t& position,
+                                                       std::size_t& line, const std::filesystem::path& path) {
             auto start = position;
             auto quote = char{};
             auto escaped = false;
@@ -259,7 +258,8 @@ namespace cpf {
                ++position;
             }
 
-            throw std::runtime_error{"While loading grammar file '" + path.string() + "': expected ';' to terminate rule"};
+            throw std::runtime_error{"While loading grammar file '" + path.string() +
+                                     "': expected ';' to terminate rule"};
          }
 
          std::set<std::filesystem::path> loaded_paths_;
@@ -268,13 +268,7 @@ namespace cpf {
       };
    } // namespace
 
-   loaded_grammar load_grammar_file(const std::filesystem::path& path) {
-      return grammar_loader{}.load(path);
-   }
+   loaded_grammar load_grammar_file(const std::filesystem::path& path) { return grammar_loader{}.load(path); }
 
-   grammar parse_grammar_file(const std::filesystem::path& path) {
-      return load_grammar_file(path).parsed_grammar;
-   }
+   grammar parse_grammar_file(const std::filesystem::path& path) { return load_grammar_file(path).parsed_grammar; }
 } // namespace cpf
-
-

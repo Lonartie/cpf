@@ -10,4 +10,3 @@ namespace cpf {
    /// @return Parsed grammar representation.
    grammar parse_grammar(std::string_view text);
 } // namespace cpf
-

@@ -29,7 +29,8 @@ The test tools live under `cpftools` and use the vendored `doctest` single-heade
 
 ## Benchmarks
 
-CPF ships a `cpfbench` executable under `cpftools/cpfbench` that measures generated parser runtime with Google Benchmark.
+CPF ships a `cpfbench` executable under `cpftools/cpfbench` that measures generated parser runtime with Google
+Benchmark.
 
 ### Included benchmark families
 
@@ -93,5 +94,6 @@ The included benchmark grammars live at:
 - `cpftools/cpfbench/fixtures/grammars/calculator.cpf`
 - `cpftools/cpfbench/fixtures/grammars/simple_c.cpf`
 
-The simple C-like benchmark grammar intentionally stays small and parser-focused: functions, blocks, variable declarations, assignments, `if` / `else`, `while`, returns, identifiers, numbers, and infix expressions.
+The simple C-like benchmark grammar intentionally stays small and parser-focused: functions, blocks, variable
+declarations, assignments, `if` / `else`, `while`, returns, identifiers, numbers, and infix expressions.
 

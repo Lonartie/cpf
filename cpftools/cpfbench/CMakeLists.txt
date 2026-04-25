@@ -12,10 +12,10 @@ CPMAddPackage(
         GITHUB_REPOSITORY google/benchmark
         VERSION 1.9.4
         OPTIONS
-                "BENCHMARK_ENABLE_GTEST_TESTS OFF"
-                "BENCHMARK_ENABLE_INSTALL OFF"
-                "BENCHMARK_ENABLE_TESTING OFF"
-                "BENCHMARK_ENABLE_WERROR OFF"
+        "BENCHMARK_ENABLE_GTEST_TESTS OFF"
+        "BENCHMARK_ENABLE_INSTALL OFF"
+        "BENCHMARK_ENABLE_TESTING OFF"
+        "BENCHMARK_ENABLE_WERROR OFF"
 )
 
 target_compile_options(benchmark PRIVATE -Wno-error=c2y-extensions -Wno-c2y-extensions)

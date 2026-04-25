@@ -64,7 +64,9 @@ struct parse_result {
 
 When `build_ast = false`, `success` still reports whether parsing succeeded, while `forest` stays empty by design.
 
-When `build_ast = true`, `forest` stores lazy `cpf::parse_tree<T>` handles rather than eagerly materialized AST roots. Each handle keeps opaque parse-tree state plus lightweight metadata such as `definition` and `range`. The actual AST node is built on first access through `operator*`, `operator->`, or `get()`.
+When `build_ast = true`, `forest` stores lazy `cpf::parse_tree<T>` handles rather than eagerly materialized AST roots.
+Each handle keeps opaque parse-tree state plus lightweight metadata such as `definition` and `range`. The actual AST
+node is built on first access through `operator*`, `operator->`, or `get()`.
 
 That means code such as this still works:
 
@@ -116,9 +118,11 @@ Each generated node also exposes:
 - `complexity_inputs(rule_id)`
 - `recompute_complexity(rule_id)`
 
-Here `rule_id` is the zero-based production `definition` stored on parsed nodes, so merged generated node classes can keep separate complexity estimates per reduction rule.
+Here `rule_id` is the zero-based production `definition` stored on parsed nodes, so merged generated node classes can
+keep separate complexity estimates per reduction rule.
 
-`Complexity[rule_id]` is intentionally populated lazily. CPF always generates the deterministic sample inputs up front, but it only fits and stores the corresponding `cpf::complexity` object when `recompute_complexity(rule_id)` is called.
+`Complexity[rule_id]` is intentionally populated lazily. CPF always generates the deterministic sample inputs up front,
+but it only fits and stores the corresponding `cpf::complexity` object when `recompute_complexity(rule_id)` is called.
 
 ## End-to-end example
 

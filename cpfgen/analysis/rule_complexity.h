@@ -17,4 +17,3 @@ namespace cpf {
    /// @return Deterministic per-reduction sample inputs used for complexity fitting.
    rule_complexity_samples generate_rule_complexity_samples(const grammar& grammar);
 } // namespace cpf
-

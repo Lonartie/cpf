@@ -28,9 +28,7 @@ namespace cpf {
 
       class grammar_parser {
       public:
-         explicit grammar_parser(std::string_view text)
-            : text_{text} {
-         }
+         explicit grammar_parser(std::string_view text) : text_{text} {}
 
          grammar parse() {
             grammar result;
@@ -40,14 +38,15 @@ namespace cpf {
                auto& parsed_rule = parsed_rules.main_rule;
                if (auto* existing = result.find_rule(parsed_rule.identifier); existing != nullptr) {
                   const auto definition_offset = existing->productions.size();
-                  for (auto& production : parsed_rule.productions) {
+                  for (auto& production: parsed_rule.productions) {
                      production.definition += definition_offset;
                   }
-                  existing->productions.insert(existing->productions.end(), parsed_rule.productions.begin(), parsed_rule.productions.end());
+                  existing->productions.insert(existing->productions.end(), parsed_rule.productions.begin(),
+                                               parsed_rule.productions.end());
                } else {
                   result.rules.push_back(std::move(parsed_rule));
                }
-               for (auto& synthetic_rule : parsed_rules.synthetic_rules) {
+               for (auto& synthetic_rule: parsed_rules.synthetic_rules) {
                   result.rules.push_back(std::move(synthetic_rule));
                }
                skip_ignored();
@@ -56,13 +55,9 @@ namespace cpf {
          }
 
       private:
-         [[nodiscard]] static bool is_quote(char ch) {
-            return ch == '\'' || ch == '"';
-         }
+         [[nodiscard]] static bool is_quote(char ch) { return ch == '\'' || ch == '"'; }
 
-         [[nodiscard]] bool eof() const {
-            return position_ >= text_.size();
-         }
+         [[nodiscard]] bool eof() const { return position_ >= text_.size(); }
 
          [[nodiscard]] std::size_t column() const {
             auto column = std::size_t{1};
@@ -88,9 +83,7 @@ namespace cpf {
             return "\"" + std::string{text_.substr(position_, std::min<std::size_t>(end - position_, 16))} + "\"";
          }
 
-         [[nodiscard]] char current() const {
-            return eof() ? '\0' : text_[position_];
-         }
+         [[nodiscard]] char current() const { return eof() ? '\0' : text_[position_]; }
 
          void advance() {
             if (eof()) {
@@ -136,9 +129,8 @@ namespace cpf {
          }
 
          [[nodiscard]] std::runtime_error error(const std::string& message) const {
-            auto full_message = "Grammar parse error at line " + std::to_string(line_)
-                              + ", column " + std::to_string(column()) + ": " + message
-                              + " but found " + found_token();
+            auto full_message = "Grammar parse error at line " + std::to_string(line_) + ", column " +
+                                std::to_string(column()) + ": " + message + " but found " + found_token();
             if (!current_rule_.empty()) {
                full_message += " while parsing rule '" + current_rule_ + "'";
             }
@@ -179,13 +171,27 @@ namespace cpf {
                   }
                   auto escaped = current();
                   switch (escaped) {
-                     case 'n': value += '\n'; break;
-                     case 'r': value += '\r'; break;
-                     case 't': value += '\t'; break;
-                     case '\\': value += '\\'; break;
-                     case '\'': value += '\''; break;
-                     case '"': value += '"'; break;
-                     default: value += escaped; break;
+                     case 'n':
+                        value += '\n';
+                        break;
+                     case 'r':
+                        value += '\r';
+                        break;
+                     case 't':
+                        value += '\t';
+                        break;
+                     case '\\':
+                        value += '\\';
+                        break;
+                     case '\'':
+                        value += '\'';
+                        break;
+                     case '"':
+                        value += '"';
+                        break;
+                     default:
+                        value += escaped;
+                        break;
                   }
                   advance();
                   continue;
@@ -294,8 +300,8 @@ namespace cpf {
             auto original_quantifier = quantifier;
             auto original_exact_repetition = exact_repetition;
             parse_quantifier(quantifier, exact_repetition);
-            if ((quantifier != original_quantifier || exact_repetition != original_exact_repetition)
-             && (original_quantifier != symbol_quantifier::one || original_exact_repetition != 1)) {
+            if ((quantifier != original_quantifier || exact_repetition != original_exact_repetition) &&
+                (original_quantifier != symbol_quantifier::one || original_exact_repetition != 1)) {
                throw error("A symbol can only have one repetition suffix");
             }
          }
@@ -360,8 +366,8 @@ namespace cpf {
          }
 
          [[nodiscard]] bool group_contains_nested_labeled_capture(const grouped_expression& group) const {
-            for (const auto& alternative : group.alternatives) {
-               for (const auto& item : alternative) {
+            for (const auto& alternative: group.alternatives) {
+               for (const auto& item: alternative) {
                   if (item.parsed_symbol.has_value()) {
                      if (item.parsed_symbol->has_label()) {
                         return true;
@@ -384,26 +390,22 @@ namespace cpf {
             return "$cpf_group_" + std::to_string(synthetic_rule_counter_++);
          }
 
-         std::vector<std::vector<symbol>> lower_alternatives(
-            const std::vector<std::vector<grouped_sequence_item>>& alternatives,
-            std::size_t line,
-            bool capture_allowed,
-            std::vector<rule>& synthetic_rules) {
+         std::vector<std::vector<symbol>>
+         lower_alternatives(const std::vector<std::vector<grouped_sequence_item>>& alternatives, std::size_t line,
+                            bool capture_allowed, std::vector<rule>& synthetic_rules) {
             std::vector<std::vector<symbol>> lowered;
-            for (const auto& alternative : alternatives) {
+            for (const auto& alternative: alternatives) {
                auto lowered_alternative = lower_sequence(alternative, line, capture_allowed, synthetic_rules);
                lowered.insert(lowered.end(), lowered_alternative.begin(), lowered_alternative.end());
             }
             return lowered;
          }
 
-         std::vector<std::vector<symbol>> lower_sequence(
-            const std::vector<grouped_sequence_item>& sequence,
-            std::size_t line,
-            bool capture_allowed,
-            std::vector<rule>& synthetic_rules) {
+         std::vector<std::vector<symbol>> lower_sequence(const std::vector<grouped_sequence_item>& sequence,
+                                                         std::size_t line, bool capture_allowed,
+                                                         std::vector<rule>& synthetic_rules) {
             std::vector<std::vector<symbol>> lowered_sequences(1);
-            for (const auto& item : sequence) {
+            for (const auto& item: sequence) {
                std::vector<std::vector<symbol>> lowered_item;
                if (item.parsed_symbol.has_value()) {
                   if (item.parsed_symbol->has_label() && !capture_allowed) {
@@ -430,18 +432,18 @@ namespace cpf {
 
                      auto lowered_group = lower_alternatives(group.alternatives, line, false, synthetic_rules);
                      if (!group.label.empty()) {
-                        for (const auto& lowered_production : lowered_group) {
+                        for (const auto& lowered_production: lowered_group) {
                            if (lowered_production.size() != 1 || !lowered_production.front().is_single()) {
                               throw error("Labeled groups must lower to exactly one symbol per alternative");
                            }
-                           if (lowered_production.front().kind == symbol_kind::reference
-                            && lowered_production.front().value.starts_with("$cpf_group_")) {
+                           if (lowered_production.front().kind == symbol_kind::reference &&
+                               lowered_production.front().value.starts_with("$cpf_group_")) {
                               throw error("Labeled groups must lower directly to terminals or public rules");
                            }
                         }
                      }
                      synthetic_rule.productions.reserve(lowered_group.size());
-                     for (const auto& lowered_production : lowered_group) {
+                     for (const auto& lowered_production: lowered_group) {
                         production parsed_production;
                         parsed_production.symbols = lowered_production;
                         parsed_production.line = line;
@@ -463,8 +465,8 @@ namespace cpf {
                }
 
                std::vector<std::vector<symbol>> next_sequences;
-               for (const auto& prefix : lowered_sequences) {
-                  for (const auto& suffix : lowered_item) {
+               for (const auto& prefix: lowered_sequences) {
+                  for (const auto& suffix: lowered_item) {
                      auto combined = prefix;
                      combined.insert(combined.end(), suffix.begin(), suffix.end());
                      next_sequences.push_back(std::move(combined));
@@ -499,8 +501,9 @@ namespace cpf {
             expect("->");
 
             auto parsed_alternatives = parse_alternatives("production", ';');
-            auto lowered_productions = lower_alternatives(parsed_alternatives, line, true, parsed_rules.synthetic_rules);
-            for (const auto& lowered_symbols : lowered_productions) {
+            auto lowered_productions =
+                  lower_alternatives(parsed_alternatives, line, true, parsed_rules.synthetic_rules);
+            for (const auto& lowered_symbols: lowered_productions) {
                production parsed_production;
                parsed_production.attributes = attributes;
                parsed_production.symbols = lowered_symbols;
@@ -521,8 +524,5 @@ namespace cpf {
       };
    } // namespace
 
-   grammar parse_grammar(std::string_view text) {
-      return grammar_parser{text}.parse();
-   }
+   grammar parse_grammar(std::string_view text) { return grammar_parser{text}.parse(); }
 } // namespace cpf
-

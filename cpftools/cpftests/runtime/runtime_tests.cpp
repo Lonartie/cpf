@@ -3,8 +3,8 @@
 #include "error_choice.h"
 #include "grouped.h"
 #include "imported_bundle.h"
-#include "message.h"
 #include "merged_definitions.h"
+#include "message.h"
 #include "namespaced_calculator.h"
 #include "quantified.h"
 
@@ -41,9 +41,7 @@ namespace {
          return left * right;
       }
 
-      int operator()(const merged_number& node) const {
-         return std::stoi(node.value.text);
-      }
+      int operator()(const merged_number& node) const { return std::stoi(node.value.text); }
    };
 
    struct quant_choice_visitor {
@@ -52,17 +50,13 @@ namespace {
    };
 
    struct imported_bundle_visitor {
-      std::string operator()(const imported_bundle_word& node) const {
-         return node.value.text;
-      }
+      std::string operator()(const imported_bundle_word& node) const { return node.value.text; }
 
       std::string operator()(const imported_bundle_greeting& node) const {
          return visit(*node.text, *this) + node.suffix->value.text;
       }
 
-      std::string operator()(const imported_bundle_parting& node) const {
-         return node.text.text;
-      }
+      std::string operator()(const imported_bundle_parting& node) const { return node.text.text; }
    };
 
    struct namespaced_calculator_visitor {
@@ -94,13 +88,13 @@ namespace {
 
    std::vector<std::string> collect_quant_values(const std::vector<std::unique_ptr<quant_choice>>& values) {
       std::vector<std::string> result;
-      for (const auto& value : values) {
+      for (const auto& value: values) {
          REQUIRE(value != nullptr);
          result.emplace_back(visit(*value, quant_choice_visitor{}));
       }
       return result;
    }
-}
+} // namespace
 
 TEST_SUITE("generated.runtime") {
    TEST_CASE("calculator grammar matches the expected generated runtime behavior") {
@@ -109,11 +103,11 @@ TEST_SUITE("generated.runtime") {
 
          REQUIRE(result.success);
          REQUIRE(result.forest.size() == 1);
-          CHECK_FALSE(result.forest.front().has_materialized());
+         CHECK_FALSE(result.forest.front().has_materialized());
 
          auto& tree = result.forest.front();
          CHECK(visit(*tree, calculator_visitor{}) == 7);
-          CHECK(tree.has_materialized());
+         CHECK(tree.has_materialized());
 
          std::ostringstream stream;
          stream << *tree;
@@ -126,18 +120,18 @@ TEST_SUITE("generated.runtime") {
          CHECK(evaluate("10 - 3 - 2") == 5);
          CHECK(evaluate(" 6 + 4 ") == 10);
 
-          CHECK(expression::complexity_inputs(0).size() >= 2);
-          CHECK(number::complexity_inputs(0).size() >= 2);
+         CHECK(expression::complexity_inputs(0).size() >= 2);
+         CHECK(number::complexity_inputs(0).size() >= 2);
 
-          const auto& expression_recomputed = expression::recompute_complexity(0);
-          const auto& recomputed = number::recompute_complexity(0);
-          CHECK(&expression_recomputed == &expression::Complexity[0]);
-          CHECK(&recomputed == &number::Complexity[0]);
-          CHECK_FALSE(expression::Complexity[0].summary.empty());
-          CHECK_FALSE(number::Complexity[0].big_o.empty());
-          CHECK_FALSE(expression_recomputed.summary.empty());
-          CHECK_FALSE(recomputed.summary.empty());
-          CHECK(recomputed.estimate(8.0) >= 0.0);
+         const auto& expression_recomputed = expression::recompute_complexity(0);
+         const auto& recomputed = number::recompute_complexity(0);
+         CHECK(&expression_recomputed == &expression::Complexity[0]);
+         CHECK(&recomputed == &number::Complexity[0]);
+         CHECK_FALSE(expression::Complexity[0].summary.empty());
+         CHECK_FALSE(number::Complexity[0].big_o.empty());
+         CHECK_FALSE(expression_recomputed.summary.empty());
+         CHECK_FALSE(recomputed.summary.empty());
+         CHECK(recomputed.estimate(8.0) >= 0.0);
 
          auto number_result = number::parse("42");
          REQUIRE(number_result.success);
@@ -300,9 +294,7 @@ TEST_SUITE("generated.runtime") {
          REQUIRE(message_result.success);
          REQUIRE(message_result.forest.size() == 1);
 
-         auto text = visit(*message_result.forest.front(), [](const greeting& node) {
-            return node.text.text;
-         });
+         auto text = visit(*message_result.forest.front(), [](const greeting& node) { return node.text.text; });
          CHECK(text == "hello");
 
          std::ostringstream stream;
@@ -328,7 +320,7 @@ TEST_SUITE("generated.runtime") {
 
       auto first_seen = false;
       auto second_seen = false;
-      for (const auto& tree : ambiguous_result.forest) {
+      for (const auto& tree: ambiguous_result.forest) {
          if (dynamic_cast<const ambiguous_first*>(tree.get()) != nullptr) {
             first_seen = true;
          }
@@ -370,7 +362,7 @@ TEST_SUITE("generated.runtime") {
          REQUIRE(result.forest.size() == 2);
 
          std::vector<std::size_t> definitions;
-         for (const auto& tree : result.forest) {
+         for (const auto& tree: result.forest) {
             definitions.push_back(tree->definition);
             CHECK(tree->text.text == "x");
          }
@@ -597,5 +589,3 @@ TEST_SUITE("generated.runtime") {
       }
    }
 }
-
-

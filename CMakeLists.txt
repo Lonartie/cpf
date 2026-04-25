@@ -17,18 +17,18 @@ target_compile_features(cpf_project_options INTERFACE cxx_std_20)
 add_library(cpf_project_warnings INTERFACE)
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
-   target_compile_options(cpf_project_warnings INTERFACE
-		   -Wall
-		   -Wextra
-		   -Wpedantic
-		   -Werror
-   )
+    target_compile_options(cpf_project_warnings INTERFACE
+            -Wall
+            -Wextra
+            -Wpedantic
+            -Werror
+    )
 elseif (MSVC)
-   target_compile_options(cpf_project_warnings INTERFACE
-		   /W4
-		   /WX
-		   /permissive-
-   )
+    target_compile_options(cpf_project_warnings INTERFACE
+            /W4
+            /WX
+            /permissive-
+    )
 endif ()
 
 add_subdirectory(cpflib)

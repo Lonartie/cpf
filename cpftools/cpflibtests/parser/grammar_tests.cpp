@@ -12,7 +12,7 @@ namespace {
       REQUIRE(stream.good());
       stream << content;
    }
-}
+} // namespace
 
 TEST_SUITE("cpflib.grammar_parser") {
    TEST_CASE("calculator grammar is parsed into the expected rule model") {
@@ -203,7 +203,7 @@ TEST_SUITE("cpflib.grammar_parser") {
       CHECK(merged_value->productions[1].definition == 1);
       CHECK(merged_value->productions[2].definition == 2);
       CHECK(merged_value->productions[3].definition == 3);
-    }
+   }
 
    TEST_CASE("quantified symbol suffixes are preserved in the grammar model") {
       auto grammar = cpf::parse_grammar(R"(
@@ -290,7 +290,7 @@ TEST_SUITE("cpflib.grammar_parser") {
       CHECK(grouped_many->productions[0].symbols[0].quantifier == cpf::symbol_quantifier::one_or_more);
 
       auto synthetic_seen = false;
-      for (const auto& rule : grammar.rules) {
+      for (const auto& rule: grammar.rules) {
          if (!rule.synthetic) {
             continue;
          }
@@ -318,7 +318,7 @@ TEST_SUITE("cpflib.grammar_parser") {
       CHECK(grouped_value->productions.front().symbols.front().value.find("$cpf_group_") == 0);
 
       auto synthetic_seen = false;
-      for (const auto& rule : grammar.rules) {
+      for (const auto& rule: grammar.rules) {
          if (!rule.synthetic) {
             continue;
          }
@@ -451,11 +451,8 @@ TEST_SUITE("cpflib.grammar_parser") {
          write_file(test_directory / "first.cpf", "import 'second.cpf';\ncycle_first -> 'a':value;\n");
          write_file(test_directory / "second.cpf", "import 'first.cpf';\ncycle_second -> 'b':value;\n");
 
-         CHECK_THROWS_WITH_AS(
-            cpf::load_grammar_file(test_directory / "first.cpf"),
-            doctest::Contains("Grammar import cycle detected"),
-            std::runtime_error
-         );
+         CHECK_THROWS_WITH_AS(cpf::load_grammar_file(test_directory / "first.cpf"),
+                              doctest::Contains("Grammar import cycle detected"), std::runtime_error);
       }
 
       SUBCASE("double-quoted imports preserve escaped quotes and relative resolution") {
@@ -529,4 +526,3 @@ TEST_SUITE("cpflib.grammar_parser") {
       }
    }
 }
-

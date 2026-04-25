@@ -20,27 +20,27 @@ namespace cpfbench {
          return *std::max_element(samples.begin(), samples.end());
       }
 
-
-      inline void report_parse_failure(benchmark::State& state, std::string_view benchmark_name, const std::string& message) {
+      inline void report_parse_failure(benchmark::State& state, std::string_view benchmark_name,
+                                       const std::string& message) {
          auto error = std::string{"Benchmark '"} + std::string{benchmark_name} + "' failed to parse input: " + message;
          state.SkipWithError(error);
       }
 
-       inline void report_materialization_failure(benchmark::State& state, std::string_view benchmark_name, std::string_view message) {
-          auto error = std::string{"Benchmark '"} + std::string{benchmark_name} + "' failed to materialize AST: " + std::string{message};
-          state.SkipWithError(error);
-       }
-
-      inline void set_items_processed(benchmark::State& state) {
-         state.SetItemsProcessed(state.iterations());
+      inline void report_materialization_failure(benchmark::State& state, std::string_view benchmark_name,
+                                                 std::string_view message) {
+         auto error = std::string{"Benchmark '"} + std::string{benchmark_name} +
+                      "' failed to materialize AST: " + std::string{message};
+         state.SkipWithError(error);
       }
+
+      inline void set_items_processed(benchmark::State& state) { state.SetItemsProcessed(state.iterations()); }
    } // namespace detail
 
    template<typename Root>
    void benchmark_parse(benchmark::State& state, std::string_view input, std::string_view benchmark_name) {
       state.SetComplexityN(static_cast<benchmark::ComplexityN>(input.size()));
 
-      for (auto _ : state) {
+      for (auto _: state) {
          auto result = Root::parse(input);
          if (!result.success || result.forest.empty()) {
             detail::report_parse_failure(state, benchmark_name, result.error.message);
@@ -57,7 +57,7 @@ namespace cpfbench {
    void benchmark_parse_to_forest(benchmark::State& state, std::string_view input, std::string_view benchmark_name) {
       state.SetComplexityN(static_cast<benchmark::ComplexityN>(input.size()));
 
-      for (auto _ : state) {
+      for (auto _: state) {
          auto result = Root::parse(input);
          if (!result.success || result.forest.empty()) {
             detail::report_parse_failure(state, benchmark_name, result.error.message);
@@ -83,11 +83,12 @@ namespace cpfbench {
 
       const auto tree_template = result.forest.front();
       if (tree_template.has_materialized()) {
-         detail::report_materialization_failure(state, benchmark_name, "forest handle was already materialized before benchmarking");
+         detail::report_materialization_failure(state, benchmark_name,
+                                                "forest handle was already materialized before benchmarking");
          return;
       }
 
-      for (auto _ : state) {
+      for (auto _: state) {
          auto tree = tree_template;
          if (tree.has_materialized()) {
             detail::report_materialization_failure(state, benchmark_name, "forest handle was already materialized");
@@ -107,10 +108,11 @@ namespace cpfbench {
    }
 
    template<typename Root, typename Consumer>
-   void benchmark_parse_and_consume(benchmark::State& state, std::string_view input, std::string_view benchmark_name, Consumer&& consume) {
+   void benchmark_parse_and_consume(benchmark::State& state, std::string_view input, std::string_view benchmark_name,
+                                    Consumer&& consume) {
       state.SetComplexityN(static_cast<benchmark::ComplexityN>(input.size()));
 
-      for (auto _ : state) {
+      for (auto _: state) {
          auto result = Root::parse(input);
          if (!result.success || result.forest.empty()) {
             detail::report_parse_failure(state, benchmark_name, result.error.message);
@@ -124,4 +126,3 @@ namespace cpfbench {
       detail::set_items_processed(state);
    }
 } // namespace cpfbench
-

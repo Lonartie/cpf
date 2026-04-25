@@ -1,6 +1,7 @@
 # Generation and integration
 
-This page covers the APIs and tools used to load grammars, generate C++ code, and integrate generated parsers into CMake targets.
+This page covers the APIs and tools used to load grammars, generate C++ code, and integrate generated parsers into CMake
+targets.
 
 ## Library entry points
 

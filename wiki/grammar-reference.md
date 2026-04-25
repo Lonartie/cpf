@@ -16,7 +16,8 @@ CPF currently supports:
 - multi-file grammars through `import`
 - generated-code namespaces
 
-Grammar strings may use either single quotes or double quotes for literals, regex bodies, quoted attribute values, and import paths.
+Grammar strings may use either single quotes or double quotes for literals, regex bodies, quoted attribute values, and
+import paths.
 
 ## Example grammar
 
@@ -30,18 +31,19 @@ division        [prec < 'num', lbl = 'div'] -> expression:left '/':op expression
 number          [lbl = 'num']               -> r'[0-9]+':value;
 ```
 
-Labels are optional. Labeled symbols become members on the generated node type. Unlabeled symbols still participate in parsing but are not stored in the AST.
+Labels are optional. Labeled symbols become members on the generated node type. Unlabeled symbols still participate in
+parsing but are not stored in the AST.
 
 ## Rule attributes
 
-| Name | Values | Example | Meaning |
-| ---- | ------ | ------- | ------- |
-| `prec` | `= <num>` | `[prec = 10]` | Absolute precedence rank |
-| `prec` | `= <str>` | `[prec = 'sum']` | Same precedence group as a label |
-| `prec` | `< <str>` | `[prec < 'product']` | Lower precedence than the referenced label |
-| `prec` | `> <str>` | `[prec > 'sum']` | Higher precedence than the referenced label |
-| `dir` | `left`, `right` | `[dir = right]` | Operator associativity |
-| `lbl` | `<str>` | `[lbl = 'number']` | Rule label used for precedence grouping |
+| Name   | Values          | Example              | Meaning                                     |
+|--------|-----------------|----------------------|---------------------------------------------|
+| `prec` | `= <num>`       | `[prec = 10]`        | Absolute precedence rank                    |
+| `prec` | `= <str>`       | `[prec = 'sum']`     | Same precedence group as a label            |
+| `prec` | `< <str>`       | `[prec < 'product']` | Lower precedence than the referenced label  |
+| `prec` | `> <str>`       | `[prec > 'sum']`     | Higher precedence than the referenced label |
+| `dir`  | `left`, `right` | `[dir = right]`      | Operator associativity                      |
+| `lbl`  | `<str>`         | `[lbl = 'number']`   | Rule label used for precedence grouping     |
 
 Default behavior when attributes are omitted:
 
@@ -53,12 +55,12 @@ Default behavior when attributes are omitted:
 
 Supported postfix forms:
 
-| Syntax | Meaning |
-| ------ | ------- |
-| `symbol?` | optional symbol |
-| `symbol*` | zero or more repetitions |
-| `symbol+` | one or more repetitions |
-| `symbol{n}` | exactly `n` repetitions |
+| Syntax      | Meaning                  |
+|-------------|--------------------------|
+| `symbol?`   | optional symbol          |
+| `symbol*`   | zero or more repetitions |
+| `symbol+`   | one or more repetitions  |
+| `symbol{n}` | exactly `n` repetitions  |
 
 The same forms work for parenthesized groups:
 
@@ -80,9 +82,11 @@ payload -> (greeting | farewell):value;
 token -> ('x' | 'y'):value;
 ```
 
-This lowers through hidden helper rules, but the generated public API still exposes `payload::value` as `std::variant<std::unique_ptr<greeting>, std::unique_ptr<farewell>>` and `token::value` as `cpf::matched_string`.
+This lowers through hidden helper rules, but the generated public API still exposes `payload::value` as
+`std::variant<std::unique_ptr<greeting>, std::unique_ptr<farewell>>` and `token::value` as `cpf::matched_string`.
 
-Current limitation: labeled groups must lower to exactly one symbol per alternative, so forms such as `('x' 'y' | 'z'):value` are rejected.
+Current limitation: labeled groups must lower to exactly one symbol per alternative, so forms such as
+`('x' 'y' | 'z'):value` are rejected.
 
 Generated member types follow the captured symbol kind:
 

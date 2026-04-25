@@ -54,7 +54,8 @@ namespace cpf {
          std::vector<std::string> repeated_members;
 
          [[nodiscard]] std::size_t member_count() const {
-            return terminal_scalars + terminal_optionals + terminal_vectors + node_scalars + node_vectors + variant_members;
+            return terminal_scalars + terminal_optionals + terminal_vectors + node_scalars + node_vectors +
+                   variant_members;
          }
       };
 
@@ -66,12 +67,7 @@ namespace cpf {
          std::vector<variant_alternative_info> production_alternatives;
       };
 
-      enum class helper_kind {
-         optional,
-         zero_or_more,
-         one_or_more,
-         exact
-      };
+      enum class helper_kind { optional, zero_or_more, one_or_more, exact };
 
       struct helper_info {
          std::size_t id = 0;
@@ -134,14 +130,26 @@ namespace cpf {
       [[nodiscard]] std::string cpp_string_literal(std::string_view value) {
          std::string escaped;
          escaped.reserve(value.size() + 4);
-         for (char ch : value) {
+         for (char ch: value) {
             switch (ch) {
-               case '\\': escaped += "\\\\"; break;
-               case '\n': escaped += "\\n"; break;
-               case '\r': escaped += "\\r"; break;
-               case '\t': escaped += "\\t"; break;
-               case '"': escaped += "\\\""; break;
-               default: escaped += ch; break;
+               case '\\':
+                  escaped += "\\\\";
+                  break;
+               case '\n':
+                  escaped += "\\n";
+                  break;
+               case '\r':
+                  escaped += "\\r";
+                  break;
+               case '\t':
+                  escaped += "\\t";
+                  break;
+               case '"':
+                  escaped += "\\\"";
+                  break;
+               default:
+                  escaped += ch;
+                  break;
             }
          }
          return std::string{"\""} + escaped + "\"";
@@ -175,7 +183,8 @@ namespace cpf {
          std::size_t offset = 0;
          while (offset < value.size()) {
             const auto separator = value.find("::", offset);
-            const auto segment_length = separator == std::string_view::npos ? value.size() - offset : separator - offset;
+            const auto segment_length =
+                  separator == std::string_view::npos ? value.size() - offset : separator - offset;
             if (!is_valid_cpp_identifier(value.substr(offset, segment_length))) {
                return false;
             }
@@ -202,26 +211,24 @@ namespace cpf {
             return false;
          }
          const auto& symbols = production.symbols;
-         return symbols.size() == 3
-             && symbols[0].is_single()
-             && symbols[1].is_single()
-             && symbols[2].is_single()
-             && symbols[0].kind == symbol_kind::reference
-             && symbols[2].kind == symbol_kind::reference
-             && symbols[0].value == info.base
-             && symbols[2].value == info.base
-             && symbols[1].kind != symbol_kind::reference;
+         return symbols.size() == 3 && symbols[0].is_single() && symbols[1].is_single() && symbols[2].is_single() &&
+                symbols[0].kind == symbol_kind::reference && symbols[2].kind == symbol_kind::reference &&
+                symbols[0].value == info.base && symbols[2].value == info.base &&
+                symbols[1].kind != symbol_kind::reference;
       }
 
-      [[nodiscard]] std::string default_precedence_alias(std::string_view rule_name, const production& production, bool repeated_definition) {
+      [[nodiscard]] std::string default_precedence_alias(std::string_view rule_name, const production& production,
+                                                         bool repeated_definition) {
          if (!repeated_definition) {
             return std::string{rule_name};
          }
          return std::string{rule_name} + "#" + std::to_string(production.definition);
       }
 
-      [[nodiscard]] std::string precedence_label(std::string_view rule_name, const production& production, bool repeated_definition) {
-         if (auto attribute = production.find_attribute("prec"); attribute.has_value() && attribute->operation == attribute_operator::assign && !attribute->numeric) {
+      [[nodiscard]] std::string precedence_label(std::string_view rule_name, const production& production,
+                                                 bool repeated_definition) {
+         if (auto attribute = production.find_attribute("prec");
+             attribute.has_value() && attribute->operation == attribute_operator::assign && !attribute->numeric) {
             return attribute->value;
          }
          if (auto attribute = production.find_attribute("lbl"); attribute.has_value()) {
@@ -230,7 +237,8 @@ namespace cpf {
          return default_precedence_alias(rule_name, production, repeated_definition);
       }
 
-      [[nodiscard]] std::string precedence_alias(std::string_view rule_name, const production& production, bool repeated_definition) {
+      [[nodiscard]] std::string precedence_alias(std::string_view rule_name, const production& production,
+                                                 bool repeated_definition) {
          if (auto attribute = production.find_attribute("lbl"); attribute.has_value()) {
             return attribute->value;
          }
@@ -262,17 +270,17 @@ namespace cpf {
          return rank;
       }
 
-      [[nodiscard]] std::vector<std::string> collect_concrete_descendants(
-         std::string_view base,
-         const std::unordered_map<std::string, std::vector<std::string>>& children,
-         const std::unordered_map<std::string, class_info>& classes) {
+      [[nodiscard]] std::vector<std::string>
+      collect_concrete_descendants(std::string_view base,
+                                   const std::unordered_map<std::string, std::vector<std::string>>& children,
+                                   const std::unordered_map<std::string, class_info>& classes) {
          std::vector<std::string> result;
          std::function<void(std::string_view)> visit = [&](std::string_view current) {
             auto child_it = children.find(std::string{current});
             if (child_it == children.end()) {
                return;
             }
-            for (const auto& child : child_it->second) {
+            for (const auto& child: child_it->second) {
                auto class_it = classes.find(child);
                if (class_it == classes.end()) {
                   continue;
@@ -304,16 +312,17 @@ namespace cpf {
          return field.shape == field_shape::capture_variant;
       }
 
-      [[nodiscard]] bool uses_helper_rule(const symbol& symbol) {
-         return !symbol.is_single();
-      }
+      [[nodiscard]] bool uses_helper_rule(const symbol& symbol) { return !symbol.is_single(); }
 
-      [[nodiscard]] field_info field_from_symbol(const symbol& symbol, const std::unordered_map<std::string, field_info>& synthetic_capture_fields = {}) {
+      [[nodiscard]] field_info
+      field_from_symbol(const symbol& symbol,
+                        const std::unordered_map<std::string, field_info>& synthetic_capture_fields = {}) {
          field_info field;
          field.name = symbol.label;
          if (symbol.kind == symbol_kind::reference) {
             if (symbol.has_label()) {
-               if (auto synthetic_it = synthetic_capture_fields.find(symbol.value); synthetic_it != synthetic_capture_fields.end()) {
+               if (auto synthetic_it = synthetic_capture_fields.find(symbol.value);
+                   synthetic_it != synthetic_capture_fields.end()) {
                   field = synthetic_it->second;
                   field.name = symbol.label;
                   return field;
@@ -343,17 +352,16 @@ namespace cpf {
          return field;
       }
 
-
       [[nodiscard]] bool field_shapes_compatible(field_shape existing, field_shape candidate) {
          if (existing == candidate) {
             return true;
          }
-         if ((existing == field_shape::terminal_scalar && candidate == field_shape::terminal_optional)
-          || (existing == field_shape::terminal_optional && candidate == field_shape::terminal_scalar)) {
+         if ((existing == field_shape::terminal_scalar && candidate == field_shape::terminal_optional) ||
+             (existing == field_shape::terminal_optional && candidate == field_shape::terminal_scalar)) {
             return true;
          }
-         if ((existing == field_shape::node_scalar && candidate == field_shape::node_scalar)
-          || (existing == field_shape::node_vector && candidate == field_shape::node_vector)) {
+         if ((existing == field_shape::node_scalar && candidate == field_shape::node_scalar) ||
+             (existing == field_shape::node_vector && candidate == field_shape::node_vector)) {
             return true;
          }
          return false;
@@ -395,10 +403,9 @@ namespace cpf {
          return {};
       }
 
-      [[nodiscard]] std::optional<std::string> common_rule_base(
-         std::string_view left,
-         std::string_view right,
-         const std::unordered_map<std::string, std::string>& bases) {
+      [[nodiscard]] std::optional<std::string>
+      common_rule_base(std::string_view left, std::string_view right,
+                       const std::unordered_map<std::string, std::string>& bases) {
          std::set<std::string> left_ancestors;
          auto current = std::string{left};
          while (!current.empty()) {
@@ -425,14 +432,13 @@ namespace cpf {
          return std::nullopt;
       }
 
-      void merge_field_resolution(
-         std::string_view owner_rule,
-         field_info& existing,
-         const field_info& candidate,
-         const std::unordered_map<std::string, std::string>& bases) {
+      void merge_field_resolution(std::string_view owner_rule, field_info& existing, const field_info& candidate,
+                                  const std::unordered_map<std::string, std::string>& bases) {
          if (is_variant_field(existing) || is_variant_field(candidate)) {
             if (existing.type != candidate.type || existing.shape != candidate.shape) {
-               throw std::runtime_error{"Rule '" + std::string{owner_rule} + "' label '" + existing.name + "' has conflicting member types '" + describe_field_type(existing) + "' and '" + describe_field_type(candidate) + "'"};
+               throw std::runtime_error{"Rule '" + std::string{owner_rule} + "' label '" + existing.name +
+                                        "' has conflicting member types '" + describe_field_type(existing) + "' and '" +
+                                        describe_field_type(candidate) + "'"};
             }
             existing.variant_alternatives = candidate.variant_alternatives;
             existing.type = candidate.type;
@@ -442,16 +448,20 @@ namespace cpf {
          auto existing_is_node = is_node_field(existing);
          auto candidate_is_node = is_node_field(candidate);
          if (existing_is_node != candidate_is_node) {
-            throw std::runtime_error{"Rule '" + std::string{owner_rule} + "' label '" + existing.name + "' has conflicting member types '" + describe_field_type(existing) + "' and '" + describe_field_type(candidate) + "'"};
+            throw std::runtime_error{"Rule '" + std::string{owner_rule} + "' label '" + existing.name +
+                                     "' has conflicting member types '" + describe_field_type(existing) + "' and '" +
+                                     describe_field_type(candidate) + "'"};
          }
 
          if (!field_shapes_compatible(existing.shape, candidate.shape)) {
-            throw std::runtime_error{"Rule '" + std::string{owner_rule} + "' label '" + existing.name + "' has conflicting member types '" + describe_field_type(existing) + "' and '" + describe_field_type(candidate) + "'"};
+            throw std::runtime_error{"Rule '" + std::string{owner_rule} + "' label '" + existing.name +
+                                     "' has conflicting member types '" + describe_field_type(existing) + "' and '" +
+                                     describe_field_type(candidate) + "'"};
          }
 
          if (!existing_is_node) {
-            if ((existing.shape == field_shape::terminal_scalar && candidate.shape == field_shape::terminal_optional)
-             || (existing.shape == field_shape::terminal_optional && candidate.shape == field_shape::terminal_scalar)) {
+            if ((existing.shape == field_shape::terminal_scalar && candidate.shape == field_shape::terminal_optional) ||
+                (existing.shape == field_shape::terminal_optional && candidate.shape == field_shape::terminal_scalar)) {
                existing.shape = field_shape::terminal_optional;
             }
             existing.type = merged_field_type(existing);
@@ -460,7 +470,9 @@ namespace cpf {
 
          auto common_base = common_rule_base(existing.resolved_rule, candidate.resolved_rule, bases);
          if (!common_base.has_value()) {
-            throw std::runtime_error{"Rule '" + std::string{owner_rule} + "' label '" + existing.name + "' cannot resolve a common member type for rules '" + existing.resolved_rule + "' and '" + candidate.resolved_rule + "'"};
+            throw std::runtime_error{"Rule '" + std::string{owner_rule} + "' label '" + existing.name +
+                                     "' cannot resolve a common member type for rules '" + existing.resolved_rule +
+                                     "' and '" + candidate.resolved_rule + "'"};
          }
 
          existing.resolved_rule = *common_base;
@@ -469,7 +481,7 @@ namespace cpf {
 
       [[nodiscard]] class_complexity_info analyze_class_complexity(const class_info& info) {
          class_complexity_info result;
-         for (const auto& field : info.fields) {
+         for (const auto& field: info.fields) {
             switch (field.shape) {
                case field_shape::terminal_scalar:
                   ++result.terminal_scalars;
@@ -525,10 +537,10 @@ namespace cpf {
 
       [[nodiscard]] std::vector<std::string> collect_recursive_public_rules(const grammar& grammar) {
          std::unordered_map<std::string, std::vector<std::string>> edges;
-         for (const auto& rule : grammar.rules) {
+         for (const auto& rule: grammar.rules) {
             auto& targets = edges[rule.identifier];
-            for (const auto& production : rule.productions) {
-               for (const auto& symbol : production.symbols) {
+            for (const auto& production: rule.productions) {
+               for (const auto& symbol: production.symbols) {
                   if (symbol.kind == symbol_kind::reference) {
                      targets.push_back(symbol.value);
                   }
@@ -537,7 +549,7 @@ namespace cpf {
          }
 
          std::vector<std::string> recursive_rules;
-         for (const auto& rule : grammar.rules) {
+         for (const auto& rule: grammar.rules) {
             if (rule.synthetic) {
                continue;
             }
@@ -548,7 +560,7 @@ namespace cpf {
                if (!visited.insert(current_text).second) {
                   return false;
                }
-               for (const auto& next : edges[current_text]) {
+               for (const auto& next: edges[current_text]) {
                   if (next == rule.identifier || reaches_self(next)) {
                      return true;
                   }
@@ -563,63 +575,71 @@ namespace cpf {
          return recursive_rules;
       }
 
-      void emit_file_complexity_comment(
-         std::ostringstream& header,
-         std::string_view base_name,
-         std::size_t public_rule_count,
-         std::size_t synthetic_rule_count,
-         const std::vector<std::string>& recursive_public_rules,
-         const std::vector<std::string>& repeated_storage_rules) {
+      void emit_file_complexity_comment(std::ostringstream& header, std::string_view base_name,
+                                        std::size_t public_rule_count, std::size_t synthetic_rule_count,
+                                        const std::vector<std::string>& recursive_public_rules,
+                                        const std::vector<std::string>& repeated_storage_rules) {
          line(header, 0, "/// @file");
          line(header, 0, "/// @brief Generated parser API for grammar '" + std::string{base_name} + "'.");
          line(header, 0, "/// @details");
          line(header, 0, "/// @li Public rules: " + std::to_string(public_rule_count) + ".");
-         line(header, 0, "/// @li Synthetic helper rules introduced during lowering: " + std::to_string(synthetic_rule_count) + ".");
-         line(header, 0, "/// @li Recursive public rules detected from the grammar graph: " + join_names(recursive_public_rules) + ".");
+         line(header, 0,
+              "/// @li Synthetic helper rules introduced during lowering: " + std::to_string(synthetic_rule_count) +
+                    ".");
+         line(header, 0,
+              "/// @li Recursive public rules detected from the grammar graph: " + join_names(recursive_public_rules) +
+                    ".");
          line(header, 0, "/// @li Rules with repeated-member storage: " + join_names(repeated_storage_rules) + ".");
-         line(header, 0, "/// @li Every generated parse entry point uses the shared Earley runtime with worst-case O(n^3) time and O(n^2) chart space for input length n.");
-         line(header, 0, "/// @li Highly ambiguous grammars can grow the returned parse forest beyond the core Earley chart.");
+         line(header, 0,
+              "/// @li Every generated parse entry point uses the shared Earley runtime with worst-case O(n^3) time "
+              "and O(n^2) chart space for input length n.");
+         line(header, 0,
+              "/// @li Highly ambiguous grammars can grow the returned parse forest beyond the core Earley chart.");
       }
 
-      void emit_rule_complexity_comment(
-         std::ostringstream& header,
-         const class_info& info,
-         const class_complexity_info& complexity,
-         bool recursive) {
+      void emit_rule_complexity_comment(std::ostringstream& header, const class_info& info,
+                                        const class_complexity_info& complexity, bool recursive) {
          line(header, 0, "/// @brief Generated AST node for grammar rule '" + info.name + "'.");
          line(header, 0, "/// @details");
-         line(header, 0, "/// @li `parse(...)` uses the shared Earley runtime with worst-case O(n^3) time and O(n^2) chart space for input length n.");
-         line(header, 0, "/// @li `clone()`, `operator<<`, and `visit_recursive(...)` are O(s) in the size of the reachable subtree.");
+         line(header, 0,
+              "/// @li `parse(...)` uses the shared Earley runtime with worst-case O(n^3) time and O(n^2) chart space "
+              "for input length n.");
+         line(header, 0,
+              "/// @li `clone()`, `operator<<`, and `visit_recursive(...)` are O(s) in the size of the reachable "
+              "subtree.");
          if (complexity.repeated_members.empty()) {
             line(header, 0, "/// @li Exclusive node storage is O(1).");
          } else {
-            line(header, 0, "/// @li Exclusive node storage is O(r) across repeated members `" + join_names(complexity.repeated_members) + "`, plus O(1) fixed members.");
+            line(header, 0,
+                 "/// @li Exclusive node storage is O(r) across repeated members `" +
+                       join_names(complexity.repeated_members) + "`, plus O(1) fixed members.");
          }
-         line(header, 0, "/// @li Captured members: " + std::to_string(complexity.member_count())
-            + " total (terminal scalar=" + std::to_string(complexity.terminal_scalars)
-            + ", terminal optional=" + std::to_string(complexity.terminal_optionals)
-            + ", terminal repeated=" + std::to_string(complexity.terminal_vectors)
-            + ", node scalar=" + std::to_string(complexity.node_scalars)
-            + ", node repeated=" + std::to_string(complexity.node_vectors)
-            + ", variants=" + std::to_string(complexity.variant_members) + ").");
-         line(header, 0, recursive
-            ? "/// @li Grammar analysis: this rule participates in a recursive rule cycle."
-            : "/// @li Grammar analysis: this rule does not participate in a recursive rule cycle.");
+         line(header, 0,
+              "/// @li Captured members: " + std::to_string(complexity.member_count()) +
+                    " total (terminal scalar=" + std::to_string(complexity.terminal_scalars) +
+                    ", terminal optional=" + std::to_string(complexity.terminal_optionals) +
+                    ", terminal repeated=" + std::to_string(complexity.terminal_vectors) +
+                    ", node scalar=" + std::to_string(complexity.node_scalars) +
+                    ", node repeated=" + std::to_string(complexity.node_vectors) +
+                    ", variants=" + std::to_string(complexity.variant_members) + ").");
+         line(header, 0,
+              recursive ? "/// @li Grammar analysis: this rule participates in a recursive rule cycle."
+                        : "/// @li Grammar analysis: this rule does not participate in a recursive rule cycle.");
       }
 
-      void register_group_alias(
-         std::unordered_map<std::string, std::string>& alias_to_group,
-         std::string_view alias,
-         std::string_view group,
-         std::string_view family_name) {
+      void register_group_alias(std::unordered_map<std::string, std::string>& alias_to_group, std::string_view alias,
+                                std::string_view group, std::string_view family_name) {
          if (alias.empty()) {
             return;
          }
 
          auto alias_text = std::string{alias};
          auto group_text = std::string{group};
-         if (auto alias_it = alias_to_group.find(alias_text); alias_it != alias_to_group.end() && alias_it->second != group_text) {
-            throw std::runtime_error{"Expression family '" + std::string{family_name} + "' cannot use precedence alias '" + alias_text + "' for both '" + alias_it->second + "' and '" + group_text + "'"};
+         if (auto alias_it = alias_to_group.find(alias_text);
+             alias_it != alias_to_group.end() && alias_it->second != group_text) {
+            throw std::runtime_error{"Expression family '" + std::string{family_name} +
+                                     "' cannot use precedence alias '" + alias_text + "' for both '" +
+                                     alias_it->second + "' and '" + group_text + "'"};
          }
          alias_to_group[alias_text] = std::move(group_text);
       }
@@ -659,34 +679,36 @@ namespace cpf {
 
       [[nodiscard]] std::string render_production_debug(std::string_view rule_name, const production& production) {
          std::string text = std::string{rule_name} + " ->";
-         for (const auto& symbol : production.symbols) {
+         for (const auto& symbol: production.symbols) {
             text += " " + render_symbol_debug(symbol);
          }
          return text;
       }
 
-      generated_code generate_code_impl(const grammar& grammar, const std::string& base_name, std::string_view code_namespace) {
+      generated_code generate_code_impl(const grammar& grammar, const std::string& base_name,
+                                        std::string_view code_namespace) {
          validate_cpp_namespace(code_namespace);
 
          std::unordered_map<std::string, const rule*> rules_by_name;
          std::unordered_map<std::string, std::vector<std::string>> children;
          std::unordered_map<std::string, std::string> bases;
 
-         for (const auto& rule : grammar.rules) {
+         for (const auto& rule: grammar.rules) {
             rules_by_name[rule.identifier] = &rule;
          }
 
-         for (const auto& rule : grammar.rules) {
+         for (const auto& rule: grammar.rules) {
             if (rule.synthetic) {
                continue;
             }
             if (!rule.is_choice_rule()) {
                continue;
             }
-            for (const auto& production : rule.productions) {
+            for (const auto& production: rule.productions) {
                auto child = production.symbols.front().value;
                if (auto base_it = bases.find(child); base_it != bases.end() && base_it->second != rule.identifier) {
-                  throw std::runtime_error{"Rule '" + child + "' cannot inherit from both '" + base_it->second + "' and '" + rule.identifier + "'"};
+                  throw std::runtime_error{"Rule '" + child + "' cannot inherit from both '" + base_it->second +
+                                           "' and '" + rule.identifier + "'"};
                }
                bases[child] = rule.identifier;
                children[rule.identifier].push_back(child);
@@ -695,13 +717,14 @@ namespace cpf {
 
          std::vector<std::string> ordered_labeled_synthetic_rules;
          std::set<std::string> labeled_synthetic_rules;
-         for (const auto& rule : grammar.rules) {
-            for (const auto& production : rule.productions) {
-               for (const auto& symbol : production.symbols) {
+         for (const auto& rule: grammar.rules) {
+            for (const auto& production: rule.productions) {
+               for (const auto& symbol: production.symbols) {
                   if (!symbol.has_label() || symbol.kind != symbol_kind::reference) {
                      continue;
                   }
-                  if (auto rule_it = rules_by_name.find(symbol.value); rule_it != rules_by_name.end() && rule_it->second->synthetic) {
+                  if (auto rule_it = rules_by_name.find(symbol.value);
+                      rule_it != rules_by_name.end() && rule_it->second->synthetic) {
                      if (labeled_synthetic_rules.insert(symbol.value).second) {
                         ordered_labeled_synthetic_rules.push_back(symbol.value);
                      }
@@ -711,24 +734,28 @@ namespace cpf {
          }
 
          std::unordered_map<std::string, field_info> synthetic_capture_fields;
-         std::unordered_map<std::string, std::vector<variant_alternative_info>> synthetic_capture_production_alternatives;
-         for (const auto& rule_name : ordered_labeled_synthetic_rules) {
+         std::unordered_map<std::string, std::vector<variant_alternative_info>>
+               synthetic_capture_production_alternatives;
+         for (const auto& rule_name: ordered_labeled_synthetic_rules) {
             const auto& synthetic_rule = *rules_by_name.at(rule_name);
             std::vector<variant_alternative_info> alternatives;
             std::vector<variant_alternative_info> production_alternatives;
             std::set<std::string> seen_types;
 
-            for (const auto& production : synthetic_rule.productions) {
+            for (const auto& production: synthetic_rule.productions) {
                if (production.symbols.size() != 1 || !production.symbols.front().is_single()) {
-                  throw std::runtime_error{"Synthetic capture rule '" + synthetic_rule.identifier + "' must lower to exactly one single symbol per alternative"};
+                  throw std::runtime_error{"Synthetic capture rule '" + synthetic_rule.identifier +
+                                           "' must lower to exactly one single symbol per alternative"};
                }
 
                const auto& capture_symbol = production.symbols.front();
                if (capture_symbol.has_label()) {
-                  throw std::runtime_error{"Synthetic capture rule '" + synthetic_rule.identifier + "' cannot expose nested labeled captures"};
+                  throw std::runtime_error{"Synthetic capture rule '" + synthetic_rule.identifier +
+                                           "' cannot expose nested labeled captures"};
                }
                if (capture_symbol.kind == symbol_kind::reference && rules_by_name.at(capture_symbol.value)->synthetic) {
-                  throw std::runtime_error{"Synthetic capture rule '" + synthetic_rule.identifier + "' cannot target another synthetic helper rule"};
+                  throw std::runtime_error{"Synthetic capture rule '" + synthetic_rule.identifier +
+                                           "' cannot target another synthetic helper rule"};
                }
 
                auto field = field_from_symbol(capture_symbol);
@@ -761,7 +788,7 @@ namespace cpf {
 
          std::vector<synthetic_capture_info> synthetic_captures;
          std::unordered_map<std::string, std::size_t> synthetic_capture_by_rule;
-         for (const auto& rule_name : ordered_labeled_synthetic_rules) {
+         for (const auto& rule_name: ordered_labeled_synthetic_rules) {
             synthetic_capture_info capture;
             capture.id = synthetic_captures.size();
             capture.rule_name = rule_name;
@@ -772,18 +799,18 @@ namespace cpf {
          }
 
          std::unordered_map<std::string, class_info> classes;
-         for (const auto& rule : grammar.rules) {
+         for (const auto& rule: grammar.rules) {
             if (rule.synthetic) {
                continue;
             }
             class_info info;
             info.name = rule.identifier;
-            const auto has_choice_definitions = std::any_of(rule.productions.begin(), rule.productions.end(), [](const auto& production) {
-               return production.is_direct_reference_choice();
-            });
-            const auto has_concrete_definitions = std::any_of(rule.productions.begin(), rule.productions.end(), [](const auto& production) {
-               return !production.is_direct_reference_choice();
-            });
+            const auto has_choice_definitions =
+                  std::any_of(rule.productions.begin(), rule.productions.end(),
+                              [](const auto& production) { return production.is_direct_reference_choice(); });
+            const auto has_concrete_definitions =
+                  std::any_of(rule.productions.begin(), rule.productions.end(),
+                              [](const auto& production) { return !production.is_direct_reference_choice(); });
             if (has_choice_definitions && has_concrete_definitions) {
                throw std::runtime_error{"Rule '" + rule.identifier + "' mixes choice-style and concrete definitions"};
             }
@@ -810,26 +837,28 @@ namespace cpf {
                   merge_field_resolution(rule.identifier, existing, field, bases);
                };
 
-               for (const auto& production : rule.productions) {
+               for (const auto& production: rule.productions) {
                   std::set<std::string> labels_in_definition;
-                  for (const auto& symbol : production.symbols) {
+                  for (const auto& symbol: production.symbols) {
                      if (symbol.kind == symbol_kind::reference && !rules_by_name.contains(symbol.value)) {
-                        throw std::runtime_error{"Rule '" + rule.identifier + "' references unknown rule '" + symbol.value + "'"};
+                        throw std::runtime_error{"Rule '" + rule.identifier + "' references unknown rule '" +
+                                                 symbol.value + "'"};
                      }
                      if (!symbol.has_label()) {
                         continue;
                      }
                      if (!labels_in_definition.insert(symbol.label).second) {
-                        throw std::runtime_error{"Rule '" + rule.identifier + "' uses label '" + symbol.label + "' more than once in definition " + std::to_string(production.definition)};
+                        throw std::runtime_error{"Rule '" + rule.identifier + "' uses label '" + symbol.label +
+                                                 "' more than once in definition " +
+                                                 std::to_string(production.definition)};
                      }
 
                      auto field = field_from_symbol(symbol, synthetic_capture_fields);
                      merge_field(std::move(field));
                   }
-
                }
 
-               for (const auto& field_name : field_order) {
+               for (const auto& field_name: field_order) {
                   info.fields.push_back(resolved_fields.at(field_name));
                }
             }
@@ -837,17 +866,17 @@ namespace cpf {
          }
 
          std::unordered_map<std::string, std::unordered_map<std::string, field_info>> fields_by_rule;
-         for (const auto& [name, info] : classes) {
+         for (const auto& [name, info]: classes) {
             std::unordered_map<std::string, field_info> fields;
-            for (const auto& field : info.fields) {
+            for (const auto& field: info.fields) {
                fields.emplace(field.name, field);
             }
             fields_by_rule.emplace(name, std::move(fields));
          }
 
-         for (const auto& [name, info] : classes) {
-            for (const auto& production : rules_by_name.at(name)->productions) {
-               for (const auto& symbol : production.symbols) {
+         for (const auto& [name, info]: classes) {
+            for (const auto& production: rules_by_name.at(name)->productions) {
+               for (const auto& symbol: production.symbols) {
                   if (symbol.kind == symbol_kind::reference && !rules_by_name.contains(symbol.value)) {
                      throw std::runtime_error{"Rule '" + name + "' references unknown rule '" + symbol.value + "'"};
                   }
@@ -869,7 +898,7 @@ namespace cpf {
             ordered_public_seen.insert(name_text);
             ordered_public_rule_names.push_back(name_text);
          };
-         for (const auto& rule : grammar.rules) {
+         for (const auto& rule: grammar.rules) {
             if (rule.synthetic) {
                continue;
             }
@@ -879,7 +908,7 @@ namespace cpf {
          auto recursive_public_rules = collect_recursive_public_rules(grammar);
          std::set<std::string> recursive_public_rule_set{recursive_public_rules.begin(), recursive_public_rules.end()};
          std::vector<std::string> repeated_storage_rules;
-         for (const auto& rule_name : ordered_public_rule_names) {
+         for (const auto& rule_name: ordered_public_rule_names) {
             const auto complexity = analyze_class_complexity(classes.at(rule_name));
             if (!complexity.repeated_members.empty()) {
                repeated_storage_rules.push_back(rule_name);
@@ -887,7 +916,7 @@ namespace cpf {
          }
 
          std::unordered_map<std::string, family_info> families;
-         for (const auto& rule : grammar.rules) {
+         for (const auto& rule: grammar.rules) {
             if (rule.synthetic) {
                continue;
             }
@@ -903,7 +932,7 @@ namespace cpf {
             std::unordered_map<std::string, precedence_rank> group_rank;
             std::unordered_map<std::string, std::set<std::string>> edges;
 
-            for (const auto& child : family.direct_children) {
+            for (const auto& child: family.direct_children) {
                const auto& child_info = classes.at(child);
                if (child_info.base_rule) {
                   family.primary_children.push_back(child);
@@ -912,7 +941,7 @@ namespace cpf {
 
                auto has_primary_definition = false;
                const auto repeated_child_definitions = rules_by_name.at(child)->productions.size() > 1;
-               for (const auto& production : rules_by_name.at(child)->productions) {
+               for (const auto& production: rules_by_name.at(child)->productions) {
                   if (is_infix_production(child_info, production)) {
                      family.expression_family = true;
 
@@ -922,19 +951,27 @@ namespace cpf {
                      infix_definition.definition = production.definition;
                      infix_definition.group = precedence_label(child_info.name, production, repeated_child_definitions);
                      infix_definition.associativity = associativity_of(production);
-                     infix_definition.left_label = production.symbols[0].label.empty() ? "left" : production.symbols[0].label;
-                     infix_definition.right_label = production.symbols[2].label.empty() ? "right" : production.symbols[2].label;
+                     infix_definition.left_label =
+                           production.symbols[0].label.empty() ? "left" : production.symbols[0].label;
+                     infix_definition.right_label =
+                           production.symbols[2].label.empty() ? "right" : production.symbols[2].label;
                      family.infix_definitions.push_back(infix_definition);
 
-                     register_group_alias(alias_to_group, precedence_alias(child_info.name, production, repeated_child_definitions), infix_definition.group, family.name);
-                     group_line[infix_definition.group] = std::min(group_line.contains(infix_definition.group) ? group_line[infix_definition.group] : production.line, production.line);
+                     register_group_alias(alias_to_group,
+                                          precedence_alias(child_info.name, production, repeated_child_definitions),
+                                          infix_definition.group, family.name);
+                     group_line[infix_definition.group] =
+                           std::min(group_line.contains(infix_definition.group) ? group_line[infix_definition.group]
+                                                                                : production.line,
+                                    production.line);
                      if (has_absolute_precedence_rank(production)) {
                         auto rank = precedence_rank_of(production);
-                        if (!group_rank.contains(infix_definition.group)
-                         || (rank.explicit_value && !group_rank[infix_definition.group].explicit_value)
-                         || (rank.explicit_value == group_rank[infix_definition.group].explicit_value
-                          && (rank.value < group_rank[infix_definition.group].value
-                           || (rank.value == group_rank[infix_definition.group].value && rank.line < group_rank[infix_definition.group].line)))) {
+                        if (!group_rank.contains(infix_definition.group) ||
+                            (rank.explicit_value && !group_rank[infix_definition.group].explicit_value) ||
+                            (rank.explicit_value == group_rank[infix_definition.group].explicit_value &&
+                             (rank.value < group_rank[infix_definition.group].value ||
+                              (rank.value == group_rank[infix_definition.group].value &&
+                               rank.line < group_rank[infix_definition.group].line)))) {
                            group_rank[infix_definition.group] = rank;
                         }
                      }
@@ -948,8 +985,9 @@ namespace cpf {
                }
             }
 
-            for (const auto& infix_definition : family.infix_definitions) {
-               if (auto attribute = infix_definition.production->find_attribute("prec"); attribute.has_value() && !attribute->numeric) {
+            for (const auto& infix_definition: family.infix_definitions) {
+               if (auto attribute = infix_definition.production->find_attribute("prec");
+                   attribute.has_value() && !attribute->numeric) {
                   if (attribute->operation == attribute_operator::less_than) {
                      edges[infix_definition.group].insert(attribute->value);
                   } else if (attribute->operation == attribute_operator::greater_than) {
@@ -959,21 +997,21 @@ namespace cpf {
             }
 
             std::set<std::string> all_groups;
-            for (const auto& infix_definition : family.infix_definitions) {
+            for (const auto& infix_definition: family.infix_definitions) {
                all_groups.insert(infix_definition.group);
             }
-            for (const auto& edge : edges) {
+            for (const auto& edge: edges) {
                all_groups.insert(edge.first);
                all_groups.insert(edge.second.begin(), edge.second.end());
             }
 
             std::unordered_map<std::string, std::set<std::string>> normalized_edges;
-            for (const auto& group : all_groups) {
+            for (const auto& group: all_groups) {
                normalized_edges[group];
             }
-            for (const auto& [from, to_set] : edges) {
+            for (const auto& [from, to_set]: edges) {
                auto normalized_from = alias_to_group.contains(from) ? alias_to_group[from] : from;
-               for (const auto& raw_to : to_set) {
+               for (const auto& raw_to: to_set) {
                   auto normalized_to = alias_to_group.contains(raw_to) ? alias_to_group[raw_to] : raw_to;
                   if (normalized_from != normalized_to) {
                      normalized_edges[normalized_from].insert(normalized_to);
@@ -998,11 +1036,11 @@ namespace cpf {
             }
 
             std::unordered_map<std::string, int> indegree;
-            for (const auto& group : all_groups) {
+            for (const auto& group: all_groups) {
                indegree[group] = 0;
             }
-            for (const auto& [from, to_set] : normalized_edges) {
-               for (const auto& to : to_set) {
+            for (const auto& [from, to_set]: normalized_edges) {
+               for (const auto& to: to_set) {
                   ++indegree[to];
                }
             }
@@ -1010,8 +1048,9 @@ namespace cpf {
             std::vector<std::string> ordered_groups;
             while (ordered_groups.size() < all_groups.size()) {
                std::vector<std::string> ready;
-               for (const auto& group : all_groups) {
-                  if (indegree[group] == 0 && std::find(ordered_groups.begin(), ordered_groups.end(), group) == ordered_groups.end()) {
+               for (const auto& group: all_groups) {
+                  if (indegree[group] == 0 &&
+                      std::find(ordered_groups.begin(), ordered_groups.end(), group) == ordered_groups.end()) {
                      ready.push_back(group);
                   }
                }
@@ -1029,13 +1068,13 @@ namespace cpf {
                auto next = ready.front();
                ordered_groups.push_back(next);
                indegree[next] = -1;
-               for (const auto& target : normalized_edges[next]) {
+               for (const auto& target: normalized_edges[next]) {
                   --indegree[target];
                }
             }
 
             for (std::size_t i = 0; i < ordered_groups.size(); ++i) {
-               for (auto& infix_definition : family.infix_definitions) {
+               for (auto& infix_definition: family.infix_definitions) {
                   if (infix_definition.group == ordered_groups[i]) {
                      infix_definition.precedence = static_cast<int>(i + 1);
                   }
@@ -1047,27 +1086,29 @@ namespace cpf {
 
          std::unordered_map<std::string, std::size_t> rule_indices;
          for (std::size_t i = 0; i < grammar.rules.size(); ++i) {
-             rule_indices.emplace(grammar.rules[i].identifier, i);
+            rule_indices.emplace(grammar.rules[i].identifier, i);
          }
 
          std::vector<std::string> emitted_rule_names;
          emitted_rule_names.reserve(grammar.rules.size());
-         for (const auto& rule : grammar.rules) {
+         for (const auto& rule: grammar.rules) {
             emitted_rule_names.push_back(rule.identifier);
          }
 
          auto complexity_samples = generate_rule_complexity_samples(grammar);
 
          std::ostringstream header;
-         emit_file_complexity_comment(header, base_name, ordered_public_rule_names.size(), grammar.rules.size() - ordered_public_rule_names.size(), recursive_public_rules, repeated_storage_rules);
+         emit_file_complexity_comment(header, base_name, ordered_public_rule_names.size(),
+                                      grammar.rules.size() - ordered_public_rule_names.size(), recursive_public_rules,
+                                      repeated_storage_rules);
          line(header, 0, "#pragma once");
          line(header, 0);
-          line(header, 0, "#include <array>");
+         line(header, 0, "#include <array>");
          line(header, 0, "#include <cpflib>");
          line(header, 0, "#include <iosfwd>");
          line(header, 0, "#include <memory>");
          line(header, 0, "#include <optional>");
-          line(header, 0, "#include <span>");
+         line(header, 0, "#include <span>");
          line(header, 0, "#include <string>");
          line(header, 0, "#include <string_view>");
          line(header, 0, "#include <typeinfo>");
@@ -1081,7 +1122,7 @@ namespace cpf {
             line(header, 0);
          }
 
-         for (const auto& rule : grammar.rules) {
+         for (const auto& rule: grammar.rules) {
             if (rule.synthetic) {
                continue;
             }
@@ -1089,26 +1130,29 @@ namespace cpf {
          }
          line(header, 0);
 
-         for (const auto& rule_name : ordered_public_rule_names) {
+         for (const auto& rule_name: ordered_public_rule_names) {
             const auto& info = classes.at(rule_name);
-             const auto definition_count = rules_by_name.at(info.name)->productions.size();
+            const auto definition_count = rules_by_name.at(info.name)->productions.size();
             auto base = info.base.empty() ? "cpf::node" : info.base;
-            emit_rule_complexity_comment(header, info, analyze_class_complexity(info), recursive_public_rule_set.contains(info.name));
+            emit_rule_complexity_comment(header, info, analyze_class_complexity(info),
+                                         recursive_public_rule_set.contains(info.name));
             line(header, 0, "struct " + info.name + " : " + base + " {");
             line(header, 1, "using parse_result = cpf::parse_result<" + info.name + ">;");
-            line(header, 1, "static constexpr std::size_t RuleId = " + std::to_string(rule_indices.at(info.name)) + ";");
-             line(header, 1, "static constexpr std::size_t ReductionCount = " + std::to_string(definition_count) + ";");
-            for (const auto& field : info.fields) {
+            line(header, 1,
+                 "static constexpr std::size_t RuleId = " + std::to_string(rule_indices.at(info.name)) + ";");
+            line(header, 1, "static constexpr std::size_t ReductionCount = " + std::to_string(definition_count) + ";");
+            for (const auto& field: info.fields) {
                line(header, 1, render_field_declaration(field));
             }
             if (!info.fields.empty()) {
                line(header, 0);
             }
             line(header, 1, "~" + info.name + "() override = default;");
-             line(header, 1, "static std::array<cpf::complexity, " + std::to_string(definition_count) + "> Complexity;");
-            line(header, 1, "static parse_result parse(std::string_view input, const cpf::parse_options& options = {});");
-             line(header, 1, "static auto complexity_inputs(std::size_t rule_id) -> std::span<const std::string_view>;");
-             line(header, 1, "static auto recompute_complexity(std::size_t rule_id) -> const cpf::complexity&;");
+            line(header, 1, "static std::array<cpf::complexity, " + std::to_string(definition_count) + "> Complexity;");
+            line(header, 1,
+                 "static parse_result parse(std::string_view input, const cpf::parse_options& options = {});");
+            line(header, 1, "static auto complexity_inputs(std::size_t rule_id) -> std::span<const std::string_view>;");
+            line(header, 1, "static auto recompute_complexity(std::size_t rule_id) -> const cpf::complexity&;");
             line(header, 1, "std::size_t rule_id() const override;");
             line(header, 1, "const std::type_info& type() const override;");
             line(header, 1, "std::unique_ptr<" + info.name + "> clone();");
@@ -1122,7 +1166,7 @@ namespace cpf {
             line(header, 0);
          }
 
-         for (const auto& rule : grammar.rules) {
+         for (const auto& rule: grammar.rules) {
             if (rule.synthetic) {
                continue;
             }
@@ -1132,7 +1176,7 @@ namespace cpf {
                line(header, 0, "template<typename Visitor>");
                line(header, 0, "auto visit(const " + info.name + "& node, Visitor&& visitor) {");
                line(header, 1, "switch (node.rule_id()) {");
-               for (const auto& descendant : concrete_descendants) {
+               for (const auto& descendant: concrete_descendants) {
                   line(header, 2, "case " + descendant + "::RuleId:");
                   line(header, 3, "return visit(static_cast<const " + descendant + "&>(node), visitor);");
                }
@@ -1145,7 +1189,7 @@ namespace cpf {
                line(header, 0, "template<typename Visitor>");
                line(header, 0, "void visit_recursive(const " + info.name + "& node, Visitor&& visitor) {");
                line(header, 1, "switch (node.rule_id()) {");
-               for (const auto& descendant : concrete_descendants) {
+               for (const auto& descendant: concrete_descendants) {
                   line(header, 2, "case " + descendant + "::RuleId:");
                   line(header, 3, "visit_recursive(static_cast<const " + descendant + "&>(node), visitor);");
                   line(header, 3, "return;");
@@ -1166,7 +1210,7 @@ namespace cpf {
             line(header, 0, "template<typename Visitor>");
             line(header, 0, "void visit_recursive(const " + info.name + "& node, Visitor&& visitor) {");
             line(header, 1, "std::forward<Visitor>(visitor)(node);");
-            for (const auto& field : info.fields) {
+            for (const auto& field: info.fields) {
                if (field.shape == field_shape::node_scalar) {
                   line(header, 1, "if (node." + field.name + ") {");
                   line(header, 2, "visit_recursive(*node." + field.name + ", visitor);");
@@ -1180,7 +1224,7 @@ namespace cpf {
                } else if (field.shape == field_shape::capture_variant) {
                   line(header, 1, "std::visit([&](const auto& value) {");
                   line(header, 2, "using value_t = std::decay_t<decltype(value)>;");
-                  for (const auto& alternative : field.variant_alternatives) {
+                  for (const auto& alternative: field.variant_alternatives) {
                      if (!alternative.node) {
                         continue;
                      }
@@ -1217,7 +1261,8 @@ namespace cpf {
             return lowered_symbol;
          };
 
-         auto create_helper = [&](const symbol& source_symbol, std::string_view owner_rule_name, std::size_t owner_definition) {
+         auto create_helper = [&](const symbol& source_symbol, std::string_view owner_rule_name,
+                                  std::size_t owner_definition) {
             helper_info helper;
             helper.id = helpers.size();
             helper.rule_index = emitted_rule_names.size();
@@ -1247,8 +1292,8 @@ namespace cpf {
             return helper.id;
          };
 
-         for (const auto& rule : grammar.rules) {
-            for (const auto& production : rule.productions) {
+         for (const auto& rule: grammar.rules) {
+            for (const auto& production: rule.productions) {
                emitted_production_info emitted_production;
                emitted_production.lhs = rule_indices.at(rule.identifier);
                emitted_production.lhs_name = rule.identifier;
@@ -1257,13 +1302,14 @@ namespace cpf {
                   emitted_production.source_rule = &rule;
                   emitted_production.source_production = &production;
                }
-               for (const auto& source_symbol : production.symbols) {
+               for (const auto& source_symbol: production.symbols) {
                   lowered_symbol lowered;
                   lowered.source = &source_symbol;
                   if (uses_helper_rule(source_symbol)) {
                      auto helper_id = create_helper(source_symbol, rule.identifier, production.definition);
                      lowered.helper_id = helper_id;
-                     emitted_production.symbols.push_back(emitted_symbol{symbol_kind::reference, helpers[helper_id].rule_index, helpers[helper_id].rule_name});
+                     emitted_production.symbols.push_back(emitted_symbol{
+                           symbol_kind::reference, helpers[helper_id].rule_index, helpers[helper_id].rule_name});
                   } else {
                      emitted_production.symbols.push_back(make_emitted_symbol(source_symbol));
                   }
@@ -1273,7 +1319,7 @@ namespace cpf {
             }
          }
 
-         for (auto& helper : helpers) {
+         for (auto& helper: helpers) {
             auto append_helper_production = [&](std::vector<emitted_symbol> symbols, std::string text) {
                helper.production_indices.push_back(emitted_productions.size());
                emitted_production_info emitted_production;
@@ -1295,11 +1341,13 @@ namespace cpf {
                   break;
                case helper_kind::zero_or_more:
                   append_helper_production({}, helper.owner_rule_name + " -> /* repetition empty */");
-                  append_helper_production({base_symbol, helper_reference}, helper.owner_rule_name + " -> " + helper_text + "*");
+                  append_helper_production({base_symbol, helper_reference},
+                                           helper.owner_rule_name + " -> " + helper_text + "*");
                   break;
                case helper_kind::one_or_more:
                   append_helper_production({base_symbol}, helper.owner_rule_name + " -> " + helper_text + "+");
-                  append_helper_production({base_symbol, helper_reference}, helper.owner_rule_name + " -> " + helper_text + "+");
+                  append_helper_production({base_symbol, helper_reference},
+                                           helper.owner_rule_name + " -> " + helper_text + "+");
                   break;
                case helper_kind::exact: {
                   std::vector<emitted_symbol> symbols;
@@ -1315,15 +1363,16 @@ namespace cpf {
 
          for (std::size_t emitted_index = 0; emitted_index < emitted_productions.size(); ++emitted_index) {
             const auto& emitted_production = emitted_productions[emitted_index];
-            if (auto capture_it = synthetic_capture_by_rule.find(emitted_production.lhs_name); capture_it != synthetic_capture_by_rule.end()) {
+            if (auto capture_it = synthetic_capture_by_rule.find(emitted_production.lhs_name);
+                capture_it != synthetic_capture_by_rule.end()) {
                synthetic_captures[capture_it->second].production_indices.push_back(emitted_index);
             }
          }
 
          std::vector<std::string> regex_patterns;
          std::unordered_map<std::string, std::size_t> regex_pattern_indices;
-         for (const auto& production : emitted_productions) {
-            for (const auto& symbol : production.symbols) {
+         for (const auto& production: emitted_productions) {
+            for (const auto& symbol: production.symbols) {
                if (symbol.kind != symbol_kind::regex) {
                   continue;
                }
@@ -1347,10 +1396,9 @@ namespace cpf {
          for (std::size_t rule_index = 0; rule_index < productions_by_rule.size(); ++rule_index) {
             grammar_rule_production_offsets[rule_index] = grammar_rule_production_indices.size();
             grammar_rule_production_counts[rule_index] = productions_by_rule[rule_index].size();
-            grammar_rule_production_indices.insert(
-               grammar_rule_production_indices.end(),
-               productions_by_rule[rule_index].begin(),
-               productions_by_rule[rule_index].end());
+            grammar_rule_production_indices.insert(grammar_rule_production_indices.end(),
+                                                   productions_by_rule[rule_index].begin(),
+                                                   productions_by_rule[rule_index].end());
          }
 
          std::ostringstream source;
@@ -1358,7 +1406,7 @@ namespace cpf {
          line(source, 0);
          line(source, 0, "#include <array>");
          line(source, 0, "#include <ostream>");
-          line(source, 0, "#include <regex>");
+         line(source, 0, "#include <regex>");
          line(source, 0, "#include <stdexcept>");
          line(source, 0, "#include <utility>");
          line(source, 0);
@@ -1368,40 +1416,50 @@ namespace cpf {
          }
          line(source, 0, "namespace {");
          line(source, 1, "using parse_node_ptr = cpf::detail::parse_node_ptr;");
-          for (std::size_t regex_index = 0; regex_index < regex_patterns.size(); ++regex_index) {
-             line(source, 1, "const std::regex regex_" + std::to_string(regex_index) + "{" + cpp_string_literal(regex_patterns[regex_index]) + ", std::regex_constants::optimize};");
-          }
-          for (const auto& rule_name : ordered_public_rule_names) {
-             const auto& inputs_by_definition = complexity_samples.inputs_by_rule.at(rule_name);
-             for (std::size_t definition = 0; definition < inputs_by_definition.size(); ++definition) {
-                const auto& inputs = inputs_by_definition[definition];
-                line(source, 1, "constexpr std::array<std::string_view, " + std::to_string(inputs.size()) + "> " + rule_name + "_complexity_inputs_" + std::to_string(definition) + "{{");
-                for (std::size_t index = 0; index < inputs.size(); ++index) {
-                   auto rendered_input = cpp_string_literal(inputs[index]);
-                   if (index + 1 != inputs.size()) {
-                      rendered_input += ",";
-                   }
-                   line(source, 2, rendered_input);
-                }
-                line(source, 1, "}};");
-             }
-          }
+         for (std::size_t regex_index = 0; regex_index < regex_patterns.size(); ++regex_index) {
+            line(source, 1,
+                 "const std::regex regex_" + std::to_string(regex_index) + "{" +
+                       cpp_string_literal(regex_patterns[regex_index]) + ", std::regex_constants::optimize};");
+         }
+         for (const auto& rule_name: ordered_public_rule_names) {
+            const auto& inputs_by_definition = complexity_samples.inputs_by_rule.at(rule_name);
+            for (std::size_t definition = 0; definition < inputs_by_definition.size(); ++definition) {
+               const auto& inputs = inputs_by_definition[definition];
+               line(source, 1,
+                    "constexpr std::array<std::string_view, " + std::to_string(inputs.size()) + "> " + rule_name +
+                          "_complexity_inputs_" + std::to_string(definition) + "{{");
+               for (std::size_t index = 0; index < inputs.size(); ++index) {
+                  auto rendered_input = cpp_string_literal(inputs[index]);
+                  if (index + 1 != inputs.size()) {
+                     rendered_input += ",";
+                  }
+                  line(source, 2, rendered_input);
+               }
+               line(source, 1, "}};");
+            }
+         }
          line(source, 0, "} // namespace");
          line(source, 0);
 
          auto production_index = 0;
-         for (const auto& production : emitted_productions) {
+         for (const auto& production: emitted_productions) {
             line(source, 0, "namespace {");
-            line(source, 1, "constexpr std::array<cpf::detail::parser_symbol, " + std::to_string(production.symbols.size()) + "> production_" + std::to_string(production_index) + "_symbols{{");
+            line(source, 1,
+                 "constexpr std::array<cpf::detail::parser_symbol, " + std::to_string(production.symbols.size()) +
+                       "> production_" + std::to_string(production_index) + "_symbols{{");
             for (std::size_t i = 0; i < production.symbols.size(); ++i) {
                const auto& symbol = production.symbols[i];
                std::string rendered_symbol;
                if (symbol.kind == symbol_kind::reference) {
-                  rendered_symbol = "{cpf::detail::parser_symbol_kind::nonterminal, " + std::to_string(symbol.value) + ", " + cpp_string_literal(symbol.text) + ", nullptr}";
+                  rendered_symbol = "{cpf::detail::parser_symbol_kind::nonterminal, " + std::to_string(symbol.value) +
+                                    ", " + cpp_string_literal(symbol.text) + ", nullptr}";
                } else if (symbol.kind == symbol_kind::literal) {
-                  rendered_symbol = "{cpf::detail::parser_symbol_kind::literal, 0, " + cpp_string_literal(symbol.text) + ", nullptr}";
+                  rendered_symbol = "{cpf::detail::parser_symbol_kind::literal, 0, " + cpp_string_literal(symbol.text) +
+                                    ", nullptr}";
                } else {
-                  rendered_symbol = "{cpf::detail::parser_symbol_kind::regex, 0, " + cpp_string_literal(symbol.text) + ", &regex_" + std::to_string(regex_pattern_indices.at(std::string{symbol.text})) + "}";
+                  rendered_symbol = "{cpf::detail::parser_symbol_kind::regex, 0, " + cpp_string_literal(symbol.text) +
+                                    ", &regex_" + std::to_string(regex_pattern_indices.at(std::string{symbol.text})) +
+                                    "}";
                }
                if (i + 1 != production.symbols.size()) {
                   rendered_symbol += ",";
@@ -1417,13 +1475,15 @@ namespace cpf {
          const auto production_count = production_index;
 
          line(source, 0, "namespace {");
-         line(source, 1, "constexpr std::array<cpf::detail::production_spec, " + std::to_string(production_count) + "> grammar_productions{{");
+         line(source, 1,
+              "constexpr std::array<cpf::detail::production_spec, " + std::to_string(production_count) +
+                    "> grammar_productions{{");
          production_index = 0;
-         for (const auto& production : emitted_productions) {
-            auto rendered_production = "{" + std::to_string(production.lhs)
-               + ", " + cpp_string_literal(production.lhs_name)
-               + ", " + cpp_string_literal(production.debug_text)
-               + ", production_" + std::to_string(production_index) + "_symbols.data(), production_" + std::to_string(production_index) + "_symbols.size()}";
+         for (const auto& production: emitted_productions) {
+            auto rendered_production =
+                  "{" + std::to_string(production.lhs) + ", " + cpp_string_literal(production.lhs_name) + ", " +
+                  cpp_string_literal(production.debug_text) + ", production_" + std::to_string(production_index) +
+                  "_symbols.data(), production_" + std::to_string(production_index) + "_symbols.size()}";
             if (production_index + 1 != production_count) {
                rendered_production += ",";
             }
@@ -1431,35 +1491,48 @@ namespace cpf {
             ++production_index;
          }
          line(source, 1, "}};");
-          line(source, 1, "constexpr std::array<std::size_t, " + std::to_string(grammar_rule_production_indices.size()) + "> grammar_rule_production_indices{{");
-          for (std::size_t i = 0; i < grammar_rule_production_indices.size(); ++i) {
-             auto rendered_index = std::to_string(grammar_rule_production_indices[i]);
-             if (i + 1 != grammar_rule_production_indices.size()) {
-                rendered_index += ",";
-             }
-             line(source, 2, rendered_index);
-          }
-          line(source, 1, "}};");
-          line(source, 1, "constexpr std::array<std::size_t, " + std::to_string(grammar_rule_production_offsets.size()) + "> grammar_rule_production_offsets{{");
-          for (std::size_t i = 0; i < grammar_rule_production_offsets.size(); ++i) {
-             auto rendered_offset = std::to_string(grammar_rule_production_offsets[i]);
-             if (i + 1 != grammar_rule_production_offsets.size()) {
-                rendered_offset += ",";
-             }
-             line(source, 2, rendered_offset);
-          }
-          line(source, 1, "}};");
-          line(source, 1, "constexpr std::array<std::size_t, " + std::to_string(grammar_rule_production_counts.size()) + "> grammar_rule_production_counts{{");
-          for (std::size_t i = 0; i < grammar_rule_production_counts.size(); ++i) {
-             auto rendered_count = std::to_string(grammar_rule_production_counts[i]);
-             if (i + 1 != grammar_rule_production_counts.size()) {
-                rendered_count += ",";
-             }
-             line(source, 2, rendered_count);
-          }
-          line(source, 1, "}};");
-          line(source, 1, "constexpr cpf::detail::grammar_spec grammar_spec{grammar_productions.data(), grammar_productions.size(), " + std::to_string(emitted_rule_names.size()) + ", grammar_rule_production_indices.data(), grammar_rule_production_offsets.data(), grammar_rule_production_counts.data()};");
-         line(source, 1, "constexpr std::array<std::string_view, " + std::to_string(emitted_rule_names.size()) + "> grammar_rule_names{{");
+         line(source, 1,
+              "constexpr std::array<std::size_t, " + std::to_string(grammar_rule_production_indices.size()) +
+                    "> grammar_rule_production_indices{{");
+         for (std::size_t i = 0; i < grammar_rule_production_indices.size(); ++i) {
+            auto rendered_index = std::to_string(grammar_rule_production_indices[i]);
+            if (i + 1 != grammar_rule_production_indices.size()) {
+               rendered_index += ",";
+            }
+            line(source, 2, rendered_index);
+         }
+         line(source, 1, "}};");
+         line(source, 1,
+              "constexpr std::array<std::size_t, " + std::to_string(grammar_rule_production_offsets.size()) +
+                    "> grammar_rule_production_offsets{{");
+         for (std::size_t i = 0; i < grammar_rule_production_offsets.size(); ++i) {
+            auto rendered_offset = std::to_string(grammar_rule_production_offsets[i]);
+            if (i + 1 != grammar_rule_production_offsets.size()) {
+               rendered_offset += ",";
+            }
+            line(source, 2, rendered_offset);
+         }
+         line(source, 1, "}};");
+         line(source, 1,
+              "constexpr std::array<std::size_t, " + std::to_string(grammar_rule_production_counts.size()) +
+                    "> grammar_rule_production_counts{{");
+         for (std::size_t i = 0; i < grammar_rule_production_counts.size(); ++i) {
+            auto rendered_count = std::to_string(grammar_rule_production_counts[i]);
+            if (i + 1 != grammar_rule_production_counts.size()) {
+               rendered_count += ",";
+            }
+            line(source, 2, rendered_count);
+         }
+         line(source, 1, "}};");
+         line(source, 1,
+              "constexpr cpf::detail::grammar_spec grammar_spec{grammar_productions.data(), "
+              "grammar_productions.size(), " +
+                    std::to_string(emitted_rule_names.size()) +
+                    ", grammar_rule_production_indices.data(), grammar_rule_production_offsets.data(), "
+                    "grammar_rule_production_counts.data()};");
+         line(source, 1,
+              "constexpr std::array<std::string_view, " + std::to_string(emitted_rule_names.size()) +
+                    "> grammar_rule_names{{");
          for (std::size_t i = 0; i < emitted_rule_names.size(); ++i) {
             auto rendered_name = cpp_string_literal(emitted_rule_names[i]);
             if (i + 1 != emitted_rule_names.size()) {
@@ -1468,37 +1541,41 @@ namespace cpf {
             line(source, 2, rendered_name);
          }
          line(source, 1, "}};");
-          line(source, 0);
-          line(source, 1, "template<typename Rule, std::size_t SampleCount>");
-          line(source, 1, "cpf::complexity compute_generated_rule_complexity(const std::array<std::string_view, SampleCount>& inputs, std::string_view rule_name, std::size_t rule_id, std::size_t root_rule) {");
-          line(source, 2, "std::vector<std::tuple<std::string_view>> args;");
-          line(source, 2, "args.reserve(inputs.size());");
-          line(source, 2, "std::vector<double> arg_sizes;");
-          line(source, 2, "arg_sizes.reserve(inputs.size());");
-          line(source, 2, "for (const auto input : inputs) {");
-          line(source, 3, "args.emplace_back(input);");
-          line(source, 3, "arg_sizes.push_back(static_cast<double>(input.size()));");
-          line(source, 2, "}");
-          line(source, 2, "return cpf::complexity_of(");
-          line(source, 3, "[rule_name, rule_id, root_rule](std::string_view input) {");
-          line(source, 4, "auto result = cpf::detail::earley_recognize(input, grammar_spec, root_rule);");
-          line(source, 4, "if (!result.success) {");
-          line(source, 5, "throw std::runtime_error{\"Generated complexity sample for rule '\" + std::string{rule_name} + \"' definition \" + std::to_string(rule_id) + \" failed to parse input: \" + result.error.message};");
-          line(source, 4, "}");
-          line(source, 4, "return static_cast<std::size_t>(result.success);");
-          line(source, 3, "},");
-          line(source, 3, "std::move(args),");
-          line(source, 3, "std::move(arg_sizes));");
-          line(source, 1, "}");
+         line(source, 0);
+         line(source, 1, "template<typename Rule, std::size_t SampleCount>");
+         line(source, 1,
+              "cpf::complexity compute_generated_rule_complexity(const std::array<std::string_view, SampleCount>& "
+              "inputs, std::string_view rule_name, std::size_t rule_id, std::size_t root_rule) {");
+         line(source, 2, "std::vector<std::tuple<std::string_view>> args;");
+         line(source, 2, "args.reserve(inputs.size());");
+         line(source, 2, "std::vector<double> arg_sizes;");
+         line(source, 2, "arg_sizes.reserve(inputs.size());");
+         line(source, 2, "for (const auto input : inputs) {");
+         line(source, 3, "args.emplace_back(input);");
+         line(source, 3, "arg_sizes.push_back(static_cast<double>(input.size()));");
+         line(source, 2, "}");
+         line(source, 2, "return cpf::complexity_of(");
+         line(source, 3, "[rule_name, rule_id, root_rule](std::string_view input) {");
+         line(source, 4, "auto result = cpf::detail::earley_recognize(input, grammar_spec, root_rule);");
+         line(source, 4, "if (!result.success) {");
+         line(source, 5,
+              "throw std::runtime_error{\"Generated complexity sample for rule '\" + std::string{rule_name} + \"' "
+              "definition \" + std::to_string(rule_id) + \" failed to parse input: \" + result.error.message};");
+         line(source, 4, "}");
+         line(source, 4, "return static_cast<std::size_t>(result.success);");
+         line(source, 3, "},");
+         line(source, 3, "std::move(args),");
+         line(source, 3, "std::move(arg_sizes));");
+         line(source, 1, "}");
          line(source, 1, "std::unique_ptr<cpf::node> build_node(const parse_node_ptr& tree);");
          line(source, 0);
 
-         for (const auto& capture : synthetic_captures) {
+         for (const auto& capture: synthetic_captures) {
             auto capture_name = "group_capture_" + std::to_string(capture.id);
             if (capture.field.shape == field_shape::terminal_scalar) {
                line(source, 1, "cpf::matched_string extract_" + capture_name + "(const parse_node_ptr& tree) {");
                line(source, 2, "switch (tree->production) {");
-               for (const auto production_index : capture.production_indices) {
+               for (const auto production_index: capture.production_indices) {
                   line(source, 3, "case " + std::to_string(production_index) + ":");
                   line(source, 4, "return std::get<cpf::matched_string>(tree->children.front());");
                }
@@ -1510,7 +1587,7 @@ namespace cpf {
                line(source, 1, "template<typename T>");
                line(source, 1, "std::unique_ptr<T> extract_" + capture_name + "(const parse_node_ptr& tree) {");
                line(source, 2, "switch (tree->production) {");
-               for (const auto production_index : capture.production_indices) {
+               for (const auto production_index: capture.production_indices) {
                   line(source, 3, "case " + std::to_string(production_index) + ": {");
                   line(source, 4, "auto built = build_node(std::get<parse_node_ptr>(tree->children.front()));");
                   line(source, 4, "return std::unique_ptr<T>{static_cast<T*>(built.release())};");
@@ -1523,15 +1600,21 @@ namespace cpf {
             } else {
                line(source, 1, capture.field.type + " extract_" + capture_name + "(const parse_node_ptr& tree) {");
                line(source, 2, "switch (tree->production) {");
-               for (std::size_t production_offset = 0; production_offset < capture.production_indices.size(); ++production_offset) {
+               for (std::size_t production_offset = 0; production_offset < capture.production_indices.size();
+                    ++production_offset) {
                   const auto production_index = capture.production_indices[production_offset];
                   const auto& alternative = capture.production_alternatives[production_offset];
                   line(source, 3, "case " + std::to_string(production_index) + ": {");
                   if (alternative.node) {
                      line(source, 4, "auto built = build_node(std::get<parse_node_ptr>(tree->children.front()));");
-                     line(source, 4, "return " + capture.field.type + "{std::in_place_type<" + alternative.type + ">, " + alternative.type + "{static_cast<" + alternative.resolved_rule + "*>(built.release())}};");
+                     line(source, 4,
+                          "return " + capture.field.type + "{std::in_place_type<" + alternative.type + ">, " +
+                                alternative.type + "{static_cast<" + alternative.resolved_rule +
+                                "*>(built.release())}};");
                   } else {
-                     line(source, 4, "return " + capture.field.type + "{std::in_place_type<" + alternative.type + ">, std::get<cpf::matched_string>(tree->children.front())};");
+                     line(source, 4,
+                          "return " + capture.field.type + "{std::in_place_type<" + alternative.type +
+                                ">, std::get<cpf::matched_string>(tree->children.front())};");
                   }
                   line(source, 3, "}");
                }
@@ -1543,7 +1626,7 @@ namespace cpf {
             line(source, 0);
          }
 
-         for (const auto& helper : helpers) {
+         for (const auto& helper: helpers) {
             auto helper_name = "helper_" + std::to_string(helper.id);
             if (helper.base_symbol.kind == symbol_kind::reference) {
                if (helper.kind == helper_kind::optional) {
@@ -1562,7 +1645,9 @@ namespace cpf {
                   line(source, 1, "}");
                } else {
                   line(source, 1, "template<typename T>");
-                  line(source, 1, "void collect_" + helper_name + "(const parse_node_ptr& tree, std::vector<std::unique_ptr<T>>& values) {");
+                  line(source, 1,
+                       "void collect_" + helper_name +
+                             "(const parse_node_ptr& tree, std::vector<std::unique_ptr<T>>& values) {");
                   line(source, 2, "switch (tree->production) {");
                   if (helper.kind == helper_kind::zero_or_more) {
                      line(source, 3, "case " + std::to_string(helper.production_indices[0]) + ":");
@@ -1570,7 +1655,8 @@ namespace cpf {
                      line(source, 3, "case " + std::to_string(helper.production_indices[1]) + ": {");
                      line(source, 4, "auto built = build_node(std::get<parse_node_ptr>(tree->children[0]));");
                      line(source, 4, "values.push_back(std::unique_ptr<T>{static_cast<T*>(built.release())});");
-                     line(source, 4, "collect_" + helper_name + "(std::get<parse_node_ptr>(tree->children[1]), values);");
+                     line(source, 4,
+                          "collect_" + helper_name + "(std::get<parse_node_ptr>(tree->children[1]), values);");
                      line(source, 4, "return;");
                      line(source, 3, "}");
                   } else if (helper.kind == helper_kind::one_or_more) {
@@ -1582,13 +1668,16 @@ namespace cpf {
                      line(source, 3, "case " + std::to_string(helper.production_indices[1]) + ": {");
                      line(source, 4, "auto built = build_node(std::get<parse_node_ptr>(tree->children[0]));");
                      line(source, 4, "values.push_back(std::unique_ptr<T>{static_cast<T*>(built.release())});");
-                     line(source, 4, "collect_" + helper_name + "(std::get<parse_node_ptr>(tree->children[1]), values);");
+                     line(source, 4,
+                          "collect_" + helper_name + "(std::get<parse_node_ptr>(tree->children[1]), values);");
                      line(source, 4, "return;");
                      line(source, 3, "}");
                   } else {
                      line(source, 3, "case " + std::to_string(helper.production_indices[0]) + ":");
                      for (std::size_t i = 0; i < helper.exact_count; ++i) {
-                        line(source, 4, "{ auto built = build_node(std::get<parse_node_ptr>(tree->children[" + std::to_string(i) + "])); values.push_back(std::unique_ptr<T>{static_cast<T*>(built.release())}); }");
+                        line(source, 4,
+                             "{ auto built = build_node(std::get<parse_node_ptr>(tree->children[" + std::to_string(i) +
+                                   "])); values.push_back(std::unique_ptr<T>{static_cast<T*>(built.release())}); }");
                      }
                      line(source, 4, "return;");
                   }
@@ -1597,14 +1686,16 @@ namespace cpf {
                   line(source, 2, "}");
                   line(source, 1, "}");
                   line(source, 1, "template<typename T>");
-                  line(source, 1, "std::vector<std::unique_ptr<T>> extract_" + helper_name + "(const parse_node_ptr& tree) {");
+                  line(source, 1,
+                       "std::vector<std::unique_ptr<T>> extract_" + helper_name + "(const parse_node_ptr& tree) {");
                   line(source, 2, "std::vector<std::unique_ptr<T>> values;");
                   line(source, 2, "collect_" + helper_name + "(tree, values);");
                   line(source, 2, "return values;");
                   line(source, 1, "}");
                }
             } else if (helper.kind == helper_kind::optional) {
-               line(source, 1, "std::optional<cpf::matched_string> extract_" + helper_name + "(const parse_node_ptr& tree) {");
+               line(source, 1,
+                    "std::optional<cpf::matched_string> extract_" + helper_name + "(const parse_node_ptr& tree) {");
                line(source, 2, "switch (tree->production) {");
                line(source, 3, "case " + std::to_string(helper.production_indices[0]) + ":");
                line(source, 4, "return std::nullopt;");
@@ -1615,7 +1706,9 @@ namespace cpf {
                line(source, 2, "}");
                line(source, 1, "}");
             } else {
-               line(source, 1, "void collect_" + helper_name + "(const parse_node_ptr& tree, std::vector<cpf::matched_string>& values) {");
+               line(source, 1,
+                    "void collect_" + helper_name +
+                          "(const parse_node_ptr& tree, std::vector<cpf::matched_string>& values) {");
                line(source, 2, "switch (tree->production) {");
                if (helper.kind == helper_kind::zero_or_more) {
                   line(source, 3, "case " + std::to_string(helper.production_indices[0]) + ":");
@@ -1635,7 +1728,9 @@ namespace cpf {
                } else {
                   line(source, 3, "case " + std::to_string(helper.production_indices[0]) + ":");
                   for (std::size_t i = 0; i < helper.exact_count; ++i) {
-                     line(source, 4, "values.push_back(std::get<cpf::matched_string>(tree->children[" + std::to_string(i) + "]));");
+                     line(source, 4,
+                          "values.push_back(std::get<cpf::matched_string>(tree->children[" + std::to_string(i) +
+                                "]));");
                   }
                   line(source, 4, "return;");
                }
@@ -1643,7 +1738,8 @@ namespace cpf {
                line(source, 4, "throw std::runtime_error{\"Unknown quantified helper production\"};");
                line(source, 2, "}");
                line(source, 1, "}");
-               line(source, 1, "std::vector<cpf::matched_string> extract_" + helper_name + "(const parse_node_ptr& tree) {");
+               line(source, 1,
+                    "std::vector<cpf::matched_string> extract_" + helper_name + "(const parse_node_ptr& tree) {");
                line(source, 2, "std::vector<cpf::matched_string> values;");
                line(source, 2, "collect_" + helper_name + "(tree, values);");
                line(source, 2, "return values;");
@@ -1670,7 +1766,7 @@ namespace cpf {
          line(source, 1, "}");
          line(source, 0);
 
-         for (const auto& rule : grammar.rules) {
+         for (const auto& rule: grammar.rules) {
             if (rule.synthetic) {
                continue;
             }
@@ -1683,35 +1779,37 @@ namespace cpf {
             const auto& family = family_it->second;
             line(source, 1, "int precedence_of_" + family.name + "(const " + family.name + "& node) {");
             line(source, 2, "switch (node.rule_id()) {");
-             for (const auto& child : family.direct_children) {
-                std::vector<const infix_definition_info*> child_definitions;
-                for (const auto& infix_definition : family.infix_definitions) {
-                   if (infix_definition.child == child) {
-                      child_definitions.push_back(&infix_definition);
-                   }
-                }
-                if (child_definitions.empty()) {
-                   continue;
-                }
+            for (const auto& child: family.direct_children) {
+               std::vector<const infix_definition_info*> child_definitions;
+               for (const auto& infix_definition: family.infix_definitions) {
+                  if (infix_definition.child == child) {
+                     child_definitions.push_back(&infix_definition);
+                  }
+               }
+               if (child_definitions.empty()) {
+                  continue;
+               }
 
-                line(source, 3, "case " + child + "::RuleId: {");
-                line(source, 4, "const auto& value = static_cast<const " + child + "&>(node);");
-                line(source, 4, "switch (value.definition) {");
-                for (const auto* infix_definition : child_definitions) {
-                   line(source, 5, "case " + std::to_string(infix_definition->definition) + ":");
-                   line(source, 6, "return " + std::to_string(infix_definition->precedence) + ";");
-                }
-                line(source, 5, "default:");
-                line(source, 6, "return 0;");
+               line(source, 3, "case " + child + "::RuleId: {");
+               line(source, 4, "const auto& value = static_cast<const " + child + "&>(node);");
+               line(source, 4, "switch (value.definition) {");
+               for (const auto* infix_definition: child_definitions) {
+                  line(source, 5, "case " + std::to_string(infix_definition->definition) + ":");
+                  line(source, 6, "return " + std::to_string(infix_definition->precedence) + ";");
+               }
+               line(source, 5, "default:");
+               line(source, 6, "return 0;");
                line(source, 4, "}");
-                line(source, 3, "}");
+               line(source, 3, "}");
             }
             line(source, 3, "default:");
             line(source, 4, "return 0;");
             line(source, 2, "}");
             line(source, 1, "}");
             line(source, 0);
-            line(source, 1, "bool validate_" + family.name + "_child(const " + family.name + "& child, int precedence, bool left_associative, bool is_left_child) {");
+            line(source, 1,
+                 "bool validate_" + family.name + "_child(const " + family.name +
+                       "& child, int precedence, bool left_associative, bool is_left_child) {");
             line(source, 2, "auto child_precedence = precedence_of_" + family.name + "(child);");
             line(source, 2, "if (child_precedence == 0) {");
             line(source, 3, "return true;");
@@ -1737,13 +1835,15 @@ namespace cpf {
                const auto& production_rule = emitted_production.source_rule->identifier;
                if (classes.at(production_rule).base_rule && production_rule == family.name) {
                   line(source, 3, "case " + std::to_string(emitted_index) + ":");
-                  line(source, 4, "return precedence_of_" + family.name + "_tree(std::get<parse_node_ptr>(tree->children.front()));");
+                  line(source, 4,
+                       "return precedence_of_" + family.name +
+                             "_tree(std::get<parse_node_ptr>(tree->children.front()));");
                   continue;
                }
 
-               for (const auto& infix_definition : family.infix_definitions) {
-                  if (infix_definition.child != production_rule
-                   || infix_definition.definition != emitted_production.source_production->definition) {
+               for (const auto& infix_definition: family.infix_definitions) {
+                  if (infix_definition.child != production_rule ||
+                      infix_definition.definition != emitted_production.source_production->definition) {
                      continue;
                   }
                   line(source, 3, "case " + std::to_string(emitted_index) + ":");
@@ -1756,7 +1856,10 @@ namespace cpf {
             line(source, 2, "}");
             line(source, 1, "}");
             line(source, 0);
-            line(source, 1, "bool validate_" + family.name + "_child_tree(const parse_node_ptr& child, int precedence, bool left_associative, bool is_left_child) {");
+            line(source, 1,
+                 "bool validate_" + family.name +
+                       "_child_tree(const parse_node_ptr& child, int precedence, bool left_associative, bool "
+                       "is_left_child) {");
             line(source, 2, "auto child_precedence = precedence_of_" + family.name + "_tree(child);");
             line(source, 2, "if (child_precedence == 0) {");
             line(source, 3, "return true;");
@@ -1773,8 +1876,8 @@ namespace cpf {
          }
 
          line(source, 1, "[[maybe_unused]] bool validate_generated_node(const cpf::node& node) {");
-          line(source, 2, "switch (node.rule_id()) {");
-         for (const auto& rule : grammar.rules) {
+         line(source, 2, "switch (node.rule_id()) {");
+         for (const auto& rule: grammar.rules) {
             if (rule.synthetic) {
                continue;
             }
@@ -1782,19 +1885,19 @@ namespace cpf {
             if (info.base_rule) {
                continue;
             }
-             std::vector<const infix_definition_info*> infix_definitions;
-             if (!info.base.empty()) {
-                if (auto family_it = families.find(info.base); family_it != families.end()) {
-                   for (const auto& infix_definition : family_it->second.infix_definitions) {
-                      if (infix_definition.child == info.name) {
-                         infix_definitions.push_back(&infix_definition);
-                      }
-                   }
-                }
-             }
+            std::vector<const infix_definition_info*> infix_definitions;
+            if (!info.base.empty()) {
+               if (auto family_it = families.find(info.base); family_it != families.end()) {
+                  for (const auto& infix_definition: family_it->second.infix_definitions) {
+                     if (infix_definition.child == info.name) {
+                        infix_definitions.push_back(&infix_definition);
+                     }
+                  }
+               }
+            }
 
-             auto needs_value = !infix_definitions.empty();
-            for (const auto& field : info.fields) {
+            auto needs_value = !infix_definitions.empty();
+            for (const auto& field: info.fields) {
                if (is_node_field(field)) {
                   needs_value = true;
                   break;
@@ -1805,9 +1908,10 @@ namespace cpf {
             if (needs_value) {
                line(source, 4, "const auto& value = static_cast<const " + info.name + "&>(node);");
             }
-            for (const auto& field : info.fields) {
+            for (const auto& field: info.fields) {
                if (field.shape == field_shape::node_scalar) {
-                  line(source, 4, "if (value." + field.name + " && !validate_generated_node(*value." + field.name + ")) {");
+                  line(source, 4,
+                       "if (value." + field.name + " && !validate_generated_node(*value." + field.name + ")) {");
                   line(source, 5, "return false;");
                   line(source, 4, "}");
                } else if (field.shape == field_shape::node_vector) {
@@ -1819,38 +1923,45 @@ namespace cpf {
                }
             }
 
-             if (!infix_definitions.empty()) {
-                line(source, 4, "switch (value.definition) {");
-                for (const auto* infix_definition : infix_definitions) {
-                   const auto precedence = std::to_string(infix_definition->precedence);
-                   const auto left_associative = infix_definition->associativity == "left" ? "true" : "false";
+            if (!infix_definitions.empty()) {
+               line(source, 4, "switch (value.definition) {");
+               for (const auto* infix_definition: infix_definitions) {
+                  const auto precedence = std::to_string(infix_definition->precedence);
+                  const auto left_associative = infix_definition->associativity == "left" ? "true" : "false";
 
-                   line(source, 5, "case " + std::to_string(infix_definition->definition) + ":");
-                   line(source, 6, "if (value." + infix_definition->left_label + " && !validate_" + info.base + "_child(*value." + infix_definition->left_label + ", " + precedence + ", " + left_associative + ", true)) {");
-                   line(source, 7, "return false;");
-                   line(source, 6, "}");
-                   line(source, 6, "if (value." + infix_definition->right_label + " && !validate_" + info.base + "_child(*value." + infix_definition->right_label + ", " + precedence + ", " + left_associative + ", false)) {");
-                   line(source, 7, "return false;");
-                   line(source, 6, "}");
-                   line(source, 6, "break;");
-                }
-                line(source, 5, "default:");
-                line(source, 6, "break;");
-                line(source, 4, "}");
+                  line(source, 5, "case " + std::to_string(infix_definition->definition) + ":");
+                  line(source, 6,
+                       "if (value." + infix_definition->left_label + " && !validate_" + info.base + "_child(*value." +
+                             infix_definition->left_label + ", " + precedence + ", " + left_associative + ", true)) {");
+                  line(source, 7, "return false;");
+                  line(source, 6, "}");
+                  line(source, 6,
+                       "if (value." + infix_definition->right_label + " && !validate_" + info.base + "_child(*value." +
+                             infix_definition->right_label + ", " + precedence + ", " + left_associative +
+                             ", false)) {");
+                  line(source, 7, "return false;");
+                  line(source, 6, "}");
+                  line(source, 6, "break;");
+               }
+               line(source, 5, "default:");
+               line(source, 6, "break;");
+               line(source, 4, "}");
             }
 
             line(source, 4, "return true;");
             line(source, 3, "}");
          }
-          line(source, 3, "default:");
-          line(source, 4, "return true;");
-          line(source, 2, "}");
+         line(source, 3, "default:");
+         line(source, 4, "return true;");
+         line(source, 2, "}");
          line(source, 1, "}");
          line(source, 0);
 
          line(source, 1, "bool validate_generated_tree(const parse_node_ptr& tree) {");
          line(source, 2, "for (const auto& child : tree->children) {");
-         line(source, 3, "if (std::holds_alternative<parse_node_ptr>(child) && !validate_generated_tree(std::get<parse_node_ptr>(child))) {");
+         line(source, 3,
+              "if (std::holds_alternative<parse_node_ptr>(child) && "
+              "!validate_generated_tree(std::get<parse_node_ptr>(child))) {");
          line(source, 4, "return false;");
          line(source, 3, "}");
          line(source, 2, "}");
@@ -1869,20 +1980,24 @@ namespace cpf {
             if (!info.base.empty()) {
                std::vector<const infix_definition_info*> infix_definitions;
                if (auto family_it = families.find(info.base); family_it != families.end()) {
-                  for (const auto& infix_definition : family_it->second.infix_definitions) {
+                  for (const auto& infix_definition: family_it->second.infix_definitions) {
                      if (infix_definition.child == info.name && infix_definition.definition == production.definition) {
                         infix_definitions.push_back(&infix_definition);
                      }
                   }
                }
 
-               for (const auto* infix_definition : infix_definitions) {
+               for (const auto* infix_definition: infix_definitions) {
                   const auto precedence = std::to_string(infix_definition->precedence);
                   const auto left_associative = infix_definition->associativity == "left" ? "true" : "false";
-                  line(source, 4, "if (!validate_" + info.base + "_child_tree(std::get<parse_node_ptr>(tree->children[0]), " + precedence + ", " + left_associative + ", true)) {");
+                  line(source, 4,
+                       "if (!validate_" + info.base + "_child_tree(std::get<parse_node_ptr>(tree->children[0]), " +
+                             precedence + ", " + left_associative + ", true)) {");
                   line(source, 5, "return false;");
                   line(source, 4, "}");
-                  line(source, 4, "if (!validate_" + info.base + "_child_tree(std::get<parse_node_ptr>(tree->children[2]), " + precedence + ", " + left_associative + ", false)) {");
+                  line(source, 4,
+                       "if (!validate_" + info.base + "_child_tree(std::get<parse_node_ptr>(tree->children[2]), " +
+                             precedence + ", " + left_associative + ", false)) {");
                   line(source, 5, "return false;");
                   line(source, 4, "}");
                }
@@ -1925,9 +2040,13 @@ namespace cpf {
                      const auto& field = fields_by_rule.at(info.name).at(symbol.label);
                      const auto helper_name = "helper_" + std::to_string(*lowered_symbol.helper_id);
                      if (field.shape == field_shape::terminal_optional || field.shape == field_shape::terminal_vector) {
-                        line(source, 4, "node->" + symbol.label + " = extract_" + helper_name + "(std::get<parse_node_ptr>(tree->children[" + std::to_string(i) + "]));");
+                        line(source, 4,
+                             "node->" + symbol.label + " = extract_" + helper_name +
+                                   "(std::get<parse_node_ptr>(tree->children[" + std::to_string(i) + "]));");
                      } else if (field.shape == field_shape::node_scalar || field.shape == field_shape::node_vector) {
-                        line(source, 4, "node->" + symbol.label + " = extract_" + helper_name + "<" + field.resolved_rule + ">(std::get<parse_node_ptr>(tree->children[" + std::to_string(i) + "]));");
+                        line(source, 4,
+                             "node->" + symbol.label + " = extract_" + helper_name + "<" + field.resolved_rule +
+                                   ">(std::get<parse_node_ptr>(tree->children[" + std::to_string(i) + "]));");
                      }
                      continue;
                   }
@@ -1935,22 +2054,37 @@ namespace cpf {
                   if (symbol.kind == symbol_kind::reference) {
                      if (symbol.has_label()) {
                         const auto& field = fields_by_rule.at(info.name).at(symbol.label);
-                        if (auto capture_it = synthetic_capture_by_rule.find(symbol.value); capture_it != synthetic_capture_by_rule.end()) {
+                        if (auto capture_it = synthetic_capture_by_rule.find(symbol.value);
+                            capture_it != synthetic_capture_by_rule.end()) {
                            const auto capture_name = "group_capture_" + std::to_string(capture_it->second);
                            if (field.shape == field_shape::terminal_scalar) {
-                              line(source, 4, "node->" + symbol.label + " = extract_" + capture_name + "(std::get<parse_node_ptr>(tree->children[" + std::to_string(i) + "]));");
+                              line(source, 4,
+                                   "node->" + symbol.label + " = extract_" + capture_name +
+                                         "(std::get<parse_node_ptr>(tree->children[" + std::to_string(i) + "]));");
                            } else if (field.shape == field_shape::capture_variant) {
-                              line(source, 4, "node->" + symbol.label + " = extract_" + capture_name + "(std::get<parse_node_ptr>(tree->children[" + std::to_string(i) + "]));");
+                              line(source, 4,
+                                   "node->" + symbol.label + " = extract_" + capture_name +
+                                         "(std::get<parse_node_ptr>(tree->children[" + std::to_string(i) + "]));");
                            } else {
-                              line(source, 4, "node->" + symbol.label + " = extract_" + capture_name + "<" + field.resolved_rule + ">(std::get<parse_node_ptr>(tree->children[" + std::to_string(i) + "]));");
+                              line(source, 4,
+                                   "node->" + symbol.label + " = extract_" + capture_name + "<" + field.resolved_rule +
+                                         ">(std::get<parse_node_ptr>(tree->children[" + std::to_string(i) + "]));");
                            }
                         } else {
-                           line(source, 4, "auto child_" + std::to_string(i) + " = build_node(std::get<parse_node_ptr>(tree->children[" + std::to_string(i) + "]));");
-                           line(source, 4, "node->" + symbol.label + " = std::unique_ptr<" + field.resolved_rule + ">{static_cast<" + field.resolved_rule + "*>(child_" + std::to_string(i) + ".release())};");
+                           line(source, 4,
+                                "auto child_" + std::to_string(i) +
+                                      " = build_node(std::get<parse_node_ptr>(tree->children[" + std::to_string(i) +
+                                      "]));");
+                           line(source, 4,
+                                "node->" + symbol.label + " = std::unique_ptr<" + field.resolved_rule +
+                                      ">{static_cast<" + field.resolved_rule + "*>(child_" + std::to_string(i) +
+                                      ".release())};");
                         }
                      }
                   } else if (symbol.has_label()) {
-                     line(source, 4, "node->" + symbol.label + " = std::get<cpf::matched_string>(tree->children[" + std::to_string(i) + "]); ");
+                     line(source, 4,
+                          "node->" + symbol.label + " = std::get<cpf::matched_string>(tree->children[" +
+                                std::to_string(i) + "]); ");
                   }
                }
                line(source, 4, "return node;");
@@ -1964,7 +2098,9 @@ namespace cpf {
          line(source, 0);
 
          line(source, 1, "template<typename T>");
-         line(source, 1, "cpf::parse_result<T> parse_generated(std::string_view input, std::size_t root_rule, const cpf::parse_options& options) {");
+         line(source, 1,
+              "cpf::parse_result<T> parse_generated(std::string_view input, std::size_t root_rule, const "
+              "cpf::parse_options& options) {");
          line(source, 2, "cpf::parse_result<T> result;");
          line(source, 2, "auto forest = cpf::detail::earley_parse(input, grammar_spec, root_rule);");
          line(source, 2, "if (!forest.success) {");
@@ -1985,7 +2121,8 @@ namespace cpf {
          line(source, 3, "}");
          line(source, 3, "result.success = true;");
          line(source, 3, "if (options.build_ast) {");
-         line(source, 4, "result.forest.emplace_back(tree, definition_of_generated_tree(tree), tree->range, [tree]() {");
+         line(source, 4,
+              "result.forest.emplace_back(tree, definition_of_generated_tree(tree), tree->range, [tree]() {");
          line(source, 5, "auto built = build_node(tree);");
          line(source, 5, "return std::unique_ptr<T>{static_cast<T*>(built.release())};");
          line(source, 4, "});");
@@ -1996,46 +2133,53 @@ namespace cpf {
          line(source, 2, "}");
          line(source, 2, "result.error.expected.push_back(\"valid parse tree\");");
          line(source, 2, "result.error.found = \"<filtered parse>\";");
-         line(source, 2, "result.error.notes.push_back(std::string{R\"(completed Earley parses for rule ')\"} + std::string{grammar_rule_names[root_rule]} + R\"(' were rejected by precedence/associativity constraints)\");");
+         line(source, 2,
+              "result.error.notes.push_back(std::string{R\"(completed Earley parses for rule ')\"} + "
+              "std::string{grammar_rule_names[root_rule]} + R\"(' were rejected by precedence/associativity "
+              "constraints)\");");
          line(source, 2, "cpf::detail::error_tracker::finalize(result.error);");
          line(source, 2, "return result;");
          line(source, 1, "}");
          line(source, 0, "} // namespace");
          line(source, 0);
 
-         for (const auto& rule : grammar.rules) {
+         for (const auto& rule: grammar.rules) {
             if (rule.synthetic) {
                continue;
             }
             const auto& info = classes.at(rule.identifier);
-             const auto definition_count = rule.productions.size();
-            line(source, 0, info.name + "::parse_result " + info.name + "::parse(std::string_view input, const cpf::parse_options& options) {");
+            const auto definition_count = rule.productions.size();
+            line(source, 0,
+                 info.name + "::parse_result " + info.name +
+                       "::parse(std::string_view input, const cpf::parse_options& options) {");
             if (info.base_rule) {
                line(source, 1, "parse_result result;");
                line(source, 1, "cpf::parse_error best_error;");
                line(source, 1, "auto have_error = false;");
-                line(source, 1, "auto successful_children = std::size_t{0};");
-               for (const auto& child : families.at(info.name).direct_children) {
+               line(source, 1, "auto successful_children = std::size_t{0};");
+               for (const auto& child: families.at(info.name).direct_children) {
                   line(source, 1, "{");
-                   line(source, 2, "auto child_result = " + child + "::parse(input, options);");
+                  line(source, 2, "auto child_result = " + child + "::parse(input, options);");
                   line(source, 2, "if (child_result.success) {");
-                   line(source, 3, "++successful_children;");
-                   line(source, 3, "if (options.error_on_ambiguity && successful_children > 1) {");
-                   line(source, 4, "result.success = false;");
-                   line(source, 4, "result.forest.clear();");
-                   line(source, 4, "result.error = cpf::detail::make_ambiguity_error(" + cpp_string_literal(info.name) + ");");
-                   line(source, 4, "return result;");
-                   line(source, 3, "}");
+                  line(source, 3, "++successful_children;");
+                  line(source, 3, "if (options.error_on_ambiguity && successful_children > 1) {");
+                  line(source, 4, "result.success = false;");
+                  line(source, 4, "result.forest.clear();");
+                  line(source, 4,
+                       "result.error = cpf::detail::make_ambiguity_error(" + cpp_string_literal(info.name) + ");");
+                  line(source, 4, "return result;");
+                  line(source, 3, "}");
                   line(source, 3, "result.success = true;");
-                   line(source, 3, "if (options.build_ast) {");
-                   line(source, 4, "for (const auto& tree : child_result.forest) {");
-                   line(source, 5, "auto opaque = cpf::detail::opaque_tree_of(tree);");
-                   line(source, 5, "result.forest.emplace_back(opaque, tree.definition, tree.range, [opaque]() {");
-                   line(source, 6, "auto built = build_node(opaque);");
-                   line(source, 6, "return std::unique_ptr<" + info.name + ">{static_cast<" + info.name + "*>(built.release())};");
-                   line(source, 5, "});");
-                   line(source, 4, "}");
-                   line(source, 3, "}");
+                  line(source, 3, "if (options.build_ast) {");
+                  line(source, 4, "for (const auto& tree : child_result.forest) {");
+                  line(source, 5, "auto opaque = cpf::detail::opaque_tree_of(tree);");
+                  line(source, 5, "result.forest.emplace_back(opaque, tree.definition, tree.range, [opaque]() {");
+                  line(source, 6, "auto built = build_node(opaque);");
+                  line(source, 6,
+                       "return std::unique_ptr<" + info.name + ">{static_cast<" + info.name + "*>(built.release())};");
+                  line(source, 5, "});");
+                  line(source, 4, "}");
+                  line(source, 3, "}");
                   line(source, 2, "} else if (!have_error) {");
                   line(source, 3, "best_error = child_result.error;");
                   line(source, 3, "have_error = true;");
@@ -2044,45 +2188,65 @@ namespace cpf {
                   line(source, 2, "}");
                   line(source, 1, "}");
                }
-                line(source, 1, "if (result.success) {");
+               line(source, 1, "if (result.success) {");
                line(source, 2, "return result;");
                line(source, 1, "}");
                line(source, 1, "if (have_error) {");
-               line(source, 2, "cpf::detail::append_unique(best_error.notes, " + cpp_string_literal("while matching base rule '" + info.name + "'") + ");");
+               line(source, 2,
+                    "cpf::detail::append_unique(best_error.notes, " +
+                          cpp_string_literal("while matching base rule '" + info.name + "'") + ");");
                line(source, 2, "cpf::detail::error_tracker::finalize(best_error);");
                line(source, 2, "result.error = best_error;");
                line(source, 1, "}");
                line(source, 1, "return result;");
             } else {
-               line(source, 1, "return parse_generated<" + info.name + ">(input, " + std::to_string(rule_indices.at(info.name)) + ", options);");
+               line(source, 1,
+                    "return parse_generated<" + info.name + ">(input, " + std::to_string(rule_indices.at(info.name)) +
+                          ", options);");
             }
             line(source, 0, "}");
             line(source, 0);
-             line(source, 0, "auto " + info.name + "::complexity_inputs(std::size_t rule_id) -> std::span<const std::string_view> {");
-             line(source, 1, "switch (rule_id) {");
-             for (std::size_t definition = 0; definition < definition_count; ++definition) {
-                line(source, 2, "case " + std::to_string(definition) + ":");
-                line(source, 3, "return std::span<const std::string_view>{" + info.name + "_complexity_inputs_" + std::to_string(definition) + ".data(), " + info.name + "_complexity_inputs_" + std::to_string(definition) + ".size()};");
-             }
-             line(source, 2, "default:");
-             line(source, 3, "throw std::out_of_range{\"Unknown complexity rule id \" + std::to_string(rule_id) + \" for rule '" + info.name + "'\"};");
-             line(source, 1, "}");
-             line(source, 0, "}");
-             line(source, 0);
-             line(source, 0, "auto " + info.name + "::recompute_complexity(std::size_t rule_id) -> const cpf::complexity& {");
-             line(source, 1, "switch (rule_id) {");
-             for (std::size_t definition = 0; definition < definition_count; ++definition) {
-                line(source, 2, "case " + std::to_string(definition) + ":");
-                line(source, 3, "Complexity[" + std::to_string(definition) + "] = compute_generated_rule_complexity<" + info.name + ">(" + info.name + "_complexity_inputs_" + std::to_string(definition) + ", " + cpp_string_literal(info.name) + ", " + std::to_string(definition) + ", " + std::to_string(rule_indices.at(info.name)) + ");");
-                line(source, 3, "return Complexity[" + std::to_string(definition) + "];");
-             }
-             line(source, 2, "default:");
-             line(source, 3, "throw std::out_of_range{\"Unknown complexity rule id \" + std::to_string(rule_id) + \" for rule '" + info.name + "'\"};");
-             line(source, 1, "}");
-             line(source, 0, "}");
-             line(source, 0);
-             line(source, 0, "std::array<cpf::complexity, " + std::to_string(definition_count) + "> " + info.name + "::Complexity{};");
-             line(source, 0);
+            line(source, 0,
+                 "auto " + info.name +
+                       "::complexity_inputs(std::size_t rule_id) -> std::span<const std::string_view> {");
+            line(source, 1, "switch (rule_id) {");
+            for (std::size_t definition = 0; definition < definition_count; ++definition) {
+               line(source, 2, "case " + std::to_string(definition) + ":");
+               line(source, 3,
+                    "return std::span<const std::string_view>{" + info.name + "_complexity_inputs_" +
+                          std::to_string(definition) + ".data(), " + info.name + "_complexity_inputs_" +
+                          std::to_string(definition) + ".size()};");
+            }
+            line(source, 2, "default:");
+            line(source, 3,
+                 "throw std::out_of_range{\"Unknown complexity rule id \" + std::to_string(rule_id) + \" for rule '" +
+                       info.name + "'\"};");
+            line(source, 1, "}");
+            line(source, 0, "}");
+            line(source, 0);
+            line(source, 0,
+                 "auto " + info.name + "::recompute_complexity(std::size_t rule_id) -> const cpf::complexity& {");
+            line(source, 1, "switch (rule_id) {");
+            for (std::size_t definition = 0; definition < definition_count; ++definition) {
+               line(source, 2, "case " + std::to_string(definition) + ":");
+               line(source, 3,
+                    "Complexity[" + std::to_string(definition) + "] = compute_generated_rule_complexity<" + info.name +
+                          ">(" + info.name + "_complexity_inputs_" + std::to_string(definition) + ", " +
+                          cpp_string_literal(info.name) + ", " + std::to_string(definition) + ", " +
+                          std::to_string(rule_indices.at(info.name)) + ");");
+               line(source, 3, "return Complexity[" + std::to_string(definition) + "];");
+            }
+            line(source, 2, "default:");
+            line(source, 3,
+                 "throw std::out_of_range{\"Unknown complexity rule id \" + std::to_string(rule_id) + \" for rule '" +
+                       info.name + "'\"};");
+            line(source, 1, "}");
+            line(source, 0, "}");
+            line(source, 0);
+            line(source, 0,
+                 "std::array<cpf::complexity, " + std::to_string(definition_count) + "> " + info.name +
+                       "::Complexity{};");
+            line(source, 0);
             line(source, 0, "std::size_t " + info.name + "::rule_id() const {");
             line(source, 1, "return RuleId;");
             line(source, 0, "}");
@@ -2093,7 +2257,8 @@ namespace cpf {
             line(source, 0);
             line(source, 0, "std::unique_ptr<" + info.name + "> " + info.name + "::clone() {");
             line(source, 1, "auto cloned = this->clone_node();");
-            line(source, 1, "return std::unique_ptr<" + info.name + ">{static_cast<" + info.name + "*>(cloned.release())};");
+            line(source, 1,
+                 "return std::unique_ptr<" + info.name + ">{static_cast<" + info.name + "*>(cloned.release())};");
             line(source, 0, "}");
             line(source, 0);
 
@@ -2102,7 +2267,7 @@ namespace cpf {
                line(source, 1, "auto copy = std::make_unique<" + info.name + ">();");
                line(source, 1, "copy->definition = definition;");
                line(source, 1, "copy->range = range;");
-               for (const auto& field : info.fields) {
+               for (const auto& field: info.fields) {
                   if (field.shape == field_shape::node_scalar) {
                      line(source, 1, render_child_clone_expression(field));
                   } else if (field.shape == field_shape::node_vector) {
@@ -2110,15 +2275,19 @@ namespace cpf {
                      line(source, 2, "copy->" + field.name + ".push_back(child ? child->clone() : nullptr);");
                      line(source, 1, "}");
                   } else if (field.shape == field_shape::capture_variant) {
-                     line(source, 1, "copy->" + field.name + " = std::visit([](const auto& value) -> " + field.type + " {");
+                     line(source, 1,
+                          "copy->" + field.name + " = std::visit([](const auto& value) -> " + field.type + " {");
                      line(source, 2, "using value_t = std::decay_t<decltype(value)>;");
-                     for (const auto& alternative : field.variant_alternatives) {
+                     for (const auto& alternative: field.variant_alternatives) {
                         line(source, 2, "if constexpr (std::is_same_v<value_t, " + alternative.type + ">) {");
                         if (alternative.node) {
                            line(source, 3, "auto cloned_value = value ? value->clone() : " + alternative.type + "{};");
-                           line(source, 3, "return " + field.type + "{std::in_place_type<" + alternative.type + ">, std::move(cloned_value)};");
+                           line(source, 3,
+                                "return " + field.type + "{std::in_place_type<" + alternative.type +
+                                      ">, std::move(cloned_value)};");
                         } else {
-                           line(source, 3, "return " + field.type + "{std::in_place_type<" + alternative.type + ">, value};");
+                           line(source, 3,
+                                "return " + field.type + "{std::in_place_type<" + alternative.type + ">, value};");
                         }
                         line(source, 2, "}");
                      }
@@ -2134,7 +2303,7 @@ namespace cpf {
             }
          }
 
-         for (const auto& rule : grammar.rules) {
+         for (const auto& rule: grammar.rules) {
             if (rule.synthetic) {
                continue;
             }
@@ -2143,7 +2312,7 @@ namespace cpf {
             if (info.base_rule) {
                auto concrete_descendants = collect_concrete_descendants(info.name, children, classes);
                line(source, 1, "switch (node.rule_id()) {");
-               for (const auto& descendant : concrete_descendants) {
+               for (const auto& descendant: concrete_descendants) {
                   line(source, 2, "case " + descendant + "::RuleId:");
                   line(source, 3, "return os << static_cast<const " + descendant + "&>(node);");
                }
@@ -2169,7 +2338,9 @@ namespace cpf {
                      line(source, 1, "}");
                   } else if (field.shape == field_shape::node_vector) {
                      line(source, 1, "os << \"[\";");
-                     line(source, 1, "for (std::size_t item_index = 0; item_index < node." + field.name + ".size(); ++item_index) {");
+                     line(source, 1,
+                          "for (std::size_t item_index = 0; item_index < node." + field.name +
+                                ".size(); ++item_index) {");
                      line(source, 2, "if (item_index != 0) {");
                      line(source, 3, "os << \", \";");
                      line(source, 2, "}");
@@ -2183,7 +2354,7 @@ namespace cpf {
                   } else if (field.shape == field_shape::capture_variant) {
                      line(source, 1, "std::visit([&](const auto& value) {");
                      line(source, 2, "using value_t = std::decay_t<decltype(value)>;");
-                     for (const auto& alternative : field.variant_alternatives) {
+                     for (const auto& alternative: field.variant_alternatives) {
                         line(source, 2, "if constexpr (std::is_same_v<value_t, " + alternative.type + ">) {");
                         if (alternative.node) {
                            line(source, 3, "if (value) {");
@@ -2205,7 +2376,9 @@ namespace cpf {
                      line(source, 1, "}");
                   } else if (field.shape == field_shape::terminal_vector) {
                      line(source, 1, "os << \"[\";");
-                     line(source, 1, "for (std::size_t item_index = 0; item_index < node." + field.name + ".size(); ++item_index) {");
+                     line(source, 1,
+                          "for (std::size_t item_index = 0; item_index < node." + field.name +
+                                ".size(); ++item_index) {");
                      line(source, 2, "if (item_index != 0) {");
                      line(source, 3, "os << \", \";");
                      line(source, 2, "}");
@@ -2237,4 +2410,3 @@ namespace cpf {
       return code;
    }
 } // namespace cpf
-

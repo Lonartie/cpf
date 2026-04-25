@@ -17,6 +17,6 @@ namespace cpf {
    /// @param base_name Base file name to embed into generated includes and parser names.
    /// @param code_namespace Optional C++ namespace that should wrap the generated public API.
    /// @return Generated header and source contents.
-   generated_code generate_code(const grammar& grammar, const std::string& base_name, std::string_view code_namespace = {});
+   generated_code generate_code(const grammar& grammar, const std::string& base_name,
+                                std::string_view code_namespace = {});
 } // namespace cpf
-

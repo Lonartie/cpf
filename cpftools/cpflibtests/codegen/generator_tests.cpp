@@ -17,7 +17,8 @@ TEST_SUITE("cpflib.code_generator") {
 
       SUBCASE("header output exposes node types and visitors") {
          CHECK(generated.header.find("Generated parser API for grammar 'calculator'.") != std::string::npos);
-         CHECK(generated.header.find("Every generated parse entry point uses the shared Earley runtime") != std::string::npos);
+         CHECK(generated.header.find("Every generated parse entry point uses the shared Earley runtime") !=
+               std::string::npos);
          CHECK(generated.header.find("Generated AST node for grammar rule 'number'.") != std::string::npos);
          CHECK(generated.header.find("this rule participates in a recursive rule cycle") != std::string::npos);
          CHECK(generated.header.find("Exclusive node storage is O(1).") != std::string::npos);
@@ -26,9 +27,15 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(generated.header.find("static constexpr std::size_t RuleId = ") != std::string::npos);
          CHECK(generated.header.find("static constexpr std::size_t ReductionCount = 5;") != std::string::npos);
          CHECK(generated.header.find("static std::array<cpf::complexity, 5> Complexity;") != std::string::npos);
-         CHECK(generated.header.find("static parse_result parse(std::string_view input, const cpf::parse_options& options = {});") != std::string::npos);
-         CHECK(generated.header.find("static auto complexity_inputs(std::size_t rule_id) -> std::span<const std::string_view>;") != std::string::npos);
-         CHECK(generated.header.find("static auto recompute_complexity(std::size_t rule_id) -> const cpf::complexity&;") != std::string::npos);
+         CHECK(generated.header.find(
+                     "static parse_result parse(std::string_view input, const cpf::parse_options& options = {});") !=
+               std::string::npos);
+         CHECK(generated.header.find(
+                     "static auto complexity_inputs(std::size_t rule_id) -> std::span<const std::string_view>;") !=
+               std::string::npos);
+         CHECK(generated.header.find(
+                     "static auto recompute_complexity(std::size_t rule_id) -> const cpf::complexity&;") !=
+               std::string::npos);
          CHECK(generated.header.find("cpf::matched_string value;") != std::string::npos);
          CHECK(generated.header.find("std::unique_ptr<expression> left;") != std::string::npos);
          CHECK(generated.header.find("template<typename Visitor>") != std::string::npos);
@@ -37,21 +44,32 @@ TEST_SUITE("cpflib.code_generator") {
 
       SUBCASE("source output wires parser, errors, and cloning") {
          CHECK(generated.source.find("grammar_productions{{") != std::string::npos);
-          CHECK(generated.source.find("grammar_rule_production_indices{{") != std::string::npos);
+         CHECK(generated.source.find("grammar_rule_production_indices{{") != std::string::npos);
          CHECK(generated.source.find("expression_complexity_inputs_0{{") != std::string::npos);
-         CHECK(generated.source.find("compute_generated_rule_complexity<expression>(expression_complexity_inputs_0") != std::string::npos);
+         CHECK(generated.source.find("compute_generated_rule_complexity<expression>(expression_complexity_inputs_0") !=
+               std::string::npos);
          CHECK(generated.source.find("std::array<cpf::complexity, 5> expression::Complexity{};") != std::string::npos);
-         CHECK(generated.source.find("cpf::parse_result<T> parse_generated(std::string_view input, std::size_t root_rule, const cpf::parse_options& options)") != std::string::npos);
+         CHECK(generated.source.find("cpf::parse_result<T> parse_generated(std::string_view input, std::size_t "
+                                     "root_rule, const cpf::parse_options& options)") != std::string::npos);
          CHECK(generated.source.find("auto valid_tree_count = std::size_t{0};") != std::string::npos);
          CHECK(generated.source.find("if (!validate_generated_tree(tree))") != std::string::npos);
-         CHECK(generated.source.find("result.error = cpf::detail::make_ambiguity_error(grammar_rule_names[root_rule]);") != std::string::npos);
-         CHECK(generated.source.find("result.forest.emplace_back(tree, definition_of_generated_tree(tree), tree->range") != std::string::npos);
-         CHECK(generated.source.find("auto expression::complexity_inputs(std::size_t rule_id) -> std::span<const std::string_view>") != std::string::npos);
-         CHECK(generated.source.find("auto expression::recompute_complexity(std::size_t rule_id) -> const cpf::complexity&") != std::string::npos);
+         CHECK(generated.source.find(
+                     "result.error = cpf::detail::make_ambiguity_error(grammar_rule_names[root_rule]);") !=
+               std::string::npos);
+         CHECK(generated.source.find(
+                     "result.forest.emplace_back(tree, definition_of_generated_tree(tree), tree->range") !=
+               std::string::npos);
+         CHECK(generated.source.find(
+                     "auto expression::complexity_inputs(std::size_t rule_id) -> std::span<const std::string_view>") !=
+               std::string::npos);
+         CHECK(generated.source.find(
+                     "auto expression::recompute_complexity(std::size_t rule_id) -> const cpf::complexity&") !=
+               std::string::npos);
          CHECK(generated.source.find("cpf::detail::earley_parse(input, grammar_spec,") != std::string::npos);
          CHECK(generated.source.find("expression -> addition") != std::string::npos);
-          CHECK(generated.source.find("const std::regex regex_0{") != std::string::npos);
-         CHECK(generated.source.find("std::unique_ptr<cpf::node> build_node(const parse_node_ptr& tree)") != std::string::npos);
+         CHECK(generated.source.find("const std::regex regex_0{") != std::string::npos);
+         CHECK(generated.source.find("std::unique_ptr<cpf::node> build_node(const parse_node_ptr& tree)") !=
+               std::string::npos);
          CHECK(generated.source.find("bool validate_generated_node(const cpf::node& node)") != std::string::npos);
          CHECK(generated.source.find("bool validate_generated_tree(const parse_node_ptr& tree)") != std::string::npos);
          CHECK(generated.source.find("rejected by precedence/associativity constraints") != std::string::npos);
@@ -98,11 +116,14 @@ TEST_SUITE("cpflib.code_generator") {
 
       auto generated = cpf::generate_code(grammar, "default_labels");
 
-      CHECK(generated.source.find("int precedence_of_default_label_expr(const default_label_expr& node)") != std::string::npos);
+      CHECK(generated.source.find("int precedence_of_default_label_expr(const default_label_expr& node)") !=
+            std::string::npos);
       CHECK(generated.source.find("case default_label_add::RuleId:") != std::string::npos);
       CHECK(generated.source.find("case default_label_multiply::RuleId:") != std::string::npos);
-      CHECK(generated.source.find("validate_default_label_expr_child(*value.right, 1, true, false)") != std::string::npos);
-      CHECK(generated.source.find("validate_default_label_expr_child(*value.right, 2, true, false)") != std::string::npos);
+      CHECK(generated.source.find("validate_default_label_expr_child(*value.right, 1, true, false)") !=
+            std::string::npos);
+      CHECK(generated.source.find("validate_default_label_expr_child(*value.right, 2, true, false)") !=
+            std::string::npos);
    }
 
    TEST_CASE("duplicate concrete rule declarations generate one merged node type") {
@@ -135,12 +156,18 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(generated.source.find("node->definition = 1;") != std::string::npos);
          CHECK(generated.source.find("copy->definition = definition;") != std::string::npos);
          CHECK(generated.source.find("switch (value.definition)") != std::string::npos);
-         CHECK(generated.source.find("std::unique_ptr<merged_message>{static_cast<merged_message*>(child_0.release())}") != std::string::npos);
+         CHECK(generated.source.find(
+                     "std::unique_ptr<merged_message>{static_cast<merged_message*>(child_0.release())}") !=
+               std::string::npos);
          CHECK(generated.source.find("merged_binary_complexity_inputs_0{{") != std::string::npos);
          CHECK(generated.source.find("merged_binary_complexity_inputs_1{{") != std::string::npos);
-         CHECK(generated.source.find("compute_generated_rule_complexity<merged_binary>(merged_binary_complexity_inputs_1") != std::string::npos);
-         CHECK(generated.source.find("std::array<cpf::complexity, 2> merged_binary::Complexity{};") != std::string::npos);
-         CHECK(generated.source.find("auto child_result = merged_greeting::parse(input, options);") != std::string::npos);
+         CHECK(generated.source.find(
+                     "compute_generated_rule_complexity<merged_binary>(merged_binary_complexity_inputs_1") !=
+               std::string::npos);
+         CHECK(generated.source.find("std::array<cpf::complexity, 2> merged_binary::Complexity{};") !=
+               std::string::npos);
+         CHECK(generated.source.find("auto child_result = merged_greeting::parse(input, options);") !=
+               std::string::npos);
          CHECK(generated.source.find("auto opaque = cpf::detail::opaque_tree_of(tree);") != std::string::npos);
       }
    }
@@ -199,7 +226,8 @@ TEST_SUITE("cpflib.code_generator") {
       auto generated = cpf::generate_code(grammar, "quantified");
 
       SUBCASE("header output exposes the expected quantified member types") {
-         CHECK(generated.header.find("Exclusive node storage is O(r) across repeated members `values`") != std::string::npos);
+         CHECK(generated.header.find("Exclusive node storage is O(r) across repeated members `values`") !=
+               std::string::npos);
          CHECK(generated.header.find("std::unique_ptr<quant_choice> value;") != std::string::npos);
          CHECK(generated.header.find("std::vector<std::unique_ptr<quant_choice>> values;") != std::string::npos);
          CHECK(generated.header.find("std::vector<cpf::matched_string> digits;") != std::string::npos);
@@ -265,7 +293,8 @@ TEST_SUITE("cpflib.code_generator") {
       auto generated = cpf::generate_code(grammar, "grouped_choice");
 
       CHECK(generated.header.find("cpf::matched_string value;") != std::string::npos);
-      CHECK(generated.header.find("std::variant<std::unique_ptr<grouped_choice_greeting>, std::unique_ptr<grouped_choice_farewell>> payload;") != std::string::npos);
+      CHECK(generated.header.find("std::variant<std::unique_ptr<grouped_choice_greeting>, "
+                                  "std::unique_ptr<grouped_choice_farewell>> payload;") != std::string::npos);
       CHECK(generated.header.find("$cpf_group_") == std::string::npos);
 
       CHECK(generated.source.find("extract_group_capture_") != std::string::npos);
@@ -288,18 +317,17 @@ TEST_SUITE("cpflib.code_generator") {
       CHECK(generated.header.find("} // namespace generated::fixtures") != std::string::npos);
 
       CHECK(generated.source.find("namespace generated::fixtures {") != std::string::npos);
-      CHECK(generated.source.find("expression::parse_result expression::parse(std::string_view input, const cpf::parse_options& options)") != std::string::npos);
-      CHECK(generated.source.find("std::ostream& operator<<(std::ostream& os, const addition& node)") != std::string::npos);
+      CHECK(generated.source.find("expression::parse_result expression::parse(std::string_view input, const "
+                                  "cpf::parse_options& options)") != std::string::npos);
+      CHECK(generated.source.find("std::ostream& operator<<(std::ostream& os, const addition& node)") !=
+            std::string::npos);
       CHECK(generated.source.find("} // namespace generated::fixtures") != std::string::npos);
    }
 
    TEST_CASE("invalid generated namespaces are rejected") {
       auto grammar = cpf::parse_grammar("value -> 'x':text;");
 
-      CHECK_THROWS_WITH_AS(
-         cpf::generate_code(grammar, "invalid_namespace", "generated::1broken"),
-         doctest::Contains("Invalid C++ namespace 'generated::1broken'"),
-         std::runtime_error);
+      CHECK_THROWS_WITH_AS(cpf::generate_code(grammar, "invalid_namespace", "generated::1broken"),
+                           doctest::Contains("Invalid C++ namespace 'generated::1broken'"), std::runtime_error);
    }
 }
-

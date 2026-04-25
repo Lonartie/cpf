@@ -5,22 +5,22 @@ This file records the attribution and license information that must be preserved
 
 ## Dependency inventory
 
-| Component | Version | CPF usage | Source | License |
-| --- | --- | --- | --- | --- |
-| doctest | 2.5.0 | Vendored single-header test framework used by `cpftools/cpflibtests` and `cpftools/cpftests` via `cpftools/support/doctest.h` | https://github.com/doctest/doctest | MIT |
-| CPM.cmake | 0.42.1 | Fetched from `cpftools/cpfbench/CMakeLists.txt` to download benchmark dependencies | https://github.com/cpm-cmake/CPM.cmake | MIT |
-| Google Benchmark | 1.9.4 | Fetched from `cpftools/cpfbench/CMakeLists.txt` and linked into `cpfbench` | https://github.com/google/benchmark | Apache License 2.0 |
+| Component        | Version | CPF usage                                                                                                                     | Source                                 | License            |
+|------------------|---------|-------------------------------------------------------------------------------------------------------------------------------|----------------------------------------|--------------------|
+| doctest          | 2.5.0   | Vendored single-header test framework used by `cpftools/cpflibtests` and `cpftools/cpftests` via `cpftools/support/doctest.h` | https://github.com/doctest/doctest     | MIT                |
+| CPM.cmake        | 0.42.1  | Fetched from `cpftools/cpfbench/CMakeLists.txt` to download benchmark dependencies                                            | https://github.com/cpm-cmake/CPM.cmake | MIT                |
+| Google Benchmark | 1.9.4   | Fetched from `cpftools/cpfbench/CMakeLists.txt` and linked into `cpfbench`                                                    | https://github.com/google/benchmark    | Apache License 2.0 |
 
 ## MIT-licensed components
 
 The following CPF dependencies are distributed under the MIT License:
 
 - **doctest 2.5.0**
-  - Upstream copyright notice: `Copyright (c) 2016-2023 Viktor Kirilov`
-  - Vendored file in this repository: `cpftools/vendor/doctest/doctest.h`
+    - Upstream copyright notice: `Copyright (c) 2016-2023 Viktor Kirilov`
+    - Vendored file in this repository: `cpftools/vendor/doctest/doctest.h`
 - **CPM.cmake 0.42.1**
-  - Upstream copyright notice: `Copyright (c) 2019-2023 Lars Melchior and contributors`
-  - Fetched during configure from the release URL declared in `cpftools/cpfbench/CMakeLists.txt`
+    - Upstream copyright notice: `Copyright (c) 2019-2023 Lars Melchior and contributors`
+    - Fetched during configure from the release URL declared in `cpftools/cpfbench/CMakeLists.txt`
 
 ### MIT License
 
@@ -49,10 +49,11 @@ SOFTWARE.
 The following CPF dependency is distributed under the Apache License, Version 2.0:
 
 - **Google Benchmark 1.9.4**
-  - Upstream repository: https://github.com/google/benchmark
-  - CPF usage: linked into the `cpfbench` executable
-  - Upstream notes that benchmark authors for copyright purposes are listed in its `AUTHORS` file
-  - The fetched source tree used by this project includes an Apache-2.0 `LICENSE` file and does not include a separate `NOTICE` file
+    - Upstream repository: https://github.com/google/benchmark
+    - CPF usage: linked into the `cpfbench` executable
+    - Upstream notes that benchmark authors for copyright purposes are listed in its `AUTHORS` file
+    - The fetched source tree used by this project includes an Apache-2.0 `LICENSE` file and does not include a separate
+      `NOTICE` file
 
 ### Apache License 2.0
 

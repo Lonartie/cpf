@@ -11,9 +11,8 @@ namespace cpf {
    namespace {
       class sample_planner {
       public:
-         explicit sample_planner(const grammar& grammar)
-            : grammar_{grammar} {
-            for (const auto& rule : grammar_.rules) {
+         explicit sample_planner(const grammar& grammar) : grammar_{grammar} {
+            for (const auto& rule: grammar_.rules) {
                rules_by_name_.emplace(rule.identifier, &rule);
             }
             compute_minimal_rule_samples();
@@ -21,7 +20,7 @@ namespace cpf {
 
          [[nodiscard]] auto build() -> rule_complexity_samples {
             rule_complexity_samples samples;
-            for (const auto& rule : grammar_.rules) {
+            for (const auto& rule: grammar_.rules) {
                if (rule.synthetic) {
                   continue;
                }
@@ -70,7 +69,7 @@ namespace cpf {
                if (char_class.find('_') != std::string_view::npos) {
                   return "_";
                }
-               for (char current : char_class) {
+               for (char current: char_class) {
                   if (std::isalnum(static_cast<unsigned char>(current)) != 0) {
                      return std::string{1, current};
                   }
@@ -80,12 +79,18 @@ namespace cpf {
 
             auto escape_sample = [](char escaped) -> std::string {
                switch (escaped) {
-                  case 'd': return "0";
-                  case 'w': return "w";
-                  case 's': return " ";
-                  case 'n': return "\n";
-                  case 't': return "\t";
-                  default: return std::string{1, escaped};
+                  case 'd':
+                     return "0";
+                  case 'w':
+                     return "w";
+                  case 's':
+                     return " ";
+                  case 'n':
+                     return "\n";
+                  case 't':
+                     return "\t";
+                  default:
+                     return std::string{1, escaped};
                }
             };
 
@@ -133,7 +138,8 @@ namespace cpf {
                   } else if (quantifier == '{') {
                      auto end = pattern.find('}', index + 1);
                      if (end != std::string_view::npos) {
-                        repetitions = static_cast<std::size_t>(std::stoull(std::string{pattern.substr(index + 1, end - index - 1)}));
+                        repetitions = static_cast<std::size_t>(
+                              std::stoull(std::string{pattern.substr(index + 1, end - index - 1)}));
                         index = end + 1;
                      }
                   }
@@ -149,7 +155,7 @@ namespace cpf {
 
          [[nodiscard]] auto join_parts(const std::vector<std::string>& parts) const -> std::string {
             std::string joined;
-            for (const auto& part : parts) {
+            for (const auto& part: parts) {
                if (part.empty()) {
                   continue;
                }
@@ -208,10 +214,11 @@ namespace cpf {
             return join_parts(pieces);
          }
 
-         [[nodiscard]] auto minimal_production_sample(const production& production) const -> std::optional<std::string> {
+         [[nodiscard]] auto minimal_production_sample(const production& production) const
+               -> std::optional<std::string> {
             std::vector<std::string> parts;
             parts.reserve(production.symbols.size());
-            for (const auto& symbol : production.symbols) {
+            for (const auto& symbol: production.symbols) {
                auto sample = minimal_symbol_sample(symbol);
                if (!sample.has_value()) {
                   return std::nullopt;
@@ -224,16 +231,16 @@ namespace cpf {
          }
 
          void compute_minimal_rule_samples() {
-            for (const auto& rule : grammar_.rules) {
+            for (const auto& rule: grammar_.rules) {
                minimal_rule_samples_.emplace(rule.identifier, std::nullopt);
             }
 
             auto changed = true;
             while (changed) {
                changed = false;
-               for (const auto& rule : grammar_.rules) {
+               for (const auto& rule: grammar_.rules) {
                   std::optional<std::string> best;
-                  for (const auto& production : rule.productions) {
+                  for (const auto& production: rule.productions) {
                      auto sample = minimal_production_sample(production);
                      if (!sample.has_value()) {
                         continue;
@@ -255,7 +262,7 @@ namespace cpf {
                }
             }
 
-            for (const auto& rule : grammar_.rules) {
+            for (const auto& rule: grammar_.rules) {
                if (!minimal_rule_samples_.at(rule.identifier).has_value()) {
                   throw std::runtime_error{"Unable to generate minimal complexity samples for every grammar rule"};
                }
@@ -271,7 +278,8 @@ namespace cpf {
             }
 
             auto requested_tier = tier;
-            if (auto active = active_rule_counts_.find(symbol.value); active != active_rule_counts_.end() && active->second > 0) {
+            if (auto active = active_rule_counts_.find(symbol.value);
+                active != active_rule_counts_.end() && active->second > 0) {
                requested_tier = requested_tier == 0 ? 0 : requested_tier - 1;
             }
             return build_rule_sample(symbol.value, requested_tier);
@@ -297,10 +305,11 @@ namespace cpf {
             return join_parts(parts);
          }
 
-         [[nodiscard]] auto build_production_sample(const production& production, std::size_t tier) -> std::optional<std::string> {
+         [[nodiscard]] auto build_production_sample(const production& production, std::size_t tier)
+               -> std::optional<std::string> {
             std::vector<std::string> parts;
             parts.reserve(production.symbols.size());
-            for (const auto& symbol : production.symbols) {
+            for (const auto& symbol: production.symbols) {
                auto sample = build_symbol_sample(symbol, tier);
                if (!sample.has_value()) {
                   return std::nullopt;
@@ -312,7 +321,8 @@ namespace cpf {
             return join_parts(parts);
          }
 
-         [[nodiscard]] auto build_rule_sample(std::string_view rule_name, std::size_t tier) -> std::optional<std::string> {
+         [[nodiscard]] auto build_rule_sample(std::string_view rule_name, std::size_t tier)
+               -> std::optional<std::string> {
             auto cache_key = std::string{rule_name} + "#" + std::to_string(tier);
             if (auto cache = rule_sample_cache_.find(cache_key); cache != rule_sample_cache_.end()) {
                return cache->second;
@@ -326,12 +336,13 @@ namespace cpf {
 
             auto rule_it = rules_by_name_.find(std::string{rule_name});
             if (rule_it == rules_by_name_.end()) {
-               throw std::runtime_error{"Unable to generate complexity sample for unknown rule '" + std::string{rule_name} + "'"};
+               throw std::runtime_error{"Unable to generate complexity sample for unknown rule '" +
+                                        std::string{rule_name} + "'"};
             }
 
             ++active_rule_counts_[std::string{rule_name}];
             std::optional<std::string> best;
-            for (const auto& production : rule_it->second->productions) {
+            for (const auto& production: rule_it->second->productions) {
                auto sample = build_production_sample(production, tier);
                if (!sample.has_value()) {
                   continue;
@@ -350,13 +361,16 @@ namespace cpf {
             return best;
          }
 
-         [[nodiscard]] auto build_reduction_samples(std::string_view rule_name, const production& production) -> std::vector<std::string> {
+         [[nodiscard]] auto build_reduction_samples(std::string_view rule_name, const production& production)
+               -> std::vector<std::string> {
             std::vector<std::string> samples;
             samples.reserve(4);
             for (auto tier = std::size_t{0}; tier < 4; ++tier) {
-               auto sample = tier == 0 ? minimal_production_sample(production) : build_production_sample(production, tier);
+               auto sample =
+                     tier == 0 ? minimal_production_sample(production) : build_production_sample(production, tier);
                if (!sample.has_value()) {
-                  throw std::runtime_error{"Unable to generate complexity samples for rule '" + std::string{rule_name} + "' definition " + std::to_string(production.definition)};
+                  throw std::runtime_error{"Unable to generate complexity samples for rule '" + std::string{rule_name} +
+                                           "' definition " + std::to_string(production.definition)};
                }
                samples.push_back(*sample);
             }
@@ -369,7 +383,7 @@ namespace cpf {
          [[nodiscard]] auto build_rule_samples(const rule& rule) -> std::vector<std::vector<std::string>> {
             std::vector<std::vector<std::string>> samples_by_definition;
             samples_by_definition.reserve(rule.productions.size());
-            for (const auto& production : rule.productions) {
+            for (const auto& production: rule.productions) {
                samples_by_definition.push_back(build_reduction_samples(rule.identifier, production));
             }
             return samples_by_definition;
@@ -387,8 +401,3 @@ namespace cpf {
       return sample_planner{grammar}.build();
    }
 } // namespace cpf
-
-
-
-
-
