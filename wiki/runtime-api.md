@@ -20,7 +20,6 @@ struct expression : cpf::node {
     static auto complexity_inputs(std::size_t production_index) -> std::span<const std::string_view>;
     static auto recompute_complexity(std::size_t production_index) -> const cpf::complexity&;
     std::size_t rule_id() const override;
-    const std::type_info& type() const override;
     std::unique_ptr<expression> clone() const;
 };
 ```
@@ -94,7 +93,7 @@ materializes lazily, but it now returns `const T&` / `const T*` access instead o
 Recovered trees also expose:
 
 - `parse_tree<T>::damaged_nodes()` for fast access to damaged AST nodes after materialization
-- `parse_tree<T>::repaired_input(std::string_view)` to rebuild an input string whose shape matches the recovered AST
+- `parse_tree<T>::try_repair_input(std::string_view)` to rebuild an input string whose shape matches the recovered AST
 - `cpf::node::is_damaged()`
 - `cpf::node::damage()`
 
@@ -118,7 +117,7 @@ struct node_damage {
 - `detail` carries the skipped snippet or inserted token text when available
 - `message` explains why recovery was needed and, for inserted virtual tokens, which token options were inserted
 
-`parse_tree<T>::repaired_input(input)` returns `std::optional<std::string>` and works like this:
+`parse_tree<T>::try_repair_input(input)` returns `std::optional<std::string>` and works like this:
 
 - when the tree has ignored damage, the corresponding ignored source ranges are removed from `input`
 - when the tree has inserted virtual tokens, the synthesized zero-width terminals are inserted into `input`
@@ -154,10 +153,9 @@ Source positions are tracked as one-based line and column values together with a
 
 `cpf::parse_error` carries:
 
-- zero-based byte offset of the furthest failure
-- one-based line and column of the furthest failure
+- `cpf::source_position position`
 - expected tokens or grammar elements
-- the found token
+- structured information about what was found
 - contextual notes
 - a human-readable message
 
@@ -185,7 +183,7 @@ Important AST semantics:
 - ignored invalid input is **not** inserted as a child node in the AST
 - inserted virtual tokens **are** preserved in the AST shape as ordinary zero-width terminal matches so the AST remains structurally healthy
 - both repair kinds are discoverable by traversing `parse_tree<T>::damaged_nodes()` and then inspecting each node's `damage()` entries
-- `repaired_input(...)` removes ignored ranges even though they are not AST children, and inserts virtual tokens because they are part of the AST shape
+- `try_repair_input(...)` removes ignored ranges even though they are not AST children, and inserts virtual tokens because they are part of the AST shape
 
 ## Complexity metadata
 
@@ -246,7 +244,7 @@ if (!result.success || result.forest.empty()) {
 
 auto& tree = result.forest.front();
 if (tree.is_partial()) {
-    if (auto repaired = tree.repaired_input("(hi"); repaired.has_value()) {
+    if (auto repaired = tree.try_repair_input("(hi"); repaired.has_value()) {
         std::cout << *repaired << '\n';
     }
     for (const auto* damaged : tree.damaged_nodes()) {

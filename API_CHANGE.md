@@ -79,71 +79,9 @@ Generated `visit(...)`, `visit_recursive(...)`, and `operator<<` fit the rest of
 
 ## Consistency and usability issues
 
-## 1. `type()` is likely redundant
-
-`cpf::node` currently requires:
-
-- `rule_id()`
-- `type()`
-
-But the runtime already has RTTI via a polymorphic base, and the generated API mostly leans on `rule_id()` plus visitors.
-
-### Recommendation
-
-Consider removing `type()` unless there is a strong documented use case for it.
-
-## 2. `parse_error` does not align well with `source_position`
-
-`parse_error` stores:
-
-- `offset`
-- `line`
-- `column`
-
-while the rest of the runtime uses `source_position` and `source_range`.
-
-### Recommendation
-
-Prefer:
-
-- `source_position position;`
-
-This would make error positions align with the rest of the API.
-
-## 3. `parse_error.found` is too stringly typed
-
-Examples of values currently include:
-
-- quoted tokens like `"*"`
-- `"<end of input>"`
-- `"<ambiguous parse>"`
-- `"<filtered parse>"`
-
-### Why this is odd
-
-Consumers have to string-match sentinel values to understand the kind of failure.
-
-### Recommendation
-
-Introduce structured error kinds and keep `message` as the display string.
-
-## 4. `repaired_input(...)` has a slightly misleading name
-
-The method is useful, but it is not a simple accessor. It reconstructs a repaired form of caller-provided input and may fail if the provided text no longer structurally matches the tree.
-
-### Recommendation
-
-A clearer name would be something like:
-
-- `try_repair_input(...)`
-- `reconstruct_repaired_input(...)`
-- `repaired_input_from(...)`
-
-My recommendation would be `try_repair_input(...)`
-
 ## Generated API oddities
 
-## 5. `Complexity` as public mutable static state is awkward
+## 1. `Complexity` as public mutable static state is awkward
 
 Generated nodes expose:
 
@@ -159,7 +97,7 @@ This exposes global mutable state directly in the public API and likely complica
 
 Hide the cache and expose accessor-based APIs instead.
 
-## 6. Group-capture `std::variant<std::unique_ptr<...>>` payloads may be awkward to consume
+## 2. Group-capture `std::variant<std::unique_ptr<...>>` payloads may be awkward to consume
 
 These are type-safe, but less ergonomic than the rest of the inheritance-and-visitor-oriented API.
 
@@ -167,7 +105,7 @@ These are type-safe, but less ergonomic than the rest of the inheritance-and-vis
 
 Consider generating helper visitor functions for such payload members, or prefer a common generated base type when possible.
 
-## 7. `visit_recursive(...)` is read-only only
+## 3. `visit_recursive(...)` is read-only only
 
 The generated traversal helpers operate on const nodes.
 

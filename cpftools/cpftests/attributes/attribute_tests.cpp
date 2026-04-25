@@ -139,9 +139,9 @@ TEST_SUITE("generated.attributes") {
       CHECK_FALSE(result.success);
       CHECK(result.status == cpf::parse_status::failure);
       REQUIRE(result.error.has_value());
-      CHECK(result.error->line == 1);
-      CHECK(result.error->column == 4);
-      CHECK(result.error->found == "<end of input>");
+      CHECK(result.error->position.line == 1);
+      CHECK(result.error->position.column == 4);
+      CHECK(result.error->found.kind == cpf::parse_error_found_kind::end_of_input);
       CHECK_FALSE(result.error->expected.empty());
       CHECK(result.error->message.find("pattern [0-9]+") != std::string::npos);
       CHECK(result.error->message.find("while parsing rule 'assoc_number'") != std::string::npos);

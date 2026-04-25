@@ -8,7 +8,6 @@
 #include <string>
 #include <string_view>
 #include <type_traits>
-#include <typeinfo>
 
 namespace {
    constexpr std::array<cpf::detail::parser_symbol, 2> recover_ab_symbols{{
@@ -61,7 +60,6 @@ namespace {
 
       [[nodiscard]] std::size_t rule_id() const override { return RuleId; }
 
-      [[nodiscard]] const std::type_info& type() const override { return typeid(fake_node); }
 
    protected:
       [[nodiscard]] std::unique_ptr<cpf::node> clone_node() const override {
@@ -148,10 +146,11 @@ TEST_SUITE("cpflib.runtime") {
 
       auto error = tracker.build("1 + * 2");
 
-      CHECK(error.offset == 4);
-      CHECK(error.line == 1);
-      CHECK(error.column == 5);
-      CHECK(error.found == "\"*\"");
+      CHECK(error.position.offset == 4);
+      CHECK(error.position.line == 1);
+      CHECK(error.position.column == 5);
+      CHECK(error.found.kind == cpf::parse_error_found_kind::token);
+      CHECK(error.found.text == "*");
       CHECK(error.expected.size() == 2);
       CHECK(error.message.find("pattern [0-9]+") != std::string::npos);
       CHECK(error.message.find("\"(\"") != std::string::npos);
@@ -162,18 +161,20 @@ TEST_SUITE("cpflib.runtime") {
 
    TEST_CASE("parse errors at the same position merge expectations and notes") {
       cpf::parse_error merged;
-      merged.line = 2;
-      merged.column = 4;
+      merged.position.line = 2;
+      merged.position.column = 4;
       merged.expected = {"\"hello\""};
-      merged.found = "\"help\"";
+      merged.found.kind = cpf::parse_error_found_kind::token;
+      merged.found.text = "help";
       merged.notes = {"while parsing rule 'say_hello'"};
       cpf::detail::error_tracker::finalize(merged);
 
       cpf::parse_error candidate;
-      candidate.line = 2;
-      candidate.column = 4;
+      candidate.position.line = 2;
+      candidate.position.column = 4;
       candidate.expected = {"\"world\""};
-      candidate.found = "\"help\"";
+      candidate.found.kind = cpf::parse_error_found_kind::token;
+      candidate.found.text = "help";
       candidate.notes = {"while parsing rule 'say_world'"};
       cpf::detail::error_tracker::finalize(candidate);
 

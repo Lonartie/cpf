@@ -88,18 +88,37 @@ namespace cpf {
 
       inline std::string quoted(std::string_view value) { return std::string{"\""} + escape_string(value) + "\""; }
 
-      inline std::string found_token(std::string_view input, std::size_t offset) {
+      inline parse_error_found found_token(std::string_view input, std::size_t offset) {
+         parse_error_found found;
          if (offset >= input.size()) {
-            return "<end of input>";
+            return found;
          }
          auto end = offset;
          if (std::isspace(static_cast<unsigned char>(input[end])) != 0) {
-            return quoted(std::string_view{input.data() + end, 1});
+            found.kind = parse_error_found_kind::token;
+            found.text = std::string{std::string_view{input.data() + end, 1}};
+            return found;
          }
          while (end < input.size() && std::isspace(static_cast<unsigned char>(input[end])) == 0) {
             ++end;
          }
-         return quoted(input.substr(offset, std::min<std::size_t>(end - offset, 16)));
+         found.kind = parse_error_found_kind::token;
+         found.text = std::string{input.substr(offset, std::min<std::size_t>(end - offset, 16))};
+         return found;
+      }
+
+      inline std::string describe_found(const parse_error_found& found) {
+         switch (found.kind) {
+            case parse_error_found_kind::token:
+               return std::string{"\""} + escape_string(found.text) + "\"";
+            case parse_error_found_kind::end_of_input:
+               return "<end of input>";
+            case parse_error_found_kind::ambiguous_parse:
+               return "<ambiguous parse>";
+            case parse_error_found_kind::filtered_parse:
+               return "<filtered parse>";
+         }
+         return "<unknown>";
       }
 
       inline std::string join_expected(const std::vector<std::string>& expected) {
@@ -145,9 +164,7 @@ namespace cpf {
          [[nodiscard]] parse_error build(std::string_view input) const {
             parse_error error;
             auto location = locate(input, furthest_);
-            error.offset = location.offset;
-            error.line = location.line;
-            error.column = location.column;
+            error.position = location;
             error.expected.assign(expected_.begin(), expected_.end());
             error.found = found_token(input, furthest_);
             error.notes.assign(notes_.begin(), notes_.end());
@@ -156,9 +173,9 @@ namespace cpf {
          }
 
          static void finalize(parse_error& error) {
-            error.message = "Parse error at line " + std::to_string(error.line) + ", column " +
-                            std::to_string(error.column) + ": expected " + join_expected(error.expected) +
-                            " but found " + error.found;
+            error.message = "Parse error at line " + std::to_string(error.position.line) + ", column " +
+                            std::to_string(error.position.column) + ": expected " + join_expected(error.expected) +
+                            " but found " + describe_found(error.found);
             if (!error.notes.empty()) {
                error.message += "\nNotes:";
                for (const auto& note: error.notes) {
@@ -183,11 +200,13 @@ namespace cpf {
       }
 
       inline void merge_parse_error(parse_error& target, const parse_error& candidate) {
-         if (candidate.line > target.line || (candidate.line == target.line && candidate.column > target.column)) {
+         if (candidate.position.line > target.position.line ||
+             (candidate.position.line == target.position.line && candidate.position.column > target.position.column)) {
             target = candidate;
             return;
          }
-         if (candidate.line < target.line || (candidate.line == target.line && candidate.column < target.column)) {
+         if (candidate.position.line < target.position.line ||
+             (candidate.position.line == target.position.line && candidate.position.column < target.position.column)) {
             return;
          }
 
@@ -203,7 +222,7 @@ namespace cpf {
       inline auto make_ambiguity_error(std::string_view rule_name) -> parse_error {
          parse_error error;
          error.expected.emplace_back("unambiguous parse");
-         error.found = "<ambiguous parse>";
+         error.found.kind = parse_error_found_kind::ambiguous_parse;
          error.notes.push_back("multiple valid derivations were detected while parsing rule '" +
                                std::string{rule_name} + "'");
          error_tracker::finalize(error);

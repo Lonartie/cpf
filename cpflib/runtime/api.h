@@ -6,23 +6,62 @@
 #include <optional>
 #include <string>
 #include <string_view>
-#include <typeinfo>
 #include <utility>
 #include <vector>
 
 namespace cpf {
+   /// @brief Classifies the shape of the input observed at the furthest parse failure.
+   enum class parse_error_found_kind {
+      token,
+      end_of_input,
+      ambiguous_parse,
+      filtered_parse
+   };
+
+   /// @brief Structured description of what the parser observed at the furthest failure.
+   struct parse_error_found {
+      parse_error_found_kind kind = parse_error_found_kind::end_of_input;
+      std::string text;
+   };
+
+   [[nodiscard]] constexpr auto to_string(parse_error_found_kind kind) -> std::string_view {
+      switch (kind) {
+         case parse_error_found_kind::token:
+            return "token";
+         case parse_error_found_kind::end_of_input:
+            return "end of input";
+         case parse_error_found_kind::ambiguous_parse:
+            return "ambiguous parse";
+         case parse_error_found_kind::filtered_parse:
+            return "filtered parse";
+      }
+      return "unknown";
+   }
+
+   /// @brief One position within an input source.
+   struct source_position {
+      /// @brief Zero-based byte offset in the original input.
+      std::size_t offset = 0;
+      /// @brief One-based line number.
+      std::size_t line = 1;
+      /// @brief One-based column number.
+      std::size_t column = 1;
+   };
+
+   /// @brief Half-open source range covering a parsed match.
+   struct source_range {
+      source_position begin;
+      source_position end;
+   };
+
    /// @brief Describes the furthest parse failure that occurred while parsing input.
    struct parse_error {
-      /// @brief Zero-based byte offset of the parse error.
-      std::size_t offset = 0;
-      /// @brief One-based line number of the parse error.
-      std::size_t line = 1;
-      /// @brief One-based column number of the parse error.
-      std::size_t column = 1;
+      /// @brief Source position of the parse error.
+      source_position position;
       /// @brief Tokens or grammar elements that would have been accepted.
       std::vector<std::string> expected;
-      /// @brief Token that was found at the point of failure.
-      std::string found = "<end of input>";
+      /// @brief Structured description of what the parser observed at the point of failure.
+      parse_error_found found;
       /// @brief Additional contextual notes explaining why a token or rule was expected.
       std::vector<std::string> notes;
       /// @brief Human-readable error message.
@@ -45,22 +84,6 @@ namespace cpf {
       bool success = false;
       /// @brief Optional failure details when recognition did not succeed.
       std::optional<parse_error> error;
-   };
-
-   /// @brief One position within an input source.
-   struct source_position {
-      /// @brief Zero-based byte offset in the original input.
-      std::size_t offset = 0;
-      /// @brief One-based line number.
-      std::size_t line = 1;
-      /// @brief One-based column number.
-      std::size_t column = 1;
-   };
-
-   /// @brief Half-open source range covering a parsed match.
-   struct source_range {
-      source_position begin;
-      source_position end;
    };
 
    /// @brief Classifies how a damaged parse region was recovered.
@@ -120,10 +143,6 @@ namespace cpf {
       /// @brief Returns the generated rule identifier of the concrete node.
       /// @return Stable rule id used for constant-time dispatch in generated visitors.
       [[nodiscard]] virtual std::size_t rule_id() const = 0;
-
-      /// @brief Returns the dynamic type of the concrete node.
-      /// @return The type information of the concrete node instance.
-      [[nodiscard]] virtual const std::type_info& type() const = 0;
 
       /// @brief True when this node was recovered from a damaged parse.
       [[nodiscard]] auto is_damaged() const -> bool { return !m_damage.empty(); }
@@ -215,7 +234,7 @@ namespace cpf {
 
       [[nodiscard]] auto is_partial() const -> bool { return m_state->partial; }
 
-      [[nodiscard]] auto repaired_input(std::string_view input) const -> std::optional<std::string> {
+      [[nodiscard]] auto try_repair_input(std::string_view input) const -> std::optional<std::string> {
          if (!m_state->partial || !m_state->repair_input) {
             return std::string{input};
          }

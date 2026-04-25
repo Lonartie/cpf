@@ -1155,7 +1155,6 @@ namespace cpf {
             line(header, 1, "static auto complexity_inputs(std::size_t production_index) -> std::span<const std::string_view>;");
             line(header, 1, "static auto recompute_complexity(std::size_t production_index) -> const cpf::complexity&;");
             line(header, 1, "std::size_t rule_id() const override;");
-            line(header, 1, "const std::type_info& type() const override;");
             line(header, 1, "std::unique_ptr<" + info.name + "> clone() const;");
             if (!info.base_rule) {
                line(header, 0);
@@ -2196,7 +2195,7 @@ namespace cpf {
          line(source, 2, "}");
          line(source, 2, "auto filtered_error = cpf::parse_error{};");
          line(source, 2, "filtered_error.expected.push_back(\"valid parse tree\");");
-         line(source, 2, "filtered_error.found = \"<filtered parse>\";");
+         line(source, 2, "filtered_error.found.kind = cpf::parse_error_found_kind::filtered_parse;");
          line(source, 2,
               "filtered_error.notes.push_back(std::string{R\"(completed Earley parses for rule ')\"} + "
               "std::string{grammar_rule_names[root_rule]} + R\"(' were rejected by precedence/associativity "
@@ -2402,10 +2401,6 @@ namespace cpf {
             line(source, 0);
             line(source, 0, "std::size_t " + info.name + "::rule_id() const {");
             line(source, 1, "return RuleId;");
-            line(source, 0, "}");
-            line(source, 0);
-            line(source, 0, "const std::type_info& " + info.name + "::type() const {");
-            line(source, 1, "return typeid(" + info.name + ");");
             line(source, 0, "}");
             line(source, 0);
             line(source, 0, "std::unique_ptr<" + info.name + "> " + info.name + "::clone() const {");
