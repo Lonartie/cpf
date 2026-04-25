@@ -56,6 +56,10 @@ namespace cpf {
          }
 
       private:
+         [[nodiscard]] static bool is_quote(char ch) {
+            return ch == '\'' || ch == '"';
+         }
+
          [[nodiscard]] bool eof() const {
             return position_ >= text_.size();
          }
@@ -160,9 +164,10 @@ namespace cpf {
 
          std::string parse_quoted() {
             skip_ignored();
-            if (current() != '\'') {
+            if (!is_quote(current())) {
                throw error("Expected quoted string");
             }
+            auto quote = current();
             advance();
             std::string value;
             while (!eof()) {
@@ -179,12 +184,13 @@ namespace cpf {
                      case 't': value += '\t'; break;
                      case '\\': value += '\\'; break;
                      case '\'': value += '\''; break;
+                     case '"': value += '"'; break;
                      default: value += escaped; break;
                   }
                   advance();
                   continue;
                }
-               if (ch == '\'') {
+               if (ch == quote) {
                   advance();
                   return value;
                }
@@ -209,7 +215,7 @@ namespace cpf {
             }
 
             skip_ignored();
-            if (current() == '\'') {
+            if (is_quote(current())) {
                parsed_attribute.value = parse_quoted();
                parsed_attribute.numeric = false;
                return parsed_attribute;
@@ -297,11 +303,11 @@ namespace cpf {
          symbol parse_symbol() {
             skip_ignored();
             symbol parsed_symbol;
-            if (current() == 'r' && text_.substr(position_, 2) == "r'") {
+            if (current() == 'r' && position_ + 1 < text_.size() && is_quote(text_[position_ + 1])) {
                advance();
                parsed_symbol.kind = symbol_kind::regex;
                parsed_symbol.value = parse_quoted();
-            } else if (current() == '\'') {
+            } else if (is_quote(current())) {
                parsed_symbol.kind = symbol_kind::literal;
                parsed_symbol.value = parse_quoted();
             } else {

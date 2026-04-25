@@ -29,6 +29,8 @@ CPF currently supports:
 - multi-file grammars via `import`
 - generated-code namespaces
 
+Grammar strings may use either single quotes or double quotes for literals, regex bodies, quoted attribute values, and import paths.
+
 ## Grammar example
 
 ```text
@@ -48,9 +50,9 @@ Labels are optional. Labeled symbols become members on the generated node type; 
 | Name | Values | Example | Meaning |
 | ---- | ------ | ------- | ------- |
 | `prec` | `= <num>` | `[prec = 10]` | Absolute precedence rank |
-| `prec` | `= <str>` | `[prec = 'sum']` | Same precedence group as a label |
-| `prec` | `< <str>` | `[prec < 'product']` | Lower precedence than the referenced label |
-| `prec` | `> <str>` | `[prec > 'sum']` | Higher precedence than the referenced label |
+| `prec` | `= <str>` | `[prec = 'sum']` or `[prec = "sum"]` | Same precedence group as a label |
+| `prec` | `< <str>` | `[prec < 'product']` or `[prec < "product"]` | Lower precedence than the referenced label |
+| `prec` | `> <str>` | `[prec > 'sum']` or `[prec > "sum"]` | Higher precedence than the referenced label |
 | `dir` | `left`, `right` | `[dir = right]` | Operator associativity |
 | `lbl` | `<str>` | `[lbl = 'number']` | Rule label used for precedence grouping |
 
@@ -112,6 +114,8 @@ import 'imports/imported_words.cpf';
 
 imported_bundle_message -> imported_bundle_greeting | imported_bundle_parting;
 ```
+
+Double-quoted imports such as `import "imports/imported_expr.cpf";` work the same way.
 
 Imports are resolved relative to the importing file, expanded transitively, and cycle-checked.
 

@@ -20,6 +20,10 @@ namespace cpf {
          }
 
       private:
+         [[nodiscard]] static bool is_quote(char ch) {
+            return ch == '\'' || ch == '"';
+         }
+
          struct file_content {
             std::string text;
             std::filesystem::path normalized_path;
@@ -176,10 +180,11 @@ namespace cpf {
             const std::filesystem::path& importer_path) {
             position += std::string_view{"import"}.size();
             skip_ignored(text, position, line);
-            if (position >= text.size() || text[position] != '\'') {
-               throw std::runtime_error{"Grammar import error in '" + importer_path.string() + "' at line " + std::to_string(line) + ": expected single-quoted import path"};
+            if (position >= text.size() || !is_quote(text[position])) {
+               throw std::runtime_error{"Grammar import error in '" + importer_path.string() + "' at line " + std::to_string(line) + ": expected quoted import path"};
             }
 
+            auto quote = text[position];
             ++position;
             std::string import_target;
             while (position < text.size()) {
@@ -193,7 +198,7 @@ namespace cpf {
                   ++position;
                   continue;
                }
-               if (current == '\'') {
+               if (current == quote) {
                   ++position;
                   break;
                }

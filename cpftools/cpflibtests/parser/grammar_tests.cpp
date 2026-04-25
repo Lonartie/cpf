@@ -112,6 +112,34 @@ TEST_SUITE("cpflib.grammar_parser") {
       }
    }
 
+   TEST_CASE("double-quoted grammar strings are parsed like single-quoted ones") {
+      auto grammar = cpf::parse_grammar(R"(
+         expr -> value | pattern;
+         value [lbl = "atom", alias = 'token'] -> "\"quoted\"":text;
+         pattern [prec = "atom"] -> r"[A-Z]+":caps;
+      )");
+
+      auto* value = grammar.find_rule("value");
+      auto* pattern = grammar.find_rule("pattern");
+
+      REQUIRE(value != nullptr);
+      REQUIRE(pattern != nullptr);
+      REQUIRE(value->productions.size() == 1);
+      REQUIRE(pattern->productions.size() == 1);
+
+      CHECK(value->productions[0].symbols[0].kind == cpf::symbol_kind::literal);
+      CHECK(value->productions[0].symbols[0].value == "\"quoted\"");
+      REQUIRE(value->productions[0].find_attribute("lbl").has_value());
+      CHECK(value->productions[0].find_attribute("lbl")->value == "atom");
+      REQUIRE(value->productions[0].find_attribute("alias").has_value());
+      CHECK(value->productions[0].find_attribute("alias")->value == "token");
+
+      CHECK(pattern->productions[0].symbols[0].kind == cpf::symbol_kind::regex);
+      CHECK(pattern->productions[0].symbols[0].value == "[A-Z]+");
+      REQUIRE(pattern->productions[0].find_attribute("prec").has_value());
+      CHECK(pattern->productions[0].find_attribute("prec")->value == "atom");
+   }
+
    TEST_CASE("identifier-valued precedence references and omitted attributes are preserved") {
       auto grammar = cpf::parse_grammar(R"(
          expr -> add | multiply | number;
@@ -360,7 +388,7 @@ TEST_SUITE("cpflib.grammar_parser") {
             imported_number -> r'[0-9]+':value;
          )");
          write_file(test_directory / "parts" / "expr.cpf", R"(
-            import 'numbers.cpf';
+            import "numbers.cpf";
             imported_expr -> imported_number;
          )");
          write_file(test_directory / "root.cpf", R"(
@@ -428,6 +456,17 @@ TEST_SUITE("cpflib.grammar_parser") {
             doctest::Contains("Grammar import cycle detected"),
             std::runtime_error
          );
+      }
+
+      SUBCASE("double-quoted imports preserve escaped quotes and relative resolution") {
+         auto quoted_directory = test_directory / "quoted imports";
+         write_file(quoted_directory / "child\"grammar.cpf", "quoted_child -> \"x\":value;\n");
+         write_file(quoted_directory / "root.cpf", "import \"child\\\"grammar.cpf\";\nquoted_root -> quoted_child;\n");
+
+         auto loaded = cpf::load_grammar_file(quoted_directory / "root.cpf");
+         CHECK(loaded.dependencies.size() == 2);
+         CHECK(loaded.parsed_grammar.find_rule("quoted_root") != nullptr);
+         CHECK(loaded.parsed_grammar.find_rule("quoted_child") != nullptr);
       }
    }
 
