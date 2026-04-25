@@ -7,7 +7,16 @@ function(cpf_link_grammars target)
       message(FATAL_ERROR "cpf_link_grammars: target 'cpfgen' must exist before linking grammars")
    endif ()
 
-   set(grammar_files ${ARGN})
+   cmake_parse_arguments(CPF_LINK_GRAMMARS "" "NAMESPACE" "" ${ARGN})
+   if (CPF_LINK_GRAMMARS_KEYWORDS_MISSING_VALUES)
+      message(FATAL_ERROR "cpf_link_grammars: missing values for arguments: ${CPF_LINK_GRAMMARS_KEYWORDS_MISSING_VALUES}")
+   endif ()
+
+   if (DEFINED CPF_LINK_GRAMMARS_NAMESPACE AND NOT CPF_LINK_GRAMMARS_NAMESPACE MATCHES "^[_A-Za-z][_A-Za-z0-9]*(::[_A-Za-z][_A-Za-z0-9]*)*$")
+      message(FATAL_ERROR "cpf_link_grammars: namespace '${CPF_LINK_GRAMMARS_NAMESPACE}' is not a valid C++ namespace")
+   endif ()
+
+   set(grammar_files ${CPF_LINK_GRAMMARS_UNPARSED_ARGUMENTS})
    if (grammar_files STREQUAL "")
       message(FATAL_ERROR "cpf_link_grammars: expected at least one .cpf grammar for target '${target}'")
    endif ()
@@ -37,12 +46,17 @@ function(cpf_link_grammars target)
       set(generated_header ${generated_directory}/${grammar_stem}.h)
       set(generated_source ${generated_directory}/${grammar_stem}.cpp)
       set(generated_depfile ${generated_directory}/${grammar_stem}.d)
+      set(cpfgen_command $<TARGET_FILE:cpfgen> ${grammar_absolute} ${generated_directory})
+      if (DEFINED CPF_LINK_GRAMMARS_NAMESPACE AND NOT CPF_LINK_GRAMMARS_NAMESPACE STREQUAL "")
+         list(APPEND cpfgen_command --namespace ${CPF_LINK_GRAMMARS_NAMESPACE})
+      endif ()
+      list(APPEND cpfgen_command --depfile ${generated_depfile})
 
       add_custom_command(
               OUTPUT ${generated_header} ${generated_source}
               DEPFILE ${generated_depfile}
               COMMAND ${CMAKE_COMMAND} -E make_directory ${generated_directory}
-              COMMAND $<TARGET_FILE:cpfgen> ${grammar_absolute} ${generated_directory} --depfile ${generated_depfile}
+              COMMAND ${cpfgen_command}
               DEPENDS cpfgen ${grammar_absolute}
               VERBATIM
       )

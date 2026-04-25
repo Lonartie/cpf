@@ -5,6 +5,7 @@
 #include "imported_bundle.h"
 #include "message.h"
 #include "merged_definitions.h"
+#include "namespaced_calculator.h"
 #include "quantified.h"
 
 #include "support/doctest.h"
@@ -15,6 +16,8 @@
 #include <vector>
 
 namespace {
+   namespace namespaced = generated::fixtures;
+
    struct calculator_visitor {
       auto visit(auto& node) const { return ::visit(node, *this); }
       int operator()(const addition& node) const { return visit(*node.left) + visit(*node.right); }
@@ -60,6 +63,12 @@ namespace {
       }
    };
 
+   struct namespaced_calculator_visitor {
+      auto visit(auto& node) const { return namespaced::visit(node, *this); }
+      int operator()(const namespaced::addition& node) const { return visit(*node.left) + visit(*node.right); }
+      int operator()(const namespaced::number& node) const { return std::stoi(node.value.text); }
+   };
+
    int evaluate(std::string_view input) {
       auto result = expression::parse(input);
       REQUIRE(result.success);
@@ -72,6 +81,13 @@ namespace {
       REQUIRE(result.success);
       REQUIRE(result.forest.size() == 1);
       return visit(*result.forest.front(), merged_expr_visitor{});
+   }
+
+   int evaluate_namespaced(std::string_view input) {
+      auto result = namespaced::expression::parse(input);
+      REQUIRE(result.success);
+      REQUIRE(result.forest.size() == 1);
+      return namespaced::visit(*result.forest.front(), namespaced_calculator_visitor{});
    }
 
    std::vector<std::string> collect_quant_values(const std::vector<std::unique_ptr<quant_choice>>& values) {
@@ -193,6 +209,41 @@ TEST_SUITE("generated.runtime") {
          CHECK(result.error.column == 1);
          CHECK(result.error.found == "\"*\"");
          CHECK(result.error.message.find("line 2, column 1") != std::string::npos);
+      }
+   }
+
+   TEST_CASE("namespaced generated grammars remain fully usable through the CMake helper") {
+      SUBCASE("parse entry points, visitors, and streaming stay available inside the namespace") {
+         auto result = namespaced::expression::parse("1 + 2 + 3");
+
+         REQUIRE(result.success);
+         REQUIRE(result.forest.size() == 1);
+         CHECK(namespaced::visit(*result.forest.front(), namespaced_calculator_visitor{}) == 6);
+         CHECK(evaluate_namespaced("4 + 5") == 9);
+
+         std::ostringstream stream;
+         stream << *result.forest.front();
+         CHECK(stream.str().find("addition(") != std::string::npos);
+         CHECK(stream.str().find("number(") != std::string::npos);
+      }
+
+      SUBCASE("recursive visiting stays reachable through the generated namespace") {
+         auto result = namespaced::expression::parse("7 + 8");
+
+         REQUIRE(result.success);
+         REQUIRE(result.forest.size() == 1);
+
+         std::vector<std::string> visited;
+         namespaced::visit_recursive(*result.forest.front(), [&](const auto& node) {
+            using node_t = std::decay_t<decltype(node)>;
+            if constexpr (std::is_same_v<node_t, namespaced::addition>) {
+               visited.push_back("addition");
+            } else if constexpr (std::is_same_v<node_t, namespaced::number>) {
+               visited.push_back("number");
+            }
+         });
+
+         CHECK(visited == std::vector<std::string>{"addition", "number", "number"});
       }
    }
 

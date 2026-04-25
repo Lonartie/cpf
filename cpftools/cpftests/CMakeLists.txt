@@ -20,6 +20,11 @@ cpf_link_grammars(cpftests
         fixtures/grammars/error_choice.cpf
 )
 
+cpf_link_grammars(cpftests
+        NAMESPACE generated::fixtures
+        fixtures/grammars/namespaced_calculator.cpf
+)
+
 target_include_directories(cpftests PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}
         ${CMAKE_CURRENT_LIST_DIR}/..

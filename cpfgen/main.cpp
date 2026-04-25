@@ -3,8 +3,14 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <string_view>
 
 namespace {
+   [[nodiscard]] int print_usage() {
+	  std::cerr << "Usage: cpfgen <grammar-file> [output-directory] [--namespace <value>] [--depfile <path>]" << std::endl;
+	  return 1;
+   }
+
    void write_text_file(const std::filesystem::path& path, const std::string& content) {
 	  std::ofstream stream{path};
 	  if (!stream) {
@@ -49,28 +55,45 @@ namespace {
 
 int main(int argc, char** argv) {
    try {
-	  if (argc != 2 && argc != 3 && argc != 5) {
-		 std::cerr << "Usage: cpfgen <grammar-file> [output-directory] [--depfile <path>]" << std::endl;
-		 return 1;
-	  }
-
-	  std::filesystem::path depfile_path;
-	  if (argc == 5) {
-		 if (std::string_view{argv[3]} != "--depfile") {
-			std::cerr << "Usage: cpfgen <grammar-file> [output-directory] [--depfile <path>]" << std::endl;
-			return 1;
-		 }
-		 depfile_path = argv[4];
+	  if (argc < 2) {
+		 return print_usage();
 	  }
 
 	  auto grammar_path = std::filesystem::path{argv[1]};
-	  auto output_directory = argc == 3 ? std::filesystem::path{argv[2]} : grammar_path.parent_path();
-	  if (argc == 5) {
-		 output_directory = std::filesystem::path{argv[2]};
+	  std::filesystem::path output_directory;
+	  std::filesystem::path depfile_path;
+	  std::string code_namespace;
+
+	  auto index = 2;
+	  if (index < argc && std::string_view{argv[index]}.rfind("--", 0) != 0) {
+		 output_directory = std::filesystem::path{argv[index]};
+		 ++index;
 	  }
+
+	  while (index < argc) {
+		 auto option = std::string_view{argv[index++]};
+		 if (option == "--depfile") {
+			 if (index >= argc) {
+				return print_usage();
+			 }
+			 depfile_path = argv[index++];
+		 } else if (option == "--namespace") {
+			 if (index >= argc) {
+				return print_usage();
+			 }
+			 code_namespace = argv[index++];
+		 } else {
+			 return print_usage();
+		 }
+	  }
+
+	  if (output_directory.empty()) {
+		 output_directory = grammar_path.parent_path();
+	  }
+
 	  auto base_name = grammar_path.stem().string();
 	  auto loaded = cpf::load_grammar_file(grammar_path);
-	  auto generated = cpf::generate_code(loaded.parsed_grammar, base_name);
+	  auto generated = cpf::generate_code(loaded.parsed_grammar, base_name, code_namespace);
 
 	  std::filesystem::create_directories(output_directory);
 	  auto header_path = output_directory / (base_name + ".h");

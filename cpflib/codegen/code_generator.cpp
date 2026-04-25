@@ -1,6 +1,7 @@
 #include "code_generator.h"
 
 #include <algorithm>
+#include <cctype>
 #include <functional>
 #include <map>
 #include <optional>
@@ -116,6 +117,52 @@ namespace cpf {
 
       void line(std::ostringstream& stream, int indent, const std::string& text = {}) {
          stream << std::string(static_cast<std::size_t>(indent) * 3, ' ') << text << '\n';
+      }
+
+      [[nodiscard]] bool is_valid_cpp_identifier(std::string_view value) {
+         if (value.empty()) {
+            return false;
+         }
+         if (std::isalpha(static_cast<unsigned char>(value.front())) == 0 && value.front() != '_') {
+            return false;
+         }
+         for (std::size_t i = 1; i < value.size(); ++i) {
+            const auto ch = value[i];
+            if (std::isalnum(static_cast<unsigned char>(ch)) == 0 && ch != '_') {
+               return false;
+            }
+         }
+         return true;
+      }
+
+      [[nodiscard]] bool is_valid_cpp_namespace(std::string_view value) {
+         if (value.empty()) {
+            return true;
+         }
+
+         std::size_t offset = 0;
+         while (offset < value.size()) {
+            const auto separator = value.find("::", offset);
+            const auto segment_length = separator == std::string_view::npos ? value.size() - offset : separator - offset;
+            if (!is_valid_cpp_identifier(value.substr(offset, segment_length))) {
+               return false;
+            }
+            if (separator == std::string_view::npos) {
+               return true;
+            }
+            offset = separator + 2;
+            if (offset == value.size()) {
+               return false;
+            }
+         }
+         return true;
+      }
+
+      void validate_cpp_namespace(std::string_view value) {
+         if (is_valid_cpp_namespace(value)) {
+            return;
+         }
+         throw std::runtime_error{"Invalid C++ namespace '" + std::string{value} + "'"};
       }
 
       [[nodiscard]] bool is_infix_production(const class_info& info, const production& production) {
@@ -389,7 +436,9 @@ namespace cpf {
          return text;
       }
 
-      generated_code generate_code_impl(const grammar& grammar, const std::string& base_name) {
+      generated_code generate_code_impl(const grammar& grammar, const std::string& base_name, std::string_view code_namespace) {
+         validate_cpp_namespace(code_namespace);
+
          std::unordered_map<std::string, const rule*> rules_by_name;
          std::unordered_map<std::string, std::vector<std::string>> children;
          std::unordered_map<std::string, std::string> bases;
@@ -717,6 +766,10 @@ namespace cpf {
          line(header, 0, "#include <utility>");
          line(header, 0, "#include <vector>");
          line(header, 0);
+         if (!code_namespace.empty()) {
+            line(header, 0, "namespace " + std::string{code_namespace} + " {");
+            line(header, 0);
+         }
 
          for (const auto& rule : grammar.rules) {
             if (rule.synthetic) {
@@ -805,6 +858,11 @@ namespace cpf {
                }
             }
             line(header, 0, "}");
+            line(header, 0);
+         }
+
+         if (!code_namespace.empty()) {
+            line(header, 0, "} // namespace " + std::string{code_namespace});
             line(header, 0);
          }
 
@@ -938,6 +996,10 @@ namespace cpf {
          line(source, 0, "#include <stdexcept>");
          line(source, 0, "#include <utility>");
          line(source, 0);
+         if (!code_namespace.empty()) {
+            line(source, 0, "namespace " + std::string{code_namespace} + " {");
+            line(source, 0);
+         }
          line(source, 0, "namespace {");
          line(source, 1, "using parse_node_ptr = cpf::detail::parse_node_ptr;");
          line(source, 0, "} // namespace");
@@ -1464,12 +1526,17 @@ namespace cpf {
             line(source, 0);
          }
 
+         if (!code_namespace.empty()) {
+            line(source, 0, "} // namespace " + std::string{code_namespace});
+            line(source, 0);
+         }
+
          return generated_code{header.str(), source.str()};
       }
    } // namespace
 
-   generated_code generate_code(const grammar& grammar, const std::string& base_name) {
-      auto code = generate_code_impl(grammar, base_name);
+   generated_code generate_code(const grammar& grammar, const std::string& base_name, std::string_view code_namespace) {
+      auto code = generate_code_impl(grammar, base_name, code_namespace);
       return code;
    }
 } // namespace cpf

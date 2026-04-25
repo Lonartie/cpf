@@ -218,5 +218,34 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(generated.source.find("extract_helper_") != std::string::npos);
       }
    }
+
+   TEST_CASE("generated code can be wrapped in an explicit C++ namespace") {
+      auto grammar = cpf::parse_grammar(R"(
+         expression -> addition | number;
+         addition -> expression:left '+':op expression:right;
+         number -> r'[0-9]+':value;
+      )");
+
+      auto generated = cpf::generate_code(grammar, "namespaced_calculator", "generated::fixtures");
+
+      CHECK(generated.header.find("namespace generated::fixtures {") != std::string::npos);
+      CHECK(generated.header.find("struct expression : cpf::node") != std::string::npos);
+      CHECK(generated.header.find("auto visit(const expression& node, Visitor&& visitor)") != std::string::npos);
+      CHECK(generated.header.find("} // namespace generated::fixtures") != std::string::npos);
+
+      CHECK(generated.source.find("namespace generated::fixtures {") != std::string::npos);
+      CHECK(generated.source.find("expression::parse_result expression::parse(std::string_view input)") != std::string::npos);
+      CHECK(generated.source.find("std::ostream& operator<<(std::ostream& os, const addition& node)") != std::string::npos);
+      CHECK(generated.source.find("} // namespace generated::fixtures") != std::string::npos);
+   }
+
+   TEST_CASE("invalid generated namespaces are rejected") {
+      auto grammar = cpf::parse_grammar("value -> 'x':text;");
+
+      CHECK_THROWS_WITH_AS(
+         cpf::generate_code(grammar, "invalid_namespace", "generated::1broken"),
+         doctest::Contains("Invalid C++ namespace 'generated::1broken'"),
+         std::runtime_error);
+   }
 }
 
