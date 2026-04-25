@@ -190,7 +190,7 @@ TEST_SUITE("cpflib.code_generator") {
                std::string::npos);
          CHECK(generated.source.find("auto child_result = merged_greeting::parse(input, options);") !=
                std::string::npos);
-         CHECK(generated.source.find("auto opaque = cpf::detail::opaque_tree_of(tree);") != std::string::npos);
+         CHECK(generated.source.find("auto opaque = std::static_pointer_cast<const cpf::detail::parse_node>(cpf::detail::opaque_tree_of(tree));") != std::string::npos);
       }
    }
 

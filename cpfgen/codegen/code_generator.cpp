@@ -1404,6 +1404,7 @@ namespace cpf {
 
          std::ostringstream source;
          line(source, 0, "#include \"" + base_name + ".h\"");
+         line(source, 0, "#include <runtime/runtime.h>");
          line(source, 0);
          line(source, 0, "#include <array>");
          line(source, 0, "#include <ostream>");
@@ -2186,7 +2187,8 @@ namespace cpf {
          line(source, 7, "damaged_nodes.push_back(&current);");
          line(source, 6, "}");
          line(source, 5, "});");
-         line(source, 4, "});");
+          line(source, 4,
+               "}, [tree](std::string_view repaired_input) { return cpf::detail::repaired_input_of(tree, repaired_input); });");
          line(source, 3, "}");
          line(source, 2, "}");
          line(source, 2, "if (result.success) {");
@@ -2248,7 +2250,8 @@ namespace cpf {
                   line(source, 4, "}");
                   line(source, 4, "if (options.build_ast) {");
                   line(source, 5, "for (const auto& tree : child_result.forest) {");
-                  line(source, 6, "auto opaque = cpf::detail::opaque_tree_of(tree);");
+                  line(source, 6,
+                       "auto opaque = std::static_pointer_cast<const cpf::detail::parse_node>(cpf::detail::opaque_tree_of(tree));");
                   line(source, 6,
                        "result.forest.emplace_back(opaque, tree.definition, tree.range, [opaque]() {");
                   line(source, 7, "auto built = build_node(opaque);");
@@ -2261,7 +2264,8 @@ namespace cpf {
                   line(source, 9, "damaged_nodes.push_back(&current);");
                   line(source, 8, "}");
                   line(source, 7, "});");
-                  line(source, 6, "});");
+                  line(source, 6,
+                       "}, [opaque](std::string_view repaired_input) { return cpf::detail::repaired_input_of(opaque, repaired_input); });");
                   line(source, 5, "}");
                   line(source, 4, "}");
                   line(source, 3, "} else if (!result.success && !have_partial_success) {");
@@ -2273,7 +2277,8 @@ namespace cpf {
                   line(source, 4, "successful_children = child_result.forest.size();");
                   line(source, 4, "if (options.build_ast) {");
                   line(source, 5, "for (const auto& tree : child_result.forest) {");
-                  line(source, 6, "auto opaque = cpf::detail::opaque_tree_of(tree);");
+                  line(source, 6,
+                       "auto opaque = std::static_pointer_cast<const cpf::detail::parse_node>(cpf::detail::opaque_tree_of(tree));");
                   line(source, 6,
                        "result.forest.emplace_back(opaque, tree.definition, tree.range, [opaque]() {");
                   line(source, 7, "auto built = build_node(opaque);");
@@ -2286,7 +2291,8 @@ namespace cpf {
                   line(source, 9, "damaged_nodes.push_back(&current);");
                   line(source, 8, "}");
                   line(source, 7, "});");
-                  line(source, 6, "});");
+                  line(source, 6,
+                       "}, [opaque](std::string_view repaired_input) { return cpf::detail::repaired_input_of(opaque, repaired_input); });");
                   line(source, 5, "}");
                   line(source, 4, "}");
                   line(source, 3, "}");
