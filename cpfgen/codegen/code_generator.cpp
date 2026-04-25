@@ -2141,6 +2141,9 @@ namespace cpf {
          line(source, 3, "return result;");
          line(source, 2, "}");
          line(source, 2, "result.partial = forest.partial;");
+         line(source, 2, "if (result.partial) {");
+         line(source, 3, "result.error = forest.error;");
+         line(source, 2, "}");
          line(source, 2, "auto valid_tree_count = std::size_t{0};");
          line(source, 2, "for (std::size_t tree_index = 0; tree_index < forest.forest.size(); ++tree_index) {");
          line(source, 3, "const auto& tree = forest.forest[tree_index];");
@@ -2149,11 +2152,13 @@ namespace cpf {
          line(source, 3, "}");
          line(source, 3, "++valid_tree_count;");
          line(source, 3, "if (options.error_on_ambiguity && valid_tree_count > 1) {");
+         line(source, 4, "result.status = cpf::parse_status::failure;");
          line(source, 4, "result.success = false;");
          line(source, 4, "result.forest.clear();");
          line(source, 4, "result.error = cpf::detail::make_ambiguity_error(grammar_rule_names[root_rule]);");
          line(source, 4, "return result;");
          line(source, 3, "}");
+         line(source, 3, "result.status = result.partial ? cpf::parse_status::partial_success : cpf::parse_status::success;");
          line(source, 3, "result.success = true;");
          line(source, 3, "if (options.build_ast) {");
          line(source, 4,
@@ -2173,13 +2178,15 @@ namespace cpf {
          line(source, 2, "if (result.success) {");
          line(source, 3, "return result;");
          line(source, 2, "}");
-         line(source, 2, "result.error.expected.push_back(\"valid parse tree\");");
-         line(source, 2, "result.error.found = \"<filtered parse>\";");
+         line(source, 2, "auto filtered_error = cpf::parse_error{};");
+         line(source, 2, "filtered_error.expected.push_back(\"valid parse tree\");");
+         line(source, 2, "filtered_error.found = \"<filtered parse>\";");
          line(source, 2,
-              "result.error.notes.push_back(std::string{R\"(completed Earley parses for rule ')\"} + "
+              "filtered_error.notes.push_back(std::string{R\"(completed Earley parses for rule ')\"} + "
               "std::string{grammar_rule_names[root_rule]} + R\"(' were rejected by precedence/associativity "
               "constraints)\");");
-         line(source, 2, "cpf::detail::error_tracker::finalize(result.error);");
+         line(source, 2, "cpf::detail::error_tracker::finalize(filtered_error);");
+         line(source, 2, "result.error = std::move(filtered_error);");
          line(source, 2, "return result;");
          line(source, 1, "}");
          line(source, 0, "} // namespace");
@@ -2208,12 +2215,16 @@ namespace cpf {
                   line(source, 4, "if (have_partial_success) {");
                   line(source, 5, "have_partial_success = false;");
                   line(source, 5, "successful_children = 0;");
+                  line(source, 5, "result.status = cpf::parse_status::failure;");
                   line(source, 5, "result.partial = false;");
                   line(source, 5, "result.forest.clear();");
                   line(source, 4, "}");
+                  line(source, 4, "result.status = cpf::parse_status::success;");
                   line(source, 4, "result.success = true;");
+                  line(source, 4, "result.error.reset();");
                   line(source, 4, "successful_children += child_result.forest.size();");
                   line(source, 4, "if (options.error_on_ambiguity && successful_children > 1) {");
+                  line(source, 5, "result.status = cpf::parse_status::failure;");
                   line(source, 5, "result.success = false;");
                   line(source, 5, "result.partial = false;");
                   line(source, 5, "result.forest.clear();");
@@ -2240,8 +2251,10 @@ namespace cpf {
                   line(source, 5, "}");
                   line(source, 4, "}");
                   line(source, 3, "} else if (!result.success && !have_partial_success) {");
+                  line(source, 4, "result.status = cpf::parse_status::partial_success;");
                   line(source, 4, "result.success = true;");
                   line(source, 4, "result.partial = true;");
+                  line(source, 4, "result.error = child_result.error;");
                   line(source, 4, "have_partial_success = true;");
                   line(source, 4, "successful_children = child_result.forest.size();");
                   line(source, 4, "if (options.build_ast) {");
@@ -2264,10 +2277,10 @@ namespace cpf {
                   line(source, 4, "}");
                   line(source, 3, "}");
                   line(source, 2, "} else if (!have_error) {");
-                  line(source, 3, "best_error = child_result.error;");
+                  line(source, 3, "best_error = *child_result.error;");
                   line(source, 3, "have_error = true;");
                   line(source, 2, "} else {");
-                  line(source, 3, "cpf::detail::merge_parse_error(best_error, child_result.error);");
+                  line(source, 3, "cpf::detail::merge_parse_error(best_error, *child_result.error);");
                   line(source, 2, "}");
                   line(source, 1, "}");
                }

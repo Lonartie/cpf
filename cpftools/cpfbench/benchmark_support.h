@@ -12,6 +12,13 @@
 
 namespace cpfbench {
    namespace detail {
+      inline auto parse_error_message(const auto& result) -> std::string {
+         if (result.error.has_value()) {
+            return result.error->message;
+         }
+         return "unknown parse failure";
+      }
+
       inline auto minimum(const std::vector<double>& samples) -> double {
          return *std::min_element(samples.begin(), samples.end());
       }
@@ -43,7 +50,7 @@ namespace cpfbench {
       for (auto _: state) {
          auto result = Root::parse(input);
          if (!result.success || result.forest.empty()) {
-            detail::report_parse_failure(state, benchmark_name, result.error.message);
+            detail::report_parse_failure(state, benchmark_name, detail::parse_error_message(result));
             return;
          }
 
@@ -60,7 +67,7 @@ namespace cpfbench {
       for (auto _: state) {
          auto result = Root::parse(input);
          if (!result.success || result.forest.empty()) {
-            detail::report_parse_failure(state, benchmark_name, result.error.message);
+            detail::report_parse_failure(state, benchmark_name, detail::parse_error_message(result));
             return;
          }
 
@@ -77,7 +84,7 @@ namespace cpfbench {
 
       auto result = Root::parse(input);
       if (!result.success || result.forest.empty()) {
-         detail::report_parse_failure(state, benchmark_name, result.error.message);
+         detail::report_parse_failure(state, benchmark_name, detail::parse_error_message(result));
          return;
       }
 
@@ -115,7 +122,7 @@ namespace cpfbench {
       for (auto _: state) {
          auto result = Root::parse(input);
          if (!result.success || result.forest.empty()) {
-            detail::report_parse_failure(state, benchmark_name, result.error.message);
+            detail::report_parse_failure(state, benchmark_name, detail::parse_error_message(result));
             return;
          }
 

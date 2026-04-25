@@ -102,6 +102,8 @@ TEST_SUITE("generated.runtime") {
          auto result = expression::parse("1 + 2 * 3");
 
          REQUIRE(result.success);
+         CHECK(result.status == cpf::parse_status::success);
+         CHECK_FALSE(result.error.has_value());
          REQUIRE(result.forest.size() == 1);
          CHECK_FALSE(result.forest.front().has_materialized());
 
@@ -144,6 +146,8 @@ TEST_SUITE("generated.runtime") {
          options.build_ast = false;
          auto result = expression::parse("1 + 2 * 3", options);
          REQUIRE(result.success);
+         CHECK(result.status == cpf::parse_status::success);
+         CHECK_FALSE(result.error.has_value());
          CHECK(result.forest.empty());
       }
 
@@ -152,10 +156,12 @@ TEST_SUITE("generated.runtime") {
          options.error_on_ambiguity = true;
          auto result = repeated_token::parse("x", options);
          CHECK_FALSE(result.success);
+         REQUIRE(result.error.has_value());
          CHECK(result.forest.empty());
-         CHECK(result.error.found == "<ambiguous parse>");
-         CHECK(result.error.message.find("unambiguous parse") != std::string::npos);
-         CHECK(result.error.message.find("repeated_token") != std::string::npos);
+         CHECK(result.status == cpf::parse_status::failure);
+         CHECK(result.error->found == "<ambiguous parse>");
+         CHECK(result.error->message.find("unambiguous parse") != std::string::npos);
+         CHECK(result.error->message.find("repeated_token") != std::string::npos);
       }
 
       SUBCASE("allow_partial keeps ignored invalid input inside one recovered tree") {
@@ -166,6 +172,8 @@ TEST_SUITE("generated.runtime") {
 
          REQUIRE(result.success);
          CHECK(result.partial);
+         CHECK(result.status == cpf::parse_status::partial_success);
+         REQUIRE(result.error.has_value());
          REQUIRE(result.forest.size() == 1);
          CHECK(result.forest.front().partial);
          CHECK(visit(*result.forest.front(), calculator_visitor{}) == 6);
@@ -226,6 +234,8 @@ TEST_SUITE("generated.runtime") {
 
          REQUIRE(result.success);
          CHECK(result.partial);
+         CHECK(result.status == cpf::parse_status::partial_success);
+         REQUIRE(result.error.has_value());
          REQUIRE(result.forest.size() == 1);
          CHECK(result.forest.front().partial);
          CHECK(result.forest.front()->open.text == "(");
@@ -272,6 +282,8 @@ TEST_SUITE("generated.runtime") {
 
          REQUIRE(result.success);
          CHECK(result.partial);
+         CHECK(result.status == cpf::parse_status::partial_success);
+         REQUIRE(result.error.has_value());
          REQUIRE(result.forest.size() == 1);
          CHECK(result.forest.front().partial);
          CHECK(visit(*result.forest.front(), calculator_visitor{}) == 6);
@@ -305,6 +317,8 @@ TEST_SUITE("generated.runtime") {
 
          REQUIRE(result.success);
          CHECK(result.partial);
+         CHECK(result.status == cpf::parse_status::partial_success);
+         REQUIRE(result.error.has_value());
          CHECK(result.forest.empty());
       }
 
@@ -312,6 +326,8 @@ TEST_SUITE("generated.runtime") {
          auto result = expression::parse(" 1 + 2 * 3 ");
 
          REQUIRE(result.success);
+         CHECK(result.status == cpf::parse_status::success);
+         CHECK_FALSE(result.error.has_value());
          REQUIRE(result.forest.size() == 1);
          CHECK_FALSE(result.forest.front().partial);
          auto repaired = result.forest.front().repaired_input(" 1 + 2 * 3 ");
@@ -373,34 +389,40 @@ TEST_SUITE("generated.runtime") {
          auto result = expression::parse("1 +");
 
          CHECK_FALSE(result.success);
-         CHECK(result.error.line == 1);
-         CHECK(result.error.column >= 3);
-         CHECK_FALSE(result.error.expected.empty());
-         CHECK(result.error.message.find("expected") != std::string::npos);
-         CHECK(result.error.message.find("found") != std::string::npos);
-         CHECK_FALSE(result.error.notes.empty());
-         CHECK(result.error.message.find("while parsing rule 'number'") != std::string::npos);
+         CHECK(result.status == cpf::parse_status::failure);
+         REQUIRE(result.error.has_value());
+         CHECK(result.error->line == 1);
+         CHECK(result.error->column >= 3);
+         CHECK_FALSE(result.error->expected.empty());
+         CHECK(result.error->message.find("expected") != std::string::npos);
+         CHECK(result.error->message.find("found") != std::string::npos);
+         CHECK_FALSE(result.error->notes.empty());
+         CHECK(result.error->message.find("while parsing rule 'number'") != std::string::npos);
       }
 
       SUBCASE("operator-sequence failures point at the exact offending token") {
          auto result = expression::parse("1 + * 2");
 
          CHECK_FALSE(result.success);
-         CHECK(result.error.line == 1);
-         CHECK(result.error.column == 5);
-         CHECK(result.error.found == "\"*\"");
-         CHECK(result.error.message.find("pattern [0-9]+") != std::string::npos);
-         CHECK(result.error.message.find("while parsing rule 'number'") != std::string::npos);
+         CHECK(result.status == cpf::parse_status::failure);
+         REQUIRE(result.error.has_value());
+         CHECK(result.error->line == 1);
+         CHECK(result.error->column == 5);
+         CHECK(result.error->found == "\"*\"");
+         CHECK(result.error->message.find("pattern [0-9]+") != std::string::npos);
+         CHECK(result.error->message.find("while parsing rule 'number'") != std::string::npos);
       }
 
       SUBCASE("multiline failures stay close to the actual broken line") {
          auto result = expression::parse("1 +\n* 2");
 
          CHECK_FALSE(result.success);
-         CHECK(result.error.line == 2);
-         CHECK(result.error.column == 1);
-         CHECK(result.error.found == "\"*\"");
-         CHECK(result.error.message.find("line 2, column 1") != std::string::npos);
+         CHECK(result.status == cpf::parse_status::failure);
+         REQUIRE(result.error.has_value());
+         CHECK(result.error->line == 2);
+         CHECK(result.error->column == 1);
+         CHECK(result.error->found == "\"*\"");
+         CHECK(result.error->message.find("line 2, column 1") != std::string::npos);
       }
    }
 
@@ -499,21 +521,25 @@ TEST_SUITE("generated.runtime") {
       auto ambiguity_error = ambiguous_expr::parse("x", ambiguity_options);
       CHECK_FALSE(ambiguity_error.success);
       CHECK(ambiguity_error.forest.empty());
-      CHECK(ambiguity_error.error.found == "<ambiguous parse>");
+      CHECK(ambiguity_error.status == cpf::parse_status::failure);
+      REQUIRE(ambiguity_error.error.has_value());
+      CHECK(ambiguity_error.error->found == "<ambiguous parse>");
    }
 
    TEST_CASE("choice-rule failures merge expectations from every matching branch") {
       auto result = choice_message::parse("help");
 
       CHECK_FALSE(result.success);
-      CHECK(result.error.line == 1);
-      CHECK(result.error.column == 1);
-      CHECK(result.error.found == "\"help\"");
-      CHECK(result.error.message.find("\"hello\"") != std::string::npos);
-      CHECK(result.error.message.find("\"world\"") != std::string::npos);
-      CHECK(result.error.message.find("while parsing rule 'say_hello'") != std::string::npos);
-      CHECK(result.error.message.find("while parsing rule 'say_world'") != std::string::npos);
-      CHECK(result.error.message.find("while matching base rule 'choice_message'") != std::string::npos);
+      CHECK(result.status == cpf::parse_status::failure);
+      REQUIRE(result.error.has_value());
+      CHECK(result.error->line == 1);
+      CHECK(result.error->column == 1);
+      CHECK(result.error->found == "\"help\"");
+      CHECK(result.error->message.find("\"hello\"") != std::string::npos);
+      CHECK(result.error->message.find("\"world\"") != std::string::npos);
+      CHECK(result.error->message.find("while parsing rule 'say_hello'") != std::string::npos);
+      CHECK(result.error->message.find("while parsing rule 'say_world'") != std::string::npos);
+      CHECK(result.error->message.find("while matching base rule 'choice_message'") != std::string::npos);
    }
 
    TEST_CASE("merged concrete rule definitions keep one generated type and mark the matched definition") {

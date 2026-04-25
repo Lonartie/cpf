@@ -72,10 +72,13 @@ namespace {
 TEST_SUITE("cpflib.runtime") {
    TEST_CASE("parse results can represent ambiguous parses as multiple trees") {
       cpf::parse_result<fake_node> result;
+      result.status = cpf::parse_status::success;
       result.success = true;
       result.forest.emplace_back(std::make_unique<fake_node>("first"));
       result.forest.emplace_back(std::make_unique<fake_node>("second"));
 
+      CHECK(result.status == cpf::parse_status::success);
+      CHECK_FALSE(result.error.has_value());
       REQUIRE(result.forest.size() == 2);
       CHECK(result.forest[0]->value == "first");
       CHECK(result.forest[1]->value == "second");

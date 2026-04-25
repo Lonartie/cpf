@@ -251,17 +251,22 @@ namespace cpf {
       mutable bool m_damage_indexed = false;
    };
 
+   /// @brief Overall outcome of one parse attempt.
+   enum class parse_status { failure, success, partial_success };
+
    /// @brief Result of parsing an input string into a forest of lazy parse-tree handles.
    /// @tparam T Root node type produced by the parse entry point.
    template<typename T> struct parse_result {
+      /// @brief Explicit parse outcome state.
+      parse_status status = parse_status::failure;
       /// @brief True when parsing produced either a complete or a partially recovered forest.
       bool success = false;
       /// @brief True when at least one returned tree is partially recovered.
       bool partial = false;
       /// @brief All parse trees produced for the input.
       std::vector<parse_tree<T>> forest;
-      /// @brief Summary error details for encountered syntax damage.
-      parse_error error;
+      /// @brief Optional failure or recovery diagnostics associated with this parse attempt.
+      std::optional<parse_error> error;
    };
 
    namespace detail {

@@ -59,6 +59,10 @@ TEST_SUITE("cpflib.code_generator") {
                      "result.error = cpf::detail::make_ambiguity_error(grammar_rule_names[root_rule]);") !=
                std::string::npos);
          CHECK(generated.source.find(
+                     "result.status = result.partial ? cpf::parse_status::partial_success : cpf::parse_status::success;") !=
+               std::string::npos);
+         CHECK(generated.source.find("result.error.reset();") != std::string::npos);
+         CHECK(generated.source.find(
                      "result.forest.emplace_back(tree, definition_of_generated_tree(tree), tree->range") !=
                std::string::npos);
           CHECK(generated.source.find("for (const auto& damage : tree->damage)") != std::string::npos);
@@ -85,6 +89,7 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(generated.source.find("std::unique_ptr<cpf::node> number::clone_node() const") != std::string::npos);
           CHECK(generated.source.find("copy_damage_to(*copy);") != std::string::npos);
           CHECK(generated.source.find("successful_children += child_result.forest.size();") != std::string::npos);
+          CHECK(generated.source.find("auto filtered_error = cpf::parse_error{};") != std::string::npos);
           CHECK(generated.source.find("partial_candidates") == std::string::npos);
       }
    }

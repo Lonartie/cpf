@@ -56,12 +56,19 @@ struct parse_options {
 Each parse entry point returns `cpf::parse_result<T>`.
 
 ```c++
+enum class parse_status {
+    failure,
+    success,
+    partial_success
+};
+
 template<typename T>
 struct parse_result {
+    cpf::parse_status status = cpf::parse_status::failure;
     bool success = false;
     bool partial = false;
     std::vector<cpf::parse_tree<T>> forest;
-    cpf::parse_error error;
+    std::optional<cpf::parse_error> error;
 };
 ```
 
@@ -70,9 +77,11 @@ When `build_ast = false`, `success` still reports whether parsing succeeded, whi
 When `allow_partial = true`, `success` may also be true for a recovered parse. In that case:
 
 - `parse_result::partial` is true when at least one returned tree is recovered
+- `parse_result::status` is `partial_success`
 - each `parse_tree<T>` exposes its own `partial` flag
 - every ambiguity path still maps to one tree
 - syntax damage is kept inside that tree instead of being split into prefix/suffix trees
+- `error` contains the underlying recovery diagnostic instead of being left disengaged
 
 When `build_ast = true`, `forest` stores lazy `cpf::parse_tree<T>` handles rather than eagerly materialized AST roots.
 Each handle keeps opaque parse-tree state plus lightweight metadata such as `definition` and `range`. The actual AST
@@ -153,8 +162,11 @@ In practice:
 
 - `success == true` means CPF produced either a complete parse or a recovered partial parse
 - `partial == true` means at least one returned tree contains recovery damage
+- `status == success` means parsing completed without recovery
+- `status == partial_success` means parsing succeeded through recovery and `error` contains the furthest original failure
+- `status == failure` means parsing failed and `error` contains the failure details
 - `forest` contains one tree per surviving ambiguity path
-- `error` still describes the furthest original parse failure, even when recovery succeeded
+- `error` is empty for clean successes and populated for failures or recovered parses
 
 Ambiguous grammars may legitimately return multiple forest entries unless `error_on_ambiguity` is enabled.
 

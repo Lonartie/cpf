@@ -137,12 +137,14 @@ TEST_SUITE("generated.attributes") {
       auto result = assoc_expr::parse("2 ^");
 
       CHECK_FALSE(result.success);
-      CHECK(result.error.line == 1);
-      CHECK(result.error.column == 4);
-      CHECK(result.error.found == "<end of input>");
-      CHECK_FALSE(result.error.expected.empty());
-      CHECK(result.error.message.find("pattern [0-9]+") != std::string::npos);
-      CHECK(result.error.message.find("while parsing rule 'assoc_number'") != std::string::npos);
+      CHECK(result.status == cpf::parse_status::failure);
+      REQUIRE(result.error.has_value());
+      CHECK(result.error->line == 1);
+      CHECK(result.error->column == 4);
+      CHECK(result.error->found == "<end of input>");
+      CHECK_FALSE(result.error->expected.empty());
+      CHECK(result.error->message.find("pattern [0-9]+") != std::string::npos);
+      CHECK(result.error->message.find("while parsing rule 'assoc_number'") != std::string::npos);
    }
 
    TEST_CASE("default rule attribute values are honored when attributes are omitted") {
