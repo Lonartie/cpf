@@ -138,21 +138,21 @@ namespace cpf {
       /// @brief Source range that produced this node.
       source_range range;
 
-      virtual ~node() = default;
+      virtual ~node();
 
       /// @brief Returns the generated rule identifier of the concrete node.
       /// @return Stable rule id used for constant-time dispatch in generated visitors.
       [[nodiscard]] virtual std::size_t rule_id() const = 0;
 
       /// @brief True when this node was recovered from a damaged parse.
-      [[nodiscard]] auto is_damaged() const -> bool { return !m_damage.empty(); }
+      [[nodiscard]] auto is_damaged() const -> bool;
 
       /// @brief Damage annotations attached to this node.
-      [[nodiscard]] auto damage() const -> const std::vector<node_damage>& { return m_damage; }
+      [[nodiscard]] auto damage() const -> const std::vector<node_damage>&;
 
    protected:
       /// @brief Adds one damage annotation to this node.
-      void add_damage(node_damage damage) { m_damage.push_back(std::move(damage)); }
+      void add_damage(node_damage damage);
 
       /// @brief Clones the concrete node through the base interface.
       /// @return A newly allocated deep copy of the node.
@@ -161,15 +161,12 @@ namespace cpf {
       template<typename T> friend class parse_tree;
       friend void detail::add_damage(node& target, node_damage damage);
 
-      void copy_damage_to(node& other) const { other.m_damage = m_damage; }
+      void copy_damage_to(node& other) const;
 
    private:
       std::vector<node_damage> m_damage;
    };
 
-   namespace detail {
-      inline void add_damage(node& target, node_damage damage) { target.add_damage(std::move(damage)); }
-   }
 
    /// @brief Lazy handle for one parse tree in a returned forest.
    /// @tparam T Root node type materialized from the opaque runtime tree.

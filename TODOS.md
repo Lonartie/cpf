@@ -72,21 +72,6 @@ This file is an ordered roadmap rather than a flat checklist. Items at the top a
 
 **Value** This builds directly on the lazy parse forest design and enables better tooling, diagnostics, and analysis.
 
-## 6. Error recovery and partial parsing
-
-**Idea** Allow CPF to continue usefully after syntax errors instead of only failing hard.
-
-**Considerations**
-
-* Return useful diagnostics for incomplete or malformed input
-* Support editor and IDE use cases
-* Investigate sync points and token insertion/deletion strategies
-* Return partial ASTs and parse forests where possible
-
-**Impact** Very high impact, high implementation effort.
-
-**Value** This is essential for interactive tooling and makes CPF much more useful outside of batch parsing.
-
 ## 7. Golden tests for generated code
 
 **Idea** Add snapshot-style tests for representative generated outputs.
@@ -222,3 +207,28 @@ This file is an ordered roadmap rather than a flat checklist. Items at the top a
 **Impact** Medium-to-high impact, medium-to-high implementation effort.
 
 **Value** This helps CPF scale from single-grammar experiments to larger multi-module projects.
+
+## 17. Injectable user data into generated AST model
+
+**Idea** Make it possible (maybe via templates) to inject a member called `user_data` into the model.
+
+**Considerations**
+
+* Templates are easy to use
+
+**Impact** Medium-to-high impact, medium-to-high implementation effort.
+
+**Value** This helps users to re-use the AST model for other purposes like storing interpreter-data or performing analysis between nodes.
+
+## 18. Prevent overfitting in complexity analysis by smoothing samples
+
+**Idea** Apply smoothing techniques to complexity analysis samples to prevent overfitting to noise.
+
+**Considerations**
+
+* Use moving averages or exponential smoothing on complexity samples
+* Balance responsiveness to changes with noise reduction
+
+**Impact** Medium impact, medium implementation effort.
+
+**Value** This would make complexity analysis more stable and actionable, especially for small inputs where noise can dominate.
