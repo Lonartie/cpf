@@ -105,15 +105,26 @@ namespace {
       state.SkipWithError(error);
    }
 
-   void calculator_parse(benchmark::State& state) {
+   void calculator_parse_to_forest(benchmark::State& state) {
       auto* selected_case = calculator_case(state.range(0));
       if (selected_case == nullptr) {
-         report_unknown_case(state, "calculator.parse", state.range(0));
+         report_unknown_case(state, "calculator.parse_to_forest", state.range(0));
          return;
       }
 
       state.SetLabel(selected_case->label);
-      cpfbench::benchmark_parse<calculator::expression>(state, *selected_case->input, "calculator.parse");
+      cpfbench::benchmark_parse_to_forest<calculator::expression>(state, *selected_case->input, "calculator.parse_to_forest");
+   }
+
+   void calculator_materialize_ast(benchmark::State& state) {
+      auto* selected_case = calculator_case(state.range(0));
+      if (selected_case == nullptr) {
+         report_unknown_case(state, "calculator.materialize_ast", state.range(0));
+         return;
+      }
+
+      state.SetLabel(selected_case->label);
+      cpfbench::benchmark_materialize_ast<calculator::expression>(state, *selected_case->input, "calculator.materialize_ast");
    }
 
    void calculator_parse_and_evaluate(benchmark::State& state) {
@@ -134,14 +145,28 @@ namespace {
    }
 }
 
-BENCHMARK(calculator_parse)
-   ->Name("calculator/parse")
+BENCHMARK(calculator_parse_to_forest)
+   ->Name("calculator/parse_to_forest")
    ->ArgName("chars")
    ->Arg(static_cast<std::int64_t>(small_expression().size()))
    ->Arg(static_cast<std::int64_t>(medium_expression().size()))
    ->Arg(static_cast<std::int64_t>(large_expression().size()))
    ->Repetitions(8)
-   ->MinWarmUpTime(1)
+   ->MinWarmUpTime(0.1)
+   ->ReportAggregatesOnly()
+   ->ComputeStatistics("min", &cpfbench::detail::minimum)
+   ->ComputeStatistics("max", &cpfbench::detail::maximum)
+   ->Complexity()
+   ->Unit(benchmark::kMicrosecond);
+
+BENCHMARK(calculator_materialize_ast)
+   ->Name("calculator/materialize_ast")
+   ->ArgName("chars")
+   ->Arg(static_cast<std::int64_t>(small_expression().size()))
+   ->Arg(static_cast<std::int64_t>(medium_expression().size()))
+   ->Arg(static_cast<std::int64_t>(large_expression().size()))
+   ->Repetitions(8)
+   ->MinWarmUpTime(0.1)
    ->ReportAggregatesOnly()
    ->ComputeStatistics("min", &cpfbench::detail::minimum)
    ->ComputeStatistics("max", &cpfbench::detail::maximum)
@@ -155,7 +180,7 @@ BENCHMARK(calculator_parse_and_evaluate)
    ->Arg(static_cast<std::int64_t>(medium_expression().size()))
    ->Arg(static_cast<std::int64_t>(large_expression().size()))
    ->Repetitions(8)
-   ->MinWarmUpTime(1)
+   ->MinWarmUpTime(0.1)
    ->ReportAggregatesOnly()
    ->ComputeStatistics("min", &cpfbench::detail::minimum)
    ->ComputeStatistics("max", &cpfbench::detail::maximum)

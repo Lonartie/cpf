@@ -85,29 +85,57 @@ namespace {
       state.SkipWithError(error);
    }
 
-   void simple_c_parse(benchmark::State& state) {
+   void simple_c_parse_to_forest(benchmark::State& state) {
       auto* selected_case = simple_c_case(state.range(0));
       if (selected_case == nullptr) {
-         report_unknown_case(state, "simple_c.parse", state.range(0));
+         report_unknown_case(state, "simple_c.parse_to_forest", state.range(0));
          return;
       }
 
       state.SetLabel(selected_case->label);
-      cpfbench::benchmark_parse<simple_c::translation_unit>(
+      cpfbench::benchmark_parse_to_forest<simple_c::translation_unit>(
          state,
          *selected_case->input,
-         "simple_c.parse");
+         "simple_c.parse_to_forest");
+   }
+
+   void simple_c_materialize_ast(benchmark::State& state) {
+      auto* selected_case = simple_c_case(state.range(0));
+      if (selected_case == nullptr) {
+         report_unknown_case(state, "simple_c.materialize_ast", state.range(0));
+         return;
+      }
+
+      state.SetLabel(selected_case->label);
+      cpfbench::benchmark_materialize_ast<simple_c::translation_unit>(
+         state,
+         *selected_case->input,
+         "simple_c.materialize_ast");
    }
 }
 
-BENCHMARK(simple_c_parse)
-   ->Name("simple_c/parse")
+BENCHMARK(simple_c_parse_to_forest)
+   ->Name("simple_c/parse_to_forest")
    ->ArgName("chars")
    ->Arg(static_cast<std::int64_t>(small_program().size()))
    ->Arg(static_cast<std::int64_t>(medium_program().size()))
    ->Arg(static_cast<std::int64_t>(large_program().size()))
    ->Repetitions(8)
-   ->MinWarmUpTime(1)
+   ->MinWarmUpTime(0.1)
+   ->ReportAggregatesOnly()
+   ->ComputeStatistics("min", &cpfbench::detail::minimum)
+   ->ComputeStatistics("max", &cpfbench::detail::maximum)
+   ->Complexity()
+   ->Unit(benchmark::kMicrosecond);
+
+BENCHMARK(simple_c_materialize_ast)
+   ->Name("simple_c/materialize_ast")
+   ->ArgName("chars")
+   ->Arg(static_cast<std::int64_t>(small_program().size()))
+   ->Arg(static_cast<std::int64_t>(medium_program().size()))
+   ->Arg(static_cast<std::int64_t>(large_program().size()))
+   ->Repetitions(8)
+   ->MinWarmUpTime(0.1)
    ->ReportAggregatesOnly()
    ->ComputeStatistics("min", &cpfbench::detail::minimum)
    ->ComputeStatistics("max", &cpfbench::detail::maximum)

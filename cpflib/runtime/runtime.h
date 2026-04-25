@@ -36,18 +36,6 @@ namespace cpf {
       std::string message = "Parse error";
    };
 
-   /// @brief Result of parsing an input string into a forest of nodes.
-   /// @tparam T Root node type produced by the parse entry point.
-   template<typename T>
-   struct parse_result {
-      /// @brief True when parsing consumed the full input successfully.
-      bool success = false;
-      /// @brief All parse trees produced for the input.
-      std::vector<std::unique_ptr<T>> forest;
-      /// @brief Error details when @ref success is false.
-      parse_error error;
-   };
-
    /// @brief Options that control generated parser behavior.
    struct parse_options {
       /// @brief When false, parsing validates syntax and constraints without materializing the AST forest.
@@ -99,6 +87,90 @@ namespace cpf {
       /// @brief Clones the concrete node through the base interface.
       /// @return A newly allocated deep copy of the node.
       [[nodiscard]] virtual std::unique_ptr<node> clone_node() const = 0;
+   };
+
+   template<typename T>
+   class parse_tree;
+
+   namespace detail {
+      struct parse_node;
+      using parse_node_ptr = std::shared_ptr<const parse_node>;
+
+      template<typename T>
+      [[nodiscard]] auto opaque_tree_of(const parse_tree<T>& tree) -> const parse_node_ptr&;
+   } // namespace detail
+
+   /// @brief Lazy handle for one parse tree in a returned forest.
+   /// @tparam T Root node type materialized from the opaque runtime tree.
+   template<typename T>
+   class parse_tree {
+   public:
+      parse_tree() = default;
+
+      parse_tree(std::unique_ptr<T> eager_tree)
+         : definition{eager_tree != nullptr ? eager_tree->definition : 0}
+         , range{eager_tree != nullptr ? eager_tree->range : source_range{}} {
+         if (eager_tree != nullptr) {
+            m_materialized = std::shared_ptr<T>{eager_tree.release()};
+         }
+      }
+
+      parse_tree(detail::parse_node_ptr opaque_tree, std::size_t tree_definition, source_range tree_range, std::function<std::unique_ptr<T>()> materializer)
+         : definition{tree_definition}
+         , range{std::move(tree_range)}
+         , m_opaque_tree{std::move(opaque_tree)}
+         , m_materialize{std::move(materializer)} {
+      }
+
+      [[nodiscard]] auto get() const -> T* {
+         ensure_materialized();
+         return m_materialized.get();
+      }
+
+      [[nodiscard]] auto operator->() const -> T* {
+         return get();
+      }
+
+      [[nodiscard]] auto operator*() const -> T& {
+         return *get();
+      }
+
+      [[nodiscard]] auto has_materialized() const -> bool {
+         return static_cast<bool>(m_materialized);
+      }
+
+      std::size_t definition = 0;
+      source_range range;
+
+   private:
+      template<typename U>
+      friend auto detail::opaque_tree_of(const parse_tree<U>& tree) -> const detail::parse_node_ptr&;
+
+      void ensure_materialized() const {
+         if (m_materialized != nullptr || !m_materialize) {
+            return;
+         }
+         auto built = m_materialize();
+         if (built != nullptr) {
+            m_materialized = std::shared_ptr<T>{built.release()};
+         }
+      }
+
+      detail::parse_node_ptr m_opaque_tree;
+      std::function<std::unique_ptr<T>()> m_materialize;
+      mutable std::shared_ptr<T> m_materialized;
+   };
+
+   /// @brief Result of parsing an input string into a forest of lazy parse-tree handles.
+   /// @tparam T Root node type produced by the parse entry point.
+   template<typename T>
+   struct parse_result {
+      /// @brief True when parsing consumed the full input successfully.
+      bool success = false;
+      /// @brief All parse trees produced for the input.
+      std::vector<parse_tree<T>> forest;
+      /// @brief Error details when @ref success is false.
+      parse_error error;
    };
 
    namespace detail {
@@ -327,8 +399,6 @@ namespace cpf {
          const std::size_t* rule_production_counts = nullptr;
       };
 
-      struct parse_node;
-      using parse_node_ptr = std::shared_ptr<const parse_node>;
       using parse_value = std::variant<matched_string, parse_node_ptr>;
 
       struct parse_node {
@@ -339,6 +409,11 @@ namespace cpf {
          source_range range;
          std::vector<parse_value> children;
       };
+
+      template<typename T>
+      [[nodiscard]] auto opaque_tree_of(const parse_tree<T>& tree) -> const parse_node_ptr& {
+         return tree.m_opaque_tree;
+      }
 
       struct parse_forest {
          bool success = false;

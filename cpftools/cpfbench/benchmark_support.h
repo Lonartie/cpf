@@ -26,6 +26,11 @@ namespace cpfbench {
          state.SkipWithError(error);
       }
 
+       inline void report_materialization_failure(benchmark::State& state, std::string_view benchmark_name, std::string_view message) {
+          auto error = std::string{"Benchmark '"} + std::string{benchmark_name} + "' failed to materialize AST: " + std::string{message};
+          state.SkipWithError(error);
+       }
+
       inline void set_items_processed(benchmark::State& state) {
          state.SetItemsProcessed(state.iterations());
       }
@@ -43,6 +48,59 @@ namespace cpfbench {
          }
 
          benchmark::DoNotOptimize(result.forest.size());
+      }
+
+      detail::set_items_processed(state);
+   }
+
+   template<typename Root>
+   void benchmark_parse_to_forest(benchmark::State& state, std::string_view input, std::string_view benchmark_name) {
+      state.SetComplexityN(static_cast<benchmark::ComplexityN>(input.size()));
+
+      for (auto _ : state) {
+         auto result = Root::parse(input);
+         if (!result.success || result.forest.empty()) {
+            detail::report_parse_failure(state, benchmark_name, result.error.message);
+            return;
+         }
+
+         benchmark::DoNotOptimize(result.forest.size());
+         benchmark::DoNotOptimize(result.forest.front().definition);
+      }
+
+      detail::set_items_processed(state);
+   }
+
+   template<typename Root>
+   void benchmark_materialize_ast(benchmark::State& state, std::string_view input, std::string_view benchmark_name) {
+      state.SetComplexityN(static_cast<benchmark::ComplexityN>(input.size()));
+
+      auto result = Root::parse(input);
+      if (!result.success || result.forest.empty()) {
+         detail::report_parse_failure(state, benchmark_name, result.error.message);
+         return;
+      }
+
+      const auto tree_template = result.forest.front();
+      if (tree_template.has_materialized()) {
+         detail::report_materialization_failure(state, benchmark_name, "forest handle was already materialized before benchmarking");
+         return;
+      }
+
+      for (auto _ : state) {
+         auto tree = tree_template;
+         if (tree.has_materialized()) {
+            detail::report_materialization_failure(state, benchmark_name, "forest handle was already materialized");
+            return;
+         }
+
+         auto* materialized = tree.get();
+         if (materialized == nullptr) {
+            detail::report_materialization_failure(state, benchmark_name, "materializer returned null");
+            return;
+         }
+
+         benchmark::DoNotOptimize(materialized);
       }
 
       detail::set_items_processed(state);

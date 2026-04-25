@@ -109,9 +109,11 @@ TEST_SUITE("generated.runtime") {
 
          REQUIRE(result.success);
          REQUIRE(result.forest.size() == 1);
+          CHECK_FALSE(result.forest.front().has_materialized());
 
          auto& tree = result.forest.front();
          CHECK(visit(*tree, calculator_visitor{}) == 7);
+          CHECK(tree.has_materialized());
 
          std::ostringstream stream;
          stream << *tree;

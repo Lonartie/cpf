@@ -42,10 +42,10 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(generated.source.find("compute_generated_rule_complexity<expression>(expression_complexity_inputs_0") != std::string::npos);
          CHECK(generated.source.find("std::array<cpf::complexity, 5> expression::Complexity{};") != std::string::npos);
          CHECK(generated.source.find("cpf::parse_result<T> parse_generated(std::string_view input, std::size_t root_rule, const cpf::parse_options& options)") != std::string::npos);
-         CHECK(generated.source.find("auto inspected = cpf::detail::earley_inspect(input, grammar_spec, root_rule);") != std::string::npos);
-         CHECK(generated.source.find("if (options.error_on_ambiguity && inspected.ambiguous)") != std::string::npos);
+         CHECK(generated.source.find("auto valid_tree_count = std::size_t{0};") != std::string::npos);
+         CHECK(generated.source.find("if (!validate_generated_tree(tree))") != std::string::npos);
          CHECK(generated.source.find("result.error = cpf::detail::make_ambiguity_error(grammar_rule_names[root_rule]);") != std::string::npos);
-         CHECK(generated.source.find("if (!options.build_ast)") != std::string::npos);
+         CHECK(generated.source.find("result.forest.emplace_back(tree, definition_of_generated_tree(tree), tree->range") != std::string::npos);
          CHECK(generated.source.find("auto expression::complexity_inputs(std::size_t rule_id) -> std::span<const std::string_view>") != std::string::npos);
          CHECK(generated.source.find("auto expression::recompute_complexity(std::size_t rule_id) -> const cpf::complexity&") != std::string::npos);
          CHECK(generated.source.find("cpf::detail::earley_parse(input, grammar_spec,") != std::string::npos);
@@ -53,9 +53,9 @@ TEST_SUITE("cpflib.code_generator") {
           CHECK(generated.source.find("const std::regex regex_0{") != std::string::npos);
          CHECK(generated.source.find("std::unique_ptr<cpf::node> build_node(const parse_node_ptr& tree)") != std::string::npos);
          CHECK(generated.source.find("bool validate_generated_node(const cpf::node& node)") != std::string::npos);
+         CHECK(generated.source.find("bool validate_generated_tree(const parse_node_ptr& tree)") != std::string::npos);
          CHECK(generated.source.find("rejected by precedence/associativity constraints") != std::string::npos);
-         CHECK(generated.source.find("result.forest.push_back(std::unique_ptr<T>{static_cast<T*>(built.release())});") != std::string::npos);
-          CHECK(generated.source.find("if (built->rule_id() != T::RuleId)") != std::string::npos);
+         CHECK(generated.source.find("definition_of_generated_tree(const parse_node_ptr& tree)") != std::string::npos);
          CHECK(generated.source.find("std::unique_ptr<cpf::node> number::clone_node() const") != std::string::npos);
       }
    }
@@ -141,6 +141,7 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(generated.source.find("compute_generated_rule_complexity<merged_binary>(merged_binary_complexity_inputs_1") != std::string::npos);
          CHECK(generated.source.find("std::array<cpf::complexity, 2> merged_binary::Complexity{};") != std::string::npos);
          CHECK(generated.source.find("auto child_result = merged_greeting::parse(input, options);") != std::string::npos);
+         CHECK(generated.source.find("auto opaque = cpf::detail::opaque_tree_of(tree);") != std::string::npos);
       }
    }
 

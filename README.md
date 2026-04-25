@@ -206,6 +206,20 @@ struct parse_options {
 
 When `build_ast = false`, `parse_result<T>::success` still reports whether parsing succeeded, while `parse_result<T>::forest` stays empty by design.
 
+When `build_ast = true`, `parse_result<T>::forest` now stores lazy parse-tree handles rather than eagerly materialized AST roots. Each handle keeps only opaque parse-tree state plus lightweight metadata such as `definition` and `range`. The actual AST node is built on first access through `operator*`, `operator->`, or `get()`.
+
+That means code such as this still works:
+
+```c++
+auto result = expression::parse("1 + 2 * 3");
+assert(result.success);
+assert(result.forest.size() == 1);
+
+auto value = visit(*result.forest.front(), visitor{});
+```
+
+but AST materialization is deferred until `result.forest.front()` is actually dereferenced.
+
 Captured terminals are stored as `cpf::matched_string`, which includes both the matched text and its exact source span.
 
 Generated headers also include Doxygen comments with conservative complexity notes derived during generation. Each header starts with a grammar-wide summary, and each generated rule documents:
@@ -388,13 +402,21 @@ Run only one benchmark suite:
 ./build/cpftools/cpfbench/cpfbench --benchmark_filter='^simple_c/.*'
 ```
 
-The benchmark executable prints a compact table by default with three benchmark rows:
+The benchmark executable prints a compact table by default with five benchmark rows:
 
-- `calculator parse`
+- `calculator parse -> forest`
+- `calculator materialize ast`
 - `calculator parse + eval`
-- `simple_c parse`
+- `simple_c parse -> forest`
+- `simple_c materialize ast`
 
 The table includes `min`, `avg`, `max`, and `iter/s` from the smallest configured input size in each benchmark family, plus the fitted asymptotic complexity for the full family.
+
+The split scenarios are useful when working with CPF's lazy parse forests:
+
+- `parse -> forest` measures parsing through opaque lazy forest handles without AST materialization
+- `materialize ast` measures on-demand AST construction from an already parsed forest entry
+- `parse + eval` remains an end-to-end comparison for parse plus immediate AST use
 
 You can still override the repetition count from the command line:
 
