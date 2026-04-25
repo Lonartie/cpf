@@ -103,6 +103,26 @@ TEST_SUITE("cpflib.runtime") {
       CHECK((&*const_tree) == static_cast<const fake_node*>(tree.get()));
    }
 
+   TEST_CASE("copied parse-tree handles share one lazy materialization state") {
+      auto materialize_count = std::size_t{0};
+      cpf::parse_tree<fake_node> original{{}, 3, {}, [&]() {
+                                           ++materialize_count;
+                                           return std::make_unique<fake_node>("lazy");
+                                        }};
+      auto copy = original;
+
+      CHECK_FALSE(original.has_materialized());
+      CHECK_FALSE(copy.has_materialized());
+
+      auto* materialized = copy.get();
+
+      REQUIRE(materialized != nullptr);
+      CHECK(materialize_count == 1);
+      CHECK(original.has_materialized());
+      CHECK(copy.has_materialized());
+      CHECK(original.get() == materialized);
+   }
+
    TEST_CASE("matched strings keep both text and source ranges") {
       cpf::matched_string match;
       match.text = "hello";

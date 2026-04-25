@@ -98,6 +98,16 @@ namespace cpf {
       std::string message;
    };
 
+   struct node;
+   template<typename T> class parse_tree;
+
+   namespace detail {
+      void add_damage(node& target, node_damage damage);
+      template<typename T> [[nodiscard]] auto opaque_tree_of(const parse_tree<T>& tree) -> std::shared_ptr<const void>;
+      template<typename T>
+      [[nodiscard]] auto pending_damage_of(const parse_tree<T>& tree) -> const std::vector<node_damage>&;
+   }
+
    /// @brief Base class for all generated model nodes.
    struct node {
       /// @brief Zero-based production index within the rule that created this node.
@@ -121,15 +131,16 @@ namespace cpf {
       /// @brief Damage annotations attached to this node.
       [[nodiscard]] auto damage() const -> const std::vector<node_damage>& { return m_damage; }
 
+   protected:
       /// @brief Adds one damage annotation to this node.
       void add_damage(node_damage damage) { m_damage.push_back(std::move(damage)); }
 
-   protected:
       /// @brief Clones the concrete node through the base interface.
       /// @return A newly allocated deep copy of the node.
       [[nodiscard]] virtual std::unique_ptr<node> clone_node() const = 0;
 
       template<typename T> friend class parse_tree;
+      friend void detail::add_damage(node& target, node_damage damage);
 
       void copy_damage_to(node& other) const { other.m_damage = m_damage; }
 
@@ -137,23 +148,22 @@ namespace cpf {
       std::vector<node_damage> m_damage;
    };
 
-   template<typename T> class parse_tree;
-
    namespace detail {
-      template<typename T> [[nodiscard]] auto opaque_tree_of(const parse_tree<T>& tree) -> std::shared_ptr<const void>;
+      inline void add_damage(node& target, node_damage damage) { target.add_damage(std::move(damage)); }
    }
 
    /// @brief Lazy handle for one parse tree in a returned forest.
    /// @tparam T Root node type materialized from the opaque runtime tree.
    template<typename T> class parse_tree {
    public:
-      parse_tree() = default;
+      parse_tree() : m_state{std::make_shared<state>()} {}
 
       parse_tree(std::unique_ptr<T> eager_tree) :
-          m_production_index{eager_tree != nullptr ? eager_tree->production_index : 0},
-          m_range{eager_tree != nullptr ? eager_tree->range : source_range{}} {
+          m_state{std::make_shared<state>()} {
+         m_state->production_index = eager_tree != nullptr ? eager_tree->production_index : 0;
+         m_state->range = eager_tree != nullptr ? eager_tree->range : source_range{};
          if (eager_tree != nullptr) {
-            m_materialized = std::shared_ptr<T>{eager_tree.release()};
+            m_state->materialized = std::shared_ptr<T>{eager_tree.release()};
          }
       }
 
@@ -162,19 +172,25 @@ namespace cpf {
                  bool tree_partial = false,
                  std::function<void(const T&, std::vector<const node*>&)> damage_indexer = {},
                  std::function<std::optional<std::string>(std::string_view)> repaired_input = {}) :
-          m_production_index{tree_production_index}, m_range{std::move(tree_range)}, m_partial{tree_partial},
-          m_opaque_tree{std::move(opaque_tree)}, m_materialize{std::move(materializer)},
-          m_pending_damage{std::move(pending_damage)}, m_damage_indexer{std::move(damage_indexer)},
-          m_repair_input{std::move(repaired_input)} {}
+          m_state{std::make_shared<state>()} {
+         m_state->production_index = tree_production_index;
+         m_state->range = std::move(tree_range);
+         m_state->partial = tree_partial;
+         m_state->opaque_tree = std::move(opaque_tree);
+         m_state->materialize = std::move(materializer);
+         m_state->pending_damage = std::move(pending_damage);
+         m_state->damage_indexer = std::move(damage_indexer);
+         m_state->repair_input = std::move(repaired_input);
+      }
 
       [[nodiscard]] auto get() -> T* {
          ensure_materialized();
-         return m_materialized.get();
+         return m_state->materialized.get();
       }
 
       [[nodiscard]] auto get() const -> const T* {
          ensure_materialized();
-         return m_materialized.get();
+         return m_state->materialized.get();
       }
 
       [[nodiscard]] auto operator->() -> T* { return get(); }
@@ -185,69 +201,73 @@ namespace cpf {
 
       [[nodiscard]] auto operator*() const -> const T& { return *get(); }
 
-      [[nodiscard]] auto has_materialized() const -> bool { return static_cast<bool>(m_materialized); }
+      [[nodiscard]] auto has_materialized() const -> bool { return static_cast<bool>(m_state->materialized); }
 
       [[nodiscard]] auto damaged_nodes() const -> const std::vector<const node*>& {
          ensure_materialized();
          ensure_damage_indexed();
-         return m_damaged_nodes;
+         return m_state->damaged_nodes;
       }
 
-      [[nodiscard]] auto production_index() const -> std::size_t { return m_production_index; }
+      [[nodiscard]] auto production_index() const -> std::size_t { return m_state->production_index; }
 
-      [[nodiscard]] auto range() const -> const source_range& { return m_range; }
+      [[nodiscard]] auto range() const -> const source_range& { return m_state->range; }
 
-      [[nodiscard]] auto is_partial() const -> bool { return m_partial; }
+      [[nodiscard]] auto is_partial() const -> bool { return m_state->partial; }
 
       [[nodiscard]] auto repaired_input(std::string_view input) const -> std::optional<std::string> {
-         if (!m_partial || !m_repair_input) {
+         if (!m_state->partial || !m_state->repair_input) {
             return std::string{input};
          }
-         return m_repair_input(input);
+         return m_state->repair_input(input);
       }
 
-      [[nodiscard]] auto root_damage() const -> const std::vector<node_damage>& { return m_pending_damage; }
-
    private:
+      struct state {
+         std::size_t production_index = 0;
+         source_range range;
+         bool partial = false;
+         std::shared_ptr<const void> opaque_tree;
+         std::function<std::unique_ptr<T>()> materialize;
+         std::vector<node_damage> pending_damage;
+         std::function<void(const T&, std::vector<const node*>&)> damage_indexer;
+         std::function<std::optional<std::string>(std::string_view)> repair_input;
+         std::shared_ptr<T> materialized;
+         std::vector<const node*> damaged_nodes;
+         bool damage_indexed = false;
+      };
+
       template<typename U>
       friend auto detail::opaque_tree_of(const parse_tree<U>& tree) -> std::shared_ptr<const void>;
+      template<typename U>
+      friend auto detail::pending_damage_of(const parse_tree<U>& tree) -> const std::vector<node_damage>&;
 
       void ensure_materialized() const {
-         if (m_materialized != nullptr || !m_materialize) {
+         if (m_state->materialized != nullptr || !m_state->materialize) {
             return;
          }
-         auto built = m_materialize();
+         auto built = m_state->materialize();
          if (built != nullptr) {
-            for (const auto& damage: m_pending_damage) {
+            for (const auto& damage: m_state->pending_damage) {
                built->add_damage(damage);
             }
-            m_materialized = std::shared_ptr<T>{built.release()};
+            m_state->materialized = std::shared_ptr<T>{built.release()};
          }
       }
 
       void ensure_damage_indexed() const {
-         if (m_damage_indexed || m_materialized == nullptr) {
+         if (m_state->damage_indexed || m_state->materialized == nullptr) {
             return;
          }
-         if (m_damage_indexer) {
-            m_damage_indexer(*m_materialized, m_damaged_nodes);
-         } else if (m_materialized->is_damaged()) {
-            m_damaged_nodes.push_back(m_materialized.get());
+         if (m_state->damage_indexer) {
+            m_state->damage_indexer(*m_state->materialized, m_state->damaged_nodes);
+         } else if (m_state->materialized->is_damaged()) {
+            m_state->damaged_nodes.push_back(m_state->materialized.get());
          }
-         m_damage_indexed = true;
+         m_state->damage_indexed = true;
       }
 
-      std::size_t m_production_index = 0;
-      source_range m_range;
-      bool m_partial = false;
-      std::shared_ptr<const void> m_opaque_tree;
-      std::function<std::unique_ptr<T>()> m_materialize;
-      std::vector<node_damage> m_pending_damage;
-      std::function<void(const T&, std::vector<const node*>&)> m_damage_indexer;
-      std::function<std::optional<std::string>(std::string_view)> m_repair_input;
-      mutable std::shared_ptr<T> m_materialized;
-      mutable std::vector<const node*> m_damaged_nodes;
-      mutable bool m_damage_indexed = false;
+      std::shared_ptr<state> m_state;
    };
 
    /// @brief Overall outcome of one parse attempt.

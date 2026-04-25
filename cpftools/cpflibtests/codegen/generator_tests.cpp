@@ -70,7 +70,7 @@ TEST_SUITE("cpflib.code_generator") {
                      "result.forest.emplace_back(tree, definition_of_generated_tree(tree), tree->range") !=
                std::string::npos);
           CHECK(generated.source.find("for (const auto& damage : tree->damage)") != std::string::npos);
-          CHECK(generated.source.find("node->add_damage(damage);") != std::string::npos);
+          CHECK(generated.source.find("cpf::detail::add_damage(*node, damage);") != std::string::npos);
          CHECK(generated.source.find(
                      "auto expression::complexity_inputs(std::size_t production_index) -> std::span<const std::string_view>") !=
                std::string::npos);

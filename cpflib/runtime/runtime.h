@@ -30,7 +30,11 @@ namespace cpf {
       [[nodiscard]] auto repaired_input_of(const parse_node_ptr& tree, std::string_view input)
             -> std::optional<std::string>;
       template<typename T> [[nodiscard]] auto opaque_tree_of(const parse_tree<T>& tree) -> std::shared_ptr<const void> {
-         return tree.m_opaque_tree;
+         return tree.m_state->opaque_tree;
+      }
+
+      template<typename T> [[nodiscard]] auto pending_damage_of(const parse_tree<T>& tree) -> const std::vector<node_damage>& {
+         return tree.m_state->pending_damage;
       }
 
       using source_location = source_position;

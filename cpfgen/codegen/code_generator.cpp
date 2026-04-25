@@ -2067,7 +2067,7 @@ namespace cpf {
                line(source, 4, "node->production_index = " + std::to_string(production.definition) + ";");
                line(source, 4, "node->range = tree->range;");
                line(source, 4, "for (const auto& damage : tree->damage) {");
-               line(source, 5, "node->add_damage(damage);");
+               line(source, 5, "cpf::detail::add_damage(*node, damage);");
                line(source, 4, "}");
                for (std::size_t i = 0; i < emitted_production.lowered_symbols.size(); ++i) {
                   const auto& lowered_symbol = emitted_production.lowered_symbols[i];
@@ -2258,7 +2258,7 @@ namespace cpf {
                   line(source, 7,
                        "return release_built_node_as<" + info.name + ">(std::move(built));");
                   line(source, 6,
-                       "}, tree.root_damage(), tree.is_partial(), [](const " + info.name + "& root, std::vector<const cpf::node*>& damaged_nodes) {");
+                       "}, cpf::detail::pending_damage_of(tree), tree.is_partial(), [](const " + info.name + "& root, std::vector<const cpf::node*>& damaged_nodes) {");
                   line(source, 7, "visit_recursive(root, [&](auto& current) {");
                   line(source, 8, "if (current.is_damaged()) {");
                   line(source, 9, "damaged_nodes.push_back(&current);");
@@ -2285,7 +2285,7 @@ namespace cpf {
                   line(source, 7,
                        "return release_built_node_as<" + info.name + ">(std::move(built));");
                   line(source, 6,
-                       "}, tree.root_damage(), tree.is_partial(), [](const " + info.name + "& root, std::vector<const cpf::node*>& damaged_nodes) {");
+                       "}, cpf::detail::pending_damage_of(tree), tree.is_partial(), [](const " + info.name + "& root, std::vector<const cpf::node*>& damaged_nodes) {");
                   line(source, 7, "visit_recursive(root, [&](auto& current) {");
                   line(source, 8, "if (current.is_damaged()) {");
                   line(source, 9, "damaged_nodes.push_back(&current);");

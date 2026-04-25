@@ -79,45 +79,7 @@ Generated `visit(...)`, `visit_recursive(...)`, and `operator<<` fit the rest of
 
 ## Consistency and usability issues
 
-## 1. `parse_tree<T>` copy semantics are surprising
-
-The type is copyable, but copying behaves differently depending on when it happens:
-
-- copies made before materialization can materialize independently
-- copies made after materialization share the same materialized object through `shared_ptr`
-
-### Why this is odd
-
-The meaning of copying a parse-tree handle changes depending on timing. That is subtle and easy to misunderstand.
-
-### Recommendation
-
-Choose a more explicit model:
-
-- make the handle move-only
-- or store all lazy state in shared state so copies behave uniformly
-
-## 2. `root_damage()` looks like public plumbing, not consumer API
-
-`parse_tree<T>::root_damage()` appears to exist for generated-code plumbing, not for ordinary users.
-
-### Recommendation
-
-Remove it from the public consumer API surface or make it internal-only.
-
-## 3. `node::add_damage(...)` probably should not be public
-
-Consumers can currently mutate parser-generated damage metadata directly.
-
-### Why this is odd
-
-That makes it harder to distinguish parser-produced damage from user-authored annotations.
-
-### Recommendation
-
-Make `add_damage(...)` protected or internal-only unless user-authored damage annotations are an intentional public feature.
-
-## 4. `type()` is likely redundant
+## 1. `type()` is likely redundant
 
 `cpf::node` currently requires:
 
@@ -130,7 +92,7 @@ But the runtime already has RTTI via a polymorphic base, and the generated API m
 
 Consider removing `type()` unless there is a strong documented use case for it.
 
-## 5. `parse_error` does not align well with `source_position`
+## 2. `parse_error` does not align well with `source_position`
 
 `parse_error` stores:
 
@@ -148,7 +110,7 @@ Prefer:
 
 This would make error positions align with the rest of the API.
 
-## 6. `parse_error.found` is too stringly typed
+## 3. `parse_error.found` is too stringly typed
 
 Examples of values currently include:
 
@@ -165,7 +127,7 @@ Consumers have to string-match sentinel values to understand the kind of failure
 
 Introduce structured error kinds and keep `message` as the display string.
 
-## 7. `repaired_input(...)` has a slightly misleading name
+## 4. `repaired_input(...)` has a slightly misleading name
 
 The method is useful, but it is not a simple accessor. It reconstructs a repaired form of caller-provided input and may fail if the provided text no longer structurally matches the tree.
 
@@ -181,7 +143,7 @@ My recommendation would be `try_repair_input(...)`
 
 ## Generated API oddities
 
-## 8. `Complexity` as public mutable static state is awkward
+## 5. `Complexity` as public mutable static state is awkward
 
 Generated nodes expose:
 
@@ -197,7 +159,7 @@ This exposes global mutable state directly in the public API and likely complica
 
 Hide the cache and expose accessor-based APIs instead.
 
-## 9. Group-capture `std::variant<std::unique_ptr<...>>` payloads may be awkward to consume
+## 6. Group-capture `std::variant<std::unique_ptr<...>>` payloads may be awkward to consume
 
 These are type-safe, but less ergonomic than the rest of the inheritance-and-visitor-oriented API.
 
@@ -205,7 +167,7 @@ These are type-safe, but less ergonomic than the rest of the inheritance-and-vis
 
 Consider generating helper visitor functions for such payload members, or prefer a common generated base type when possible.
 
-## 10. `visit_recursive(...)` is read-only only
+## 7. `visit_recursive(...)` is read-only only
 
 The generated traversal helpers operate on const nodes.
 
