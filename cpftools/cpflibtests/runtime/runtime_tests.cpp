@@ -6,6 +6,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <typeinfo>
 
 namespace {
@@ -79,6 +80,23 @@ TEST_SUITE("cpflib.runtime") {
       CHECK(result.forest[0]->value == "first");
       CHECK(result.forest[1]->value == "second");
       CHECK(result.forest[0]->rule_id() == fake_node::RuleId);
+   }
+
+   TEST_CASE("const parse-tree handles expose read-only materialized nodes") {
+      cpf::parse_tree<fake_node> tree{std::make_unique<fake_node>("first")};
+      const auto& const_tree = tree;
+
+      CHECK(std::is_same_v<decltype(tree.get()), fake_node*>);
+      CHECK(std::is_same_v<decltype(const_tree.get()), const fake_node*>);
+      CHECK(std::is_same_v<decltype(tree.operator->()), fake_node*>);
+      CHECK(std::is_same_v<decltype(const_tree.operator->()), const fake_node*>);
+      CHECK(std::is_same_v<decltype((*tree)), fake_node&>);
+      CHECK(std::is_same_v<decltype((*const_tree)), const fake_node&>);
+
+      tree->value = "updated";
+
+      CHECK(const_tree->value == "updated");
+      CHECK((&*const_tree) == static_cast<const fake_node*>(tree.get()));
    }
 
    TEST_CASE("matched strings keep both text and source ranges") {

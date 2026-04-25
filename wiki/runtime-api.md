@@ -76,7 +76,8 @@ When `allow_partial = true`, `success` may also be true for a recovered parse. I
 
 When `build_ast = true`, `forest` stores lazy `cpf::parse_tree<T>` handles rather than eagerly materialized AST roots.
 Each handle keeps opaque parse-tree state plus lightweight metadata such as `definition` and `range`. The actual AST
-node is built on first access through `operator*`, `operator->`, or `get()`.
+node is built on first access through `operator*`, `operator->`, or `get()`. Dereferencing a const handle still
+materializes lazily, but it now returns `const T&` / `const T*` access instead of mutable node access.
 
 Recovered trees also expose:
 

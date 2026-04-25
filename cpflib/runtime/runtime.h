@@ -174,14 +174,23 @@ namespace cpf {
           m_pending_damage{std::move(pending_damage)},
           m_damage_indexer{std::move(damage_indexer)} {}
 
-      [[nodiscard]] auto get() const -> T* {
+      [[nodiscard]] auto get() -> T* {
          ensure_materialized();
          return m_materialized.get();
       }
 
-      [[nodiscard]] auto operator->() const -> T* { return get(); }
+      [[nodiscard]] auto get() const -> const T* {
+         ensure_materialized();
+         return m_materialized.get();
+      }
 
-      [[nodiscard]] auto operator*() const -> T& { return *get(); }
+      [[nodiscard]] auto operator->() -> T* { return get(); }
+
+      [[nodiscard]] auto operator->() const -> const T* { return get(); }
+
+      [[nodiscard]] auto operator*() -> T& { return *get(); }
+
+      [[nodiscard]] auto operator*() const -> const T& { return *get(); }
 
       [[nodiscard]] auto has_materialized() const -> bool { return static_cast<bool>(m_materialized); }
 
