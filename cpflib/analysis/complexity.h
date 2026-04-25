@@ -20,10 +20,6 @@
 #include <utility>
 #include <vector>
 
-#if defined(_MSC_VER)
-#include <intrin.h>
-#endif
-
 namespace cpf {
    /// @brief Estimated time-complexity model derived from observed measurements.
    struct complexity {
@@ -94,27 +90,6 @@ namespace cpf {
          return std::max(std::abs(value), std::numeric_limits<double>::epsilon());
       }
 
-#if defined(__clang__) || defined(__GNUC__)
-      template<typename T> inline void do_not_optimize(T& value) { asm volatile("" : "+r,m"(value) : : "memory"); }
-
-      template<typename T> inline void do_not_optimize(const T& value) { asm volatile("" : : "g"(value) : "memory"); }
-
-      inline void clobber_memory() { asm volatile("" : : : "memory"); }
-#elif defined(_MSC_VER)
-      template<typename T> inline void do_not_optimize(T& value) {
-         auto* volatile sink = &value;
-         (void) sink;
-         _ReadWriteBarrier();
-      }
-
-      template<typename T> inline void do_not_optimize(const T& value) {
-         auto const* volatile sink = &value;
-         (void) sink;
-         _ReadWriteBarrier();
-      }
-
-      inline void clobber_memory() { _ReadWriteBarrier(); }
-#else
       template<typename T> inline void do_not_optimize(T& value) {
          std::atomic_signal_fence(std::memory_order_seq_cst);
          auto* volatile sink = &value;
@@ -130,7 +105,7 @@ namespace cpf {
       }
 
       inline void clobber_memory() { std::atomic_signal_fence(std::memory_order_seq_cst); }
-#endif
+
 
       inline auto basis_constant(double) -> double { return 1.0; }
 

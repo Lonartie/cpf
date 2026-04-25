@@ -103,7 +103,7 @@ namespace cpf {
       };
 
       struct infix_definition_info {
-         const production* production = nullptr;
+         const production* source_production = nullptr;
          std::string child;
          std::size_t definition = 0;
          std::string group;
@@ -946,7 +946,7 @@ namespace cpf {
                      family.expression_family = true;
 
                      infix_definition_info infix_definition;
-                     infix_definition.production = &production;
+                     infix_definition.source_production = &production;
                      infix_definition.child = child;
                      infix_definition.definition = production.definition;
                      infix_definition.group = precedence_label(child_info.name, production, repeated_child_definitions);
@@ -986,7 +986,7 @@ namespace cpf {
             }
 
             for (const auto& infix_definition: family.infix_definitions) {
-               if (auto attribute = infix_definition.production->find_attribute("prec");
+               if (auto attribute = infix_definition.source_production->find_attribute("prec");
                    attribute.has_value() && !attribute->numeric) {
                   if (attribute->operation == attribute_operator::less_than) {
                      edges[infix_definition.group].insert(attribute->value);
