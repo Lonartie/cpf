@@ -191,5 +191,32 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(generated.source.find("node->marker = extract_helper_") != std::string::npos);
       }
    }
+
+   TEST_CASE("grouped grammar syntax lowers without leaking helper rules into the public API") {
+      auto grammar = cpf::parse_grammar(R"(
+         grouped_value -> ('x':text | 'y':text);
+         grouped_sentence -> '(':open ('hi':text | 'bye':text) ')':close;
+         grouped_repeat -> ('a' | 'b')+;
+      )");
+
+      auto generated = cpf::generate_code(grammar, "grouped");
+
+      SUBCASE("header output exposes only public rules and flattened captures") {
+         CHECK(generated.header.find("struct grouped_value : cpf::node") != std::string::npos);
+         CHECK(generated.header.find("struct grouped_sentence : cpf::node") != std::string::npos);
+         CHECK(generated.header.find("cpf::matched_string text;") != std::string::npos);
+         CHECK(generated.header.find("cpf::matched_string open;") != std::string::npos);
+         CHECK(generated.header.find("cpf::matched_string close;") != std::string::npos);
+         CHECK(generated.header.find("$cpf_group_") == std::string::npos);
+      }
+
+      SUBCASE("source output still emits Earley productions for lowered groups") {
+         CHECK(generated.source.find("grouped_value -> 'x':text") != std::string::npos);
+         CHECK(generated.source.find("grouped_value -> 'y':text") != std::string::npos);
+         CHECK(generated.source.find("grouped_sentence -> '(':open 'hi':text ')':close") != std::string::npos);
+         CHECK(generated.source.find("grouped_sentence -> '(':open 'bye':text ')':close") != std::string::npos);
+         CHECK(generated.source.find("extract_helper_") != std::string::npos);
+      }
+   }
 }
 

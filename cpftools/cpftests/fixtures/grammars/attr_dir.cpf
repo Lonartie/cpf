@@ -1,5 +1,5 @@
 assoc_expr -> assoc_power | assoc_subtract | assoc_number;
-assoc_power    [dir = right, prec = 20] -> assoc_expr:left '^':op assoc_expr:right;
-assoc_subtract [dir = left,  prec = 10] -> assoc_expr:left '-':op assoc_expr:right;
+assoc_power    [dir = right, prec = 20] -> assoc_expr:left '^' assoc_expr:right;
+assoc_subtract [dir = left,  prec = 10] -> assoc_expr:left '-' assoc_expr:right;
 assoc_number   [lbl = 'atom']           -> r'[0-9]+':value;
 

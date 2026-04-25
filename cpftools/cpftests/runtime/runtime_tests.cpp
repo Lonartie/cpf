@@ -1,6 +1,7 @@
 #include "ambiguous_choice.h"
 #include "calculator.h"
 #include "error_choice.h"
+#include "grouped.h"
 #include "message.h"
 #include "merged_definitions.h"
 #include "quantified.h"
@@ -362,6 +363,52 @@ TEST_SUITE("generated.runtime") {
          REQUIRE(present_terminal.forest.size() == 1);
          REQUIRE(present_terminal.forest.front()->marker.has_value());
          CHECK(present_terminal.forest.front()->marker->text == "go");
+      }
+   }
+
+   TEST_CASE("grouped grammar syntax widens the frontend while still using the Earley backend") {
+      SUBCASE("groups with inner alternatives flatten into the expected captures") {
+         auto x_result = grouped_value::parse("x");
+         REQUIRE(x_result.success);
+         REQUIRE(x_result.forest.size() == 1);
+         CHECK(x_result.forest.front()->text.text == "x");
+
+         auto y_result = grouped_value::parse("y");
+         REQUIRE(y_result.success);
+         REQUIRE(y_result.forest.size() == 1);
+         CHECK(y_result.forest.front()->text.text == "y");
+      }
+
+      SUBCASE("alternation can appear both inside and outside grouped sequences") {
+         auto hello = grouped_sentence::parse("(hi)");
+         REQUIRE(hello.success);
+         REQUIRE(hello.forest.size() == 1);
+         CHECK(hello.forest.front()->open.text == "(");
+         CHECK(hello.forest.front()->text.text == "hi");
+         CHECK(hello.forest.front()->close.text == ")");
+
+         auto bye = grouped_sentence::parse("(bye)");
+         REQUIRE(bye.success);
+         REQUIRE(bye.forest.size() == 1);
+         CHECK(bye.forest.front()->text.text == "bye");
+      }
+
+      SUBCASE("quantifiers apply to groups as parse-shaping constructs") {
+         auto repeated = grouped_repeat::parse("abba");
+         REQUIRE(repeated.success);
+         REQUIRE(repeated.forest.size() == 1);
+         CHECK(repeated.forest.front()->range.begin.offset == 0);
+         CHECK(repeated.forest.front()->range.end.offset == 4);
+
+         auto missing = grouped_repeat::parse("");
+         CHECK_FALSE(missing.success);
+
+         auto exact = grouped_exact::parse("hahaha");
+         REQUIRE(exact.success);
+         REQUIRE(exact.forest.size() == 1);
+
+         auto too_short = grouped_exact::parse("haha");
+         CHECK_FALSE(too_short.success);
       }
    }
 }

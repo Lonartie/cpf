@@ -1,8 +1,5 @@
 # TODO's
 
-* Allow for '(' and ')' grouping in the grammar. 
-    * Quantifiers should be applicable to groups as well as individual elements
-    * '|' operator should be able to be put inside and outside of groups to allow for more complex alternatives
 * Allow for a grammar to be defined in multiple files
     * Enable the use of `import` statements to include other grammar files
 * Adjust cpf_link_grammars to accept an optional namespace argument
@@ -12,3 +9,4 @@
 * From grammar analysis while generation estimate the space and runtime complexity of 
   the generated classes and include this information in the generated code as documentation
 * Benchmark the performance of the generated classes to gather metrics on runtime
+* String format: Allow single quotes as well as double quotes for string literals in the grammar

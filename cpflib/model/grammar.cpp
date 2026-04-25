@@ -36,6 +36,7 @@ namespace cpf {
    bool production::is_direct_reference_choice() const {
 	  return attributes.empty()
 		  && symbols.size() == 1
+		  && symbols.front().is_single()
 		  && symbols.front().kind == symbol_kind::reference
 		  && !symbols.front().has_label();
    }

@@ -6,6 +6,7 @@ add_executable(cpftests
 
 cpf_link_grammars(cpftests
         fixtures/grammars/calculator.cpf
+        fixtures/grammars/grouped.cpf
         fixtures/grammars/message.cpf
         fixtures/grammars/merged_definitions.cpf
         fixtures/grammars/quantified.cpf

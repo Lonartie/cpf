@@ -399,6 +399,9 @@ namespace cpf {
          }
 
          for (const auto& rule : grammar.rules) {
+            if (rule.synthetic) {
+               continue;
+            }
             if (!rule.is_choice_rule()) {
                continue;
             }
@@ -414,6 +417,9 @@ namespace cpf {
 
          std::unordered_map<std::string, class_info> classes;
          for (const auto& rule : grammar.rules) {
+            if (rule.synthetic) {
+               continue;
+            }
             class_info info;
             info.name = rule.identifier;
             const auto has_choice_definitions = std::any_of(rule.productions.begin(), rule.productions.end(), [](const auto& production) {
@@ -520,6 +526,9 @@ namespace cpf {
 
          std::unordered_map<std::string, family_info> families;
          for (const auto& rule : grammar.rules) {
+            if (rule.synthetic) {
+               continue;
+            }
             if (!classes.at(rule.identifier).base_rule) {
                continue;
             }
@@ -689,11 +698,17 @@ namespace cpf {
          line(header, 0);
 
          for (const auto& rule : grammar.rules) {
+            if (rule.synthetic) {
+               continue;
+            }
             line(header, 0, "struct " + rule.identifier + ";");
          }
          line(header, 0);
 
          for (const auto& rule : grammar.rules) {
+            if (rule.synthetic) {
+               continue;
+            }
             const auto& info = classes.at(rule.identifier);
             auto base = info.base.empty() ? "cpf::node" : info.base;
             line(header, 0, "struct " + info.name + " : " + base + " {");
@@ -719,6 +734,9 @@ namespace cpf {
          }
 
          for (const auto& rule : grammar.rules) {
+            if (rule.synthetic) {
+               continue;
+            }
             const auto& info = classes.at(rule.identifier);
             if (info.base_rule) {
                auto concrete_descendants = collect_concrete_descendants(info.name, children, classes);
@@ -834,8 +852,10 @@ namespace cpf {
                emitted_production.lhs = rule_indices.at(rule.identifier);
                emitted_production.lhs_name = rule.identifier;
                emitted_production.debug_text = render_production_debug(rule.identifier, production);
-               emitted_production.source_rule = &rule;
-               emitted_production.source_production = &production;
+               if (!rule.synthetic) {
+                  emitted_production.source_rule = &rule;
+                  emitted_production.source_production = &production;
+               }
                for (const auto& source_symbol : production.symbols) {
                   lowered_symbol lowered;
                   lowered.source = &source_symbol;
@@ -1072,6 +1092,9 @@ namespace cpf {
          line(source, 0);
 
          for (const auto& rule : grammar.rules) {
+            if (rule.synthetic) {
+               continue;
+            }
             const auto& info = classes.at(rule.identifier);
             auto family_it = families.find(rule.identifier);
             if (!info.base_rule || family_it == families.end() || !family_it->second.expression_family) {
@@ -1123,6 +1146,9 @@ namespace cpf {
 
          line(source, 1, "bool validate_generated_node(const cpf::node& node) {");
          for (const auto& rule : grammar.rules) {
+            if (rule.synthetic) {
+               continue;
+            }
             const auto& info = classes.at(rule.identifier);
             if (info.base_rule) {
                continue;
@@ -1279,6 +1305,9 @@ namespace cpf {
          line(source, 0);
 
          for (const auto& rule : grammar.rules) {
+            if (rule.synthetic) {
+               continue;
+            }
             const auto& info = classes.at(rule.identifier);
             line(source, 0, info.name + "::parse_result " + info.name + "::parse(std::string_view input) {");
             if (info.base_rule) {
@@ -1348,6 +1377,9 @@ namespace cpf {
          }
 
          for (const auto& rule : grammar.rules) {
+            if (rule.synthetic) {
+               continue;
+            }
             const auto& info = classes.at(rule.identifier);
             line(source, 0, "std::ostream& operator<<(std::ostream& os, const " + info.name + "& node) {");
             if (info.base_rule) {
@@ -1359,6 +1391,9 @@ namespace cpf {
                }
                line(source, 1, "return os << \"" + info.name + "()\";");
             } else {
+               if (info.fields.empty()) {
+                  line(source, 1, "(void)node;");
+               }
                line(source, 1, "os << \"" + info.name + "(\";");
                for (std::size_t i = 0; i < info.fields.size(); ++i) {
                   const auto& field = info.fields[i];

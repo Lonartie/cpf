@@ -64,6 +64,8 @@ parses `1 + 2 * 3` as `1 + (2 * 3)` even though no explicit attributes are writt
 
 CPF also supports postfix quantifiers on individual symbols so grammar files can stay compact while the generated parser still uses the same Earley runtime internally.
 
+Parenthesized groups are also supported and can be combined with the same postfix quantifiers.
+
 Supported postfix forms:
 
 | Syntax | Meaning |
@@ -72,6 +74,17 @@ Supported postfix forms:
 | `symbol*` | zero or more repetitions |
 | `symbol+` | one or more repetitions |
 | `symbol{n}` | exactly `n` repetitions |
+
+The same postfix operators can be applied to groups:
+
+```text
+grouped_value -> ('x':text | 'y':text);
+grouped_sentence -> '(':open ('hi':text | 'bye':text) ')':close;
+grouped_repeat -> ('a' | 'b')+;
+grouped_exact -> ('ha'){3};
+```
+
+This means `|` can now appear both inside and outside groups, and nested groups are flattened into ordinary context-free productions before code generation.
 
 Quantifiers can be written either before or after a label:
 
@@ -89,6 +102,13 @@ Generated member types follow the quantified symbol kind:
 - repeated terminals: `std::vector<cpf::matched_string>`
 
 Internally the generator lowers quantified syntax into helper context-free productions, so the parser remains Earley-based rather than switching to a different parsing strategy.
+
+For grouped syntax specifically:
+
+- plain groups are inlined into ordinary alternatives
+- quantified groups are lowered to hidden helper nonterminals before code generation
+- labels on groups themselves are currently rejected
+- quantified groups are intended for parse-shaping; labeled captures inside quantified groups are currently rejected because CPF does not yet have a tuple/list capture model for repeated grouped substructures
 
 Rules may also be declared multiple times. CPF merges every production for the same identifier into one generated node type while keeping per-production attributes and defaults intact.
 

@@ -217,6 +217,80 @@ TEST_SUITE("cpflib.grammar_parser") {
       }
    }
 
+   TEST_CASE("grouped alternatives are lowered into flat productions") {
+      auto grammar = cpf::parse_grammar(R"(
+         grouped -> 'a' ('b' | 'c') 'd' | ('e' | 'f');
+      )");
+
+      REQUIRE(grammar.rules.size() == 1);
+      auto* grouped = grammar.find_rule("grouped");
+      REQUIRE(grouped != nullptr);
+      REQUIRE(grouped->productions.size() == 4);
+
+      CHECK(grouped->productions[0].symbols.size() == 3);
+      CHECK(grouped->productions[0].symbols[0].value == "a");
+      CHECK(grouped->productions[0].symbols[1].value == "b");
+      CHECK(grouped->productions[1].symbols[1].value == "c");
+      CHECK(grouped->productions[2].symbols[0].value == "e");
+      CHECK(grouped->productions[3].symbols[0].value == "f");
+   }
+
+   TEST_CASE("quantified groups lower to synthetic helper rules") {
+      auto grammar = cpf::parse_grammar(R"(
+         grouped_many -> ('a' | 'b')+;
+      )");
+
+      REQUIRE(grammar.rules.size() == 2);
+
+      auto* grouped_many = grammar.find_rule("grouped_many");
+      REQUIRE(grouped_many != nullptr);
+      REQUIRE(grouped_many->productions.size() == 1);
+      REQUIRE(grouped_many->productions[0].symbols.size() == 1);
+      CHECK(grouped_many->productions[0].symbols[0].kind == cpf::symbol_kind::reference);
+      CHECK(grouped_many->productions[0].symbols[0].quantifier == cpf::symbol_quantifier::one_or_more);
+
+      auto synthetic_seen = false;
+      for (const auto& rule : grammar.rules) {
+         if (!rule.synthetic) {
+            continue;
+         }
+         synthetic_seen = true;
+         REQUIRE(rule.productions.size() == 2);
+         CHECK(rule.productions[0].symbols[0].value == "a");
+         CHECK(rule.productions[1].symbols[0].value == "b");
+      }
+      CHECK(synthetic_seen);
+   }
+
+   TEST_CASE("unsupported labeled group captures report expressive parser errors") {
+      auto capture_error = [](std::string_view source) -> std::string {
+         try {
+            static_cast<void>(cpf::parse_grammar(source));
+         } catch (const std::runtime_error& error) {
+            return error.what();
+         }
+         return std::string{};
+      };
+
+      SUBCASE("labels on groups are rejected") {
+         auto message = capture_error(R"(
+            expr -> ('x' | 'y'):value;
+         )");
+
+         REQUIRE_FALSE(message.empty());
+         CHECK(message.find("Labels on groups are not supported") != std::string::npos);
+      }
+
+      SUBCASE("quantified groups cannot contain labeled captures") {
+         auto message = capture_error(R"(
+            expr -> ('x':value | 'y':value)+;
+         )");
+
+         REQUIRE_FALSE(message.empty());
+         CHECK(message.find("Quantified groups cannot contain labeled captures") != std::string::npos);
+      }
+   }
+
    TEST_CASE("grammar parser reports precise and expressive source errors") {
       auto capture_error = [](std::string_view source) -> std::string {
          try {

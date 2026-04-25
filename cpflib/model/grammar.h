@@ -84,6 +84,7 @@ namespace cpf {
    /// @brief Parsed grammar rule.
    struct rule {
       std::string identifier;
+      bool synthetic = false;
       std::vector<production> productions;
 
       /// @brief Checks whether all productions are direct reference choices.

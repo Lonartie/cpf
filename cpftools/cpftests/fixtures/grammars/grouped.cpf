@@ -1,0 +1,5 @@
+grouped_value -> ('x':text | 'y':text);
+grouped_sentence -> '(':open ('hi':text | 'bye':text) ')':close;
+grouped_repeat -> ('a' | 'b')+;
+grouped_exact -> ('ha'){3};
+

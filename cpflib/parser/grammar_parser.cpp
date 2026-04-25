@@ -1,10 +1,31 @@
 #include "grammar_parser.h"
 
 #include <cctype>
+#include <memory>
 #include <stdexcept>
+#include <utility>
 
 namespace cpf {
    namespace {
+      struct grouped_sequence_item;
+
+      struct grouped_expression {
+         std::vector<std::vector<grouped_sequence_item>> alternatives;
+         std::string label;
+         symbol_quantifier quantifier = symbol_quantifier::one;
+         std::size_t exact_repetition = 1;
+      };
+
+      struct grouped_sequence_item {
+         std::optional<symbol> parsed_symbol;
+         std::unique_ptr<grouped_expression> group;
+      };
+
+      struct parsed_rule_bundle {
+         rule main_rule;
+         std::vector<rule> synthetic_rules;
+      };
+
       class grammar_parser {
       public:
          explicit grammar_parser(std::string_view text)
@@ -15,7 +36,8 @@ namespace cpf {
             grammar result;
             skip_ignored();
             while (!eof()) {
-               auto parsed_rule = parse_rule();
+               auto parsed_rules = parse_rule();
+               auto& parsed_rule = parsed_rules.main_rule;
                if (auto* existing = result.find_rule(parsed_rule.identifier); existing != nullptr) {
                   const auto definition_offset = existing->productions.size();
                   for (auto& production : parsed_rule.productions) {
@@ -24,6 +46,9 @@ namespace cpf {
                   existing->productions.insert(existing->productions.end(), parsed_rule.productions.begin(), parsed_rule.productions.end());
                } else {
                   result.rules.push_back(std::move(parsed_rule));
+               }
+               for (auto& synthetic_rule : parsed_rules.synthetic_rules) {
+                  result.rules.push_back(std::move(synthetic_rule));
                }
                skip_ignored();
             }
@@ -214,21 +239,21 @@ namespace cpf {
             return attributes;
          }
 
-         void parse_symbol_quantifier(symbol& parsed_symbol) {
+         void parse_quantifier(symbol_quantifier& quantifier, std::size_t& exact_repetition) {
             skip_ignored();
             if (take("?")) {
-               parsed_symbol.quantifier = symbol_quantifier::optional;
-               parsed_symbol.exact_repetition = 1;
+               quantifier = symbol_quantifier::optional;
+               exact_repetition = 1;
                return;
             }
             if (take("*")) {
-               parsed_symbol.quantifier = symbol_quantifier::zero_or_more;
-               parsed_symbol.exact_repetition = 0;
+               quantifier = symbol_quantifier::zero_or_more;
+               exact_repetition = 0;
                return;
             }
             if (take("+")) {
-               parsed_symbol.quantifier = symbol_quantifier::one_or_more;
-               parsed_symbol.exact_repetition = 1;
+               quantifier = symbol_quantifier::one_or_more;
+               exact_repetition = 1;
                return;
             }
             if (!take("{")) {
@@ -248,8 +273,25 @@ namespace cpf {
             skip_ignored();
             expect("}");
 
-            parsed_symbol.quantifier = symbol_quantifier::exact;
-            parsed_symbol.exact_repetition = static_cast<std::size_t>(std::stoull(digits));
+            quantifier = symbol_quantifier::exact;
+            exact_repetition = static_cast<std::size_t>(std::stoull(digits));
+         }
+
+         void parse_item_suffix(std::string& label, symbol_quantifier& quantifier, std::size_t& exact_repetition) {
+            parse_quantifier(quantifier, exact_repetition);
+            skip_ignored();
+            if (!take(":")) {
+               return;
+            }
+
+            label = parse_identifier();
+            auto original_quantifier = quantifier;
+            auto original_exact_repetition = exact_repetition;
+            parse_quantifier(quantifier, exact_repetition);
+            if ((quantifier != original_quantifier || exact_repetition != original_exact_repetition)
+             && (original_quantifier != symbol_quantifier::one || original_exact_repetition != 1)) {
+               throw error("A symbol can only have one repetition suffix");
+            }
          }
 
          symbol parse_symbol() {
@@ -266,20 +308,153 @@ namespace cpf {
                parsed_symbol.kind = symbol_kind::reference;
                parsed_symbol.value = parse_identifier();
             }
-            parse_symbol_quantifier(parsed_symbol);
+            parse_item_suffix(parsed_symbol.label, parsed_symbol.quantifier, parsed_symbol.exact_repetition);
+            return parsed_symbol;
+         }
+
+         grouped_expression parse_group() {
+            grouped_expression parsed_group;
+            expect("(");
+            parsed_group.alternatives = parse_alternatives("group", ')');
+            expect(")");
+            parse_item_suffix(parsed_group.label, parsed_group.quantifier, parsed_group.exact_repetition);
+            return parsed_group;
+         }
+
+         grouped_sequence_item parse_sequence_item() {
             skip_ignored();
-            if (take(":")) {
-               parsed_symbol.label = parse_identifier();
-               auto original_quantifier = parsed_symbol.quantifier;
-               auto original_exact_repetition = parsed_symbol.exact_repetition;
-               parse_symbol_quantifier(parsed_symbol);
-               if (parsed_symbol.quantifier != original_quantifier || parsed_symbol.exact_repetition != original_exact_repetition) {
-                  if (original_quantifier != symbol_quantifier::one || original_exact_repetition != 1) {
-                     throw error("A symbol can only have one repetition suffix");
+            grouped_sequence_item item;
+            if (current() == '(') {
+               item.group = std::make_unique<grouped_expression>(parse_group());
+            } else {
+               item.parsed_symbol = parse_symbol();
+            }
+            return item;
+         }
+
+         std::vector<grouped_sequence_item> parse_sequence(std::string_view context, char terminator) {
+            std::vector<grouped_sequence_item> sequence;
+            skip_ignored();
+            while (!eof() && current() != '|' && current() != terminator) {
+               sequence.push_back(parse_sequence_item());
+               skip_ignored();
+            }
+            if (sequence.empty()) {
+               throw error("Expected at least one symbol in " + std::string{context});
+            }
+            return sequence;
+         }
+
+         std::vector<std::vector<grouped_sequence_item>> parse_alternatives(std::string_view context, char terminator) {
+            std::vector<std::vector<grouped_sequence_item>> alternatives;
+            do {
+               alternatives.push_back(parse_sequence(context, terminator));
+            } while (take("|"));
+            return alternatives;
+         }
+
+         [[nodiscard]] bool group_contains_labeled_capture(const grouped_expression& group) const {
+            if (!group.label.empty()) {
+               return true;
+            }
+            for (const auto& alternative : group.alternatives) {
+               for (const auto& item : alternative) {
+                  if (item.parsed_symbol.has_value()) {
+                     if (item.parsed_symbol->has_label()) {
+                        return true;
+                     }
+                     continue;
+                  }
+                  if (group_contains_labeled_capture(*item.group)) {
+                     return true;
                   }
                }
             }
-            return parsed_symbol;
+            return false;
+         }
+
+         [[nodiscard]] static bool is_group_single(const grouped_expression& group) {
+            return group.quantifier == symbol_quantifier::one;
+         }
+
+         [[nodiscard]] std::string make_group_rule_name() {
+            return "$cpf_group_" + std::to_string(synthetic_rule_counter_++);
+         }
+
+         std::vector<std::vector<symbol>> lower_alternatives(
+            const std::vector<std::vector<grouped_sequence_item>>& alternatives,
+            std::size_t line,
+            bool capture_allowed,
+            std::vector<rule>& synthetic_rules) {
+            std::vector<std::vector<symbol>> lowered;
+            for (const auto& alternative : alternatives) {
+               auto lowered_alternative = lower_sequence(alternative, line, capture_allowed, synthetic_rules);
+               lowered.insert(lowered.end(), lowered_alternative.begin(), lowered_alternative.end());
+            }
+            return lowered;
+         }
+
+         std::vector<std::vector<symbol>> lower_sequence(
+            const std::vector<grouped_sequence_item>& sequence,
+            std::size_t line,
+            bool capture_allowed,
+            std::vector<rule>& synthetic_rules) {
+            std::vector<std::vector<symbol>> lowered_sequences(1);
+            for (const auto& item : sequence) {
+               std::vector<std::vector<symbol>> lowered_item;
+               if (item.parsed_symbol.has_value()) {
+                  if (item.parsed_symbol->has_label() && !capture_allowed) {
+                     throw error("Quantified groups cannot contain labeled captures");
+                  }
+                  lowered_item.push_back(std::vector<symbol>{*item.parsed_symbol});
+               } else {
+                  const auto& group = *item.group;
+                  if (!group.label.empty()) {
+                     throw error("Labels on groups are not supported");
+                  }
+
+                  if (!is_group_single(group)) {
+                     if (group_contains_labeled_capture(group)) {
+                        throw error("Quantified groups cannot contain labeled captures");
+                     }
+
+                     rule synthetic_rule;
+                     synthetic_rule.identifier = make_group_rule_name();
+                     synthetic_rule.synthetic = true;
+
+                     auto lowered_group = lower_alternatives(group.alternatives, line, false, synthetic_rules);
+                     synthetic_rule.productions.reserve(lowered_group.size());
+                     for (const auto& lowered_production : lowered_group) {
+                        production parsed_production;
+                        parsed_production.symbols = lowered_production;
+                        parsed_production.line = line;
+                        parsed_production.definition = synthetic_rule.productions.size();
+                        synthetic_rule.productions.push_back(std::move(parsed_production));
+                     }
+                     synthetic_rules.push_back(synthetic_rule);
+
+                     symbol helper_symbol;
+                     helper_symbol.kind = symbol_kind::reference;
+                     helper_symbol.value = synthetic_rules.back().identifier;
+                     helper_symbol.quantifier = group.quantifier;
+                     helper_symbol.exact_repetition = group.exact_repetition;
+                     lowered_item.push_back(std::vector<symbol>{std::move(helper_symbol)});
+                  } else {
+                     lowered_item = lower_alternatives(group.alternatives, line, capture_allowed, synthetic_rules);
+                  }
+               }
+
+               std::vector<std::vector<symbol>> next_sequences;
+               for (const auto& prefix : lowered_sequences) {
+                  for (const auto& suffix : lowered_item) {
+                     auto combined = prefix;
+                     combined.insert(combined.end(), suffix.begin(), suffix.end());
+                     next_sequences.push_back(std::move(combined));
+                  }
+               }
+               lowered_sequences = std::move(next_sequences);
+            }
+            return lowered_sequences;
          }
 
          production parse_production(const std::vector<attribute>& attributes, std::size_t line) {
@@ -297,27 +472,34 @@ namespace cpf {
             return parsed_production;
          }
 
-         rule parse_rule() {
+         parsed_rule_bundle parse_rule() {
             auto line = line_;
-            rule parsed_rule;
-            parsed_rule.identifier = parse_identifier();
-            current_rule_ = parsed_rule.identifier;
+            parsed_rule_bundle parsed_rules;
+            parsed_rules.main_rule.identifier = parse_identifier();
+            current_rule_ = parsed_rules.main_rule.identifier;
             auto attributes = parse_attributes();
             expect("->");
-            do {
-               auto parsed_production = parse_production(attributes, line);
-               parsed_production.definition = parsed_rule.productions.size();
-               parsed_rule.productions.push_back(std::move(parsed_production));
-            } while (take("|"));
+
+            auto parsed_alternatives = parse_alternatives("production", ';');
+            auto lowered_productions = lower_alternatives(parsed_alternatives, line, true, parsed_rules.synthetic_rules);
+            for (const auto& lowered_symbols : lowered_productions) {
+               production parsed_production;
+               parsed_production.attributes = attributes;
+               parsed_production.symbols = lowered_symbols;
+               parsed_production.line = line;
+               parsed_production.definition = parsed_rules.main_rule.productions.size();
+               parsed_rules.main_rule.productions.push_back(std::move(parsed_production));
+            }
             expect(";");
             current_rule_.clear();
-            return parsed_rule;
+            return parsed_rules;
          }
 
          std::string_view text_;
          std::size_t position_ = 0;
          std::size_t line_ = 1;
          std::string current_rule_;
+         std::size_t synthetic_rule_counter_ = 0;
       };
    } // namespace
 
