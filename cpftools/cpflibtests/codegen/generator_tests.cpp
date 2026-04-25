@@ -16,6 +16,11 @@ TEST_SUITE("cpflib.code_generator") {
       auto generated = cpf::generate_code(grammar, "calculator");
 
       SUBCASE("header output exposes node types and visitors") {
+         CHECK(generated.header.find("Generated parser API for grammar 'calculator'.") != std::string::npos);
+         CHECK(generated.header.find("Every generated parse entry point uses the shared Earley runtime") != std::string::npos);
+         CHECK(generated.header.find("Generated AST node for grammar rule 'number'.") != std::string::npos);
+         CHECK(generated.header.find("this rule participates in a recursive rule cycle") != std::string::npos);
+         CHECK(generated.header.find("Exclusive node storage is O(1).") != std::string::npos);
          CHECK(generated.header.find("struct expression : cpf::node") != std::string::npos);
          CHECK(generated.header.find("struct number : expression") != std::string::npos);
          CHECK(generated.header.find("cpf::matched_string value;") != std::string::npos);
@@ -166,6 +171,7 @@ TEST_SUITE("cpflib.code_generator") {
       auto generated = cpf::generate_code(grammar, "quantified");
 
       SUBCASE("header output exposes the expected quantified member types") {
+         CHECK(generated.header.find("Exclusive node storage is O(r) across repeated members `values`") != std::string::npos);
          CHECK(generated.header.find("std::unique_ptr<quant_choice> value;") != std::string::npos);
          CHECK(generated.header.find("std::vector<std::unique_ptr<quant_choice>> values;") != std::string::npos);
          CHECK(generated.header.find("std::vector<cpf::matched_string> digits;") != std::string::npos);
@@ -217,6 +223,26 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(generated.source.find("grouped_sentence -> '(':open 'bye':text ')':close") != std::string::npos);
          CHECK(generated.source.find("extract_helper_") != std::string::npos);
       }
+   }
+
+   TEST_CASE("labeled groups generate public members without exposing helper rule types") {
+      auto grammar = cpf::parse_grammar(R"(
+         grouped_choice_message -> grouped_choice_greeting | grouped_choice_farewell;
+         grouped_choice_greeting -> 'hello':text;
+         grouped_choice_farewell -> 'bye':text;
+         grouped_choice_value -> ('x' | 'y'):value;
+         grouped_choice_payload -> (grouped_choice_greeting | grouped_choice_farewell):payload;
+      )");
+
+      auto generated = cpf::generate_code(grammar, "grouped_choice");
+
+      CHECK(generated.header.find("cpf::matched_string value;") != std::string::npos);
+      CHECK(generated.header.find("std::variant<std::unique_ptr<grouped_choice_greeting>, std::unique_ptr<grouped_choice_farewell>> payload;") != std::string::npos);
+      CHECK(generated.header.find("$cpf_group_") == std::string::npos);
+
+      CHECK(generated.source.find("extract_group_capture_") != std::string::npos);
+      CHECK(generated.source.find("node->value = extract_group_capture_") != std::string::npos);
+      CHECK(generated.source.find("node->payload = extract_group_capture_") != std::string::npos);
    }
 
    TEST_CASE("generated code can be wrapped in an explicit C++ namespace") {

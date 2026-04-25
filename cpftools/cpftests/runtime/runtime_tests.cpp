@@ -13,6 +13,7 @@
 #include <sstream>
 #include <string>
 #include <type_traits>
+#include <variant>
 #include <vector>
 
 namespace {
@@ -457,6 +458,35 @@ TEST_SUITE("generated.runtime") {
          REQUIRE(bye.success);
          REQUIRE(bye.forest.size() == 1);
          CHECK(bye.forest.front()->text.text == "bye");
+      }
+
+      SUBCASE("single-symbol grouped choices can be captured through a group label") {
+         auto x = grouped_choice_value::parse("x");
+         REQUIRE(x.success);
+         REQUIRE(x.forest.size() == 1);
+         CHECK(x.forest.front()->value.text == "x");
+
+         auto y = grouped_choice_value::parse("y");
+         REQUIRE(y.success);
+         REQUIRE(y.forest.size() == 1);
+         CHECK(y.forest.front()->value.text == "y");
+      }
+
+      SUBCASE("group labels on rule choices resolve to the nearest generated base type") {
+         auto hello = grouped_choice_payload::parse("hello");
+         REQUIRE(hello.success);
+         REQUIRE(hello.forest.size() == 1);
+         CHECK(std::holds_alternative<std::unique_ptr<grouped_choice_greeting>>(hello.forest.front()->payload));
+         const auto& greeting = std::get<std::unique_ptr<grouped_choice_greeting>>(hello.forest.front()->payload);
+         REQUIRE(greeting != nullptr);
+         CHECK(greeting->definition == 0);
+
+         auto bye = grouped_choice_payload::parse("bye");
+         REQUIRE(bye.success);
+         REQUIRE(bye.forest.size() == 1);
+         CHECK(std::holds_alternative<std::unique_ptr<grouped_choice_farewell>>(bye.forest.front()->payload));
+         const auto& farewell = std::get<std::unique_ptr<grouped_choice_farewell>>(bye.forest.front()->payload);
+         REQUIRE(farewell != nullptr);
       }
 
       SUBCASE("quantifiers apply to groups as parse-shaping constructs") {

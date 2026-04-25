@@ -353,10 +353,7 @@ namespace cpf {
             return alternatives;
          }
 
-         [[nodiscard]] bool group_contains_labeled_capture(const grouped_expression& group) const {
-            if (!group.label.empty()) {
-               return true;
-            }
+         [[nodiscard]] bool group_contains_nested_labeled_capture(const grouped_expression& group) const {
             for (const auto& alternative : group.alternatives) {
                for (const auto& item : alternative) {
                   if (item.parsed_symbol.has_value()) {
@@ -365,7 +362,7 @@ namespace cpf {
                      }
                      continue;
                   }
-                  if (group_contains_labeled_capture(*item.group)) {
+                  if (!item.group->label.empty() || group_contains_nested_labeled_capture(*item.group)) {
                      return true;
                   }
                }
@@ -409,12 +406,15 @@ namespace cpf {
                   lowered_item.push_back(std::vector<symbol>{*item.parsed_symbol});
                } else {
                   const auto& group = *item.group;
-                  if (!group.label.empty()) {
-                     throw error("Labels on groups are not supported");
+                  if (!group.label.empty() && !is_group_single(group)) {
+                     throw error("Quantified labeled groups are not supported");
                   }
 
-                  if (!is_group_single(group)) {
-                     if (group_contains_labeled_capture(group)) {
+                  if (!is_group_single(group) || !group.label.empty()) {
+                     if (group_contains_nested_labeled_capture(group)) {
+                        if (!group.label.empty()) {
+                           throw error("Labeled groups cannot contain labeled captures");
+                        }
                         throw error("Quantified groups cannot contain labeled captures");
                      }
 
@@ -423,6 +423,17 @@ namespace cpf {
                      synthetic_rule.synthetic = true;
 
                      auto lowered_group = lower_alternatives(group.alternatives, line, false, synthetic_rules);
+                     if (!group.label.empty()) {
+                        for (const auto& lowered_production : lowered_group) {
+                           if (lowered_production.size() != 1 || !lowered_production.front().is_single()) {
+                              throw error("Labeled groups must lower to exactly one symbol per alternative");
+                           }
+                           if (lowered_production.front().kind == symbol_kind::reference
+                            && lowered_production.front().value.starts_with("$cpf_group_")) {
+                              throw error("Labeled groups must lower directly to terminals or public rules");
+                           }
+                        }
+                     }
                      synthetic_rule.productions.reserve(lowered_group.size());
                      for (const auto& lowered_production : lowered_group) {
                         production parsed_production;
@@ -436,6 +447,7 @@ namespace cpf {
                      symbol helper_symbol;
                      helper_symbol.kind = symbol_kind::reference;
                      helper_symbol.value = synthetic_rules.back().identifier;
+                     helper_symbol.label = group.label;
                      helper_symbol.quantifier = group.quantifier;
                      helper_symbol.exact_repetition = group.exact_repetition;
                      lowered_item.push_back(std::vector<symbol>{std::move(helper_symbol)});

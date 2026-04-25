@@ -21,6 +21,7 @@ CPF currently supports:
 - precedence and associativity attributes
 - quantified symbols (`?`, `*`, `+`, `{n}`)
 - grouped alternatives
+- labeled single-symbol group captures such as `('x' | 'y'):value`
 - multi-file grammars via `import`
 - generated-code namespaces
 
@@ -72,7 +73,23 @@ The same forms work for parenthesized groups:
 grouped_value -> ('x':text | 'y':text);
 grouped_sentence -> '(':open ('hi':text | 'bye':text) ')':close;
 grouped_repeat -> ('a' | 'b')+;
+grouped_choice_value -> ('x' | 'y'):value;
 ```
+
+Single-symbol grouped choices can also be captured into one generated member:
+
+```text
+message -> greeting | farewell;
+greeting -> 'hello':text;
+farewell -> 'bye':text;
+
+payload -> (greeting | farewell):value;
+token -> ('x' | 'y'):value;
+```
+
+This lowers through hidden helper rules, but the generated public API still exposes `payload::value` as `std::variant<std::unique_ptr<greeting>, std::unique_ptr<farewell>>` and `token::value` as `cpf::matched_string`.
+
+Current limitation: labeled groups must lower to exactly one symbol per alternative, so forms such as `('x' 'y' | 'z'):value` are still rejected.
 
 Generated member types follow the captured symbol kind:
 
@@ -143,6 +160,13 @@ Every generated node inherits:
 - `cpf::source_range range`
 
 Captured terminals are stored as `cpf::matched_string`, which includes both the matched text and its exact source span.
+
+Generated headers also include Doxygen comments with conservative complexity notes derived during generation. Each header starts with a grammar-wide summary, and each generated rule documents:
+
+- Earley parse upper bounds for `parse(...)`
+- subtree cost for `clone()`, `operator<<`, and `visit_recursive(...)`
+- whether the rule participates in a recursive cycle
+- whether the generated node stores repeated members with linear extra storage
 
 ## Namespacing generated code
 

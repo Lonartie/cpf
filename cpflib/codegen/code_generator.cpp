@@ -17,7 +17,14 @@ namespace cpf {
          terminal_optional,
          terminal_vector,
          node_scalar,
-         node_vector
+         node_vector,
+         capture_variant
+      };
+
+      struct variant_alternative_info {
+         std::string type;
+         std::string resolved_rule;
+         bool node = false;
       };
 
       struct field_info {
@@ -25,6 +32,7 @@ namespace cpf {
          std::string type;
          std::string resolved_rule;
          field_shape shape = field_shape::terminal_scalar;
+         std::vector<variant_alternative_info> variant_alternatives;
       };
 
       struct class_info {
@@ -32,6 +40,28 @@ namespace cpf {
          std::string base;
          bool base_rule = false;
          std::vector<field_info> fields;
+      };
+
+      struct class_complexity_info {
+         std::size_t terminal_scalars = 0;
+         std::size_t terminal_optionals = 0;
+         std::size_t terminal_vectors = 0;
+         std::size_t node_scalars = 0;
+         std::size_t node_vectors = 0;
+         std::size_t variant_members = 0;
+         std::vector<std::string> repeated_members;
+
+         [[nodiscard]] std::size_t member_count() const {
+            return terminal_scalars + terminal_optionals + terminal_vectors + node_scalars + node_vectors + variant_members;
+         }
+      };
+
+      struct synthetic_capture_info {
+         std::size_t id = 0;
+         std::string rule_name;
+         field_info field;
+         std::vector<std::size_t> production_indices;
+         std::vector<variant_alternative_info> production_alternatives;
       };
 
       enum class helper_kind {
@@ -268,14 +298,25 @@ namespace cpf {
          return field.shape == field_shape::node_scalar || field.shape == field_shape::node_vector;
       }
 
+      [[nodiscard]] bool is_variant_field(const field_info& field) {
+         return field.shape == field_shape::capture_variant;
+      }
+
       [[nodiscard]] bool uses_helper_rule(const symbol& symbol) {
          return !symbol.is_single();
       }
 
-      [[nodiscard]] field_info field_from_symbol(const symbol& symbol) {
+      [[nodiscard]] field_info field_from_symbol(const symbol& symbol, const std::unordered_map<std::string, field_info>& synthetic_capture_fields = {}) {
          field_info field;
          field.name = symbol.label;
          if (symbol.kind == symbol_kind::reference) {
+            if (symbol.has_label()) {
+               if (auto synthetic_it = synthetic_capture_fields.find(symbol.value); synthetic_it != synthetic_capture_fields.end()) {
+                  field = synthetic_it->second;
+                  field.name = symbol.label;
+                  return field;
+               }
+            }
             field.resolved_rule = symbol.value;
             if (symbol.is_repeated()) {
                field.shape = field_shape::node_vector;
@@ -328,6 +369,8 @@ namespace cpf {
                return "std::unique_ptr<" + field.resolved_rule + ">";
             case field_shape::node_vector:
                return "std::vector<std::unique_ptr<" + field.resolved_rule + ">>";
+            case field_shape::capture_variant:
+               return field.type;
          }
          return {};
       }
@@ -344,6 +387,8 @@ namespace cpf {
                return field.resolved_rule;
             case field_shape::node_vector:
                return "std::vector<" + field.resolved_rule + ">";
+            case field_shape::capture_variant:
+               return field.type;
          }
          return {};
       }
@@ -376,6 +421,188 @@ namespace cpf {
          }
 
          return std::nullopt;
+      }
+
+      void merge_field_resolution(
+         std::string_view owner_rule,
+         field_info& existing,
+         const field_info& candidate,
+         const std::unordered_map<std::string, std::string>& bases) {
+         if (is_variant_field(existing) || is_variant_field(candidate)) {
+            if (existing.type != candidate.type || existing.shape != candidate.shape) {
+               throw std::runtime_error{"Rule '" + std::string{owner_rule} + "' label '" + existing.name + "' has conflicting member types '" + describe_field_type(existing) + "' and '" + describe_field_type(candidate) + "'"};
+            }
+            existing.variant_alternatives = candidate.variant_alternatives;
+            existing.type = candidate.type;
+            return;
+         }
+
+         auto existing_is_node = is_node_field(existing);
+         auto candidate_is_node = is_node_field(candidate);
+         if (existing_is_node != candidate_is_node) {
+            throw std::runtime_error{"Rule '" + std::string{owner_rule} + "' label '" + existing.name + "' has conflicting member types '" + describe_field_type(existing) + "' and '" + describe_field_type(candidate) + "'"};
+         }
+
+         if (!field_shapes_compatible(existing.shape, candidate.shape)) {
+            throw std::runtime_error{"Rule '" + std::string{owner_rule} + "' label '" + existing.name + "' has conflicting member types '" + describe_field_type(existing) + "' and '" + describe_field_type(candidate) + "'"};
+         }
+
+         if (!existing_is_node) {
+            if ((existing.shape == field_shape::terminal_scalar && candidate.shape == field_shape::terminal_optional)
+             || (existing.shape == field_shape::terminal_optional && candidate.shape == field_shape::terminal_scalar)) {
+               existing.shape = field_shape::terminal_optional;
+            }
+            existing.type = merged_field_type(existing);
+            return;
+         }
+
+         auto common_base = common_rule_base(existing.resolved_rule, candidate.resolved_rule, bases);
+         if (!common_base.has_value()) {
+            throw std::runtime_error{"Rule '" + std::string{owner_rule} + "' label '" + existing.name + "' cannot resolve a common member type for rules '" + existing.resolved_rule + "' and '" + candidate.resolved_rule + "'"};
+         }
+
+         existing.resolved_rule = *common_base;
+         existing.type = merged_field_type(existing);
+      }
+
+      [[nodiscard]] class_complexity_info analyze_class_complexity(const class_info& info) {
+         class_complexity_info result;
+         for (const auto& field : info.fields) {
+            switch (field.shape) {
+               case field_shape::terminal_scalar:
+                  ++result.terminal_scalars;
+                  break;
+               case field_shape::terminal_optional:
+                  ++result.terminal_optionals;
+                  break;
+               case field_shape::terminal_vector:
+                  ++result.terminal_vectors;
+                  result.repeated_members.push_back(field.name);
+                  break;
+               case field_shape::node_scalar:
+                  ++result.node_scalars;
+                  break;
+               case field_shape::node_vector:
+                  ++result.node_vectors;
+                  result.repeated_members.push_back(field.name);
+                  break;
+               case field_shape::capture_variant:
+                  ++result.variant_members;
+                  break;
+            }
+         }
+         return result;
+      }
+
+      [[nodiscard]] std::string join_names(const std::vector<std::string>& names) {
+         if (names.empty()) {
+            return "none";
+         }
+
+         std::string joined;
+         for (std::size_t i = 0; i < names.size(); ++i) {
+            if (i != 0) {
+               joined += ", ";
+            }
+            joined += names[i];
+         }
+         return joined;
+      }
+
+      [[nodiscard]] std::string render_variant_type(const std::vector<variant_alternative_info>& alternatives) {
+         std::string rendered = "std::variant<";
+         for (std::size_t i = 0; i < alternatives.size(); ++i) {
+            if (i != 0) {
+               rendered += ", ";
+            }
+            rendered += alternatives[i].type;
+         }
+         rendered += ">";
+         return rendered;
+      }
+
+      [[nodiscard]] std::vector<std::string> collect_recursive_public_rules(const grammar& grammar) {
+         std::unordered_map<std::string, std::vector<std::string>> edges;
+         for (const auto& rule : grammar.rules) {
+            auto& targets = edges[rule.identifier];
+            for (const auto& production : rule.productions) {
+               for (const auto& symbol : production.symbols) {
+                  if (symbol.kind == symbol_kind::reference) {
+                     targets.push_back(symbol.value);
+                  }
+               }
+            }
+         }
+
+         std::vector<std::string> recursive_rules;
+         for (const auto& rule : grammar.rules) {
+            if (rule.synthetic) {
+               continue;
+            }
+
+            std::set<std::string> visited;
+            std::function<bool(std::string_view)> reaches_self = [&](std::string_view current) {
+               auto current_text = std::string{current};
+               if (!visited.insert(current_text).second) {
+                  return false;
+               }
+               for (const auto& next : edges[current_text]) {
+                  if (next == rule.identifier || reaches_self(next)) {
+                     return true;
+                  }
+               }
+               return false;
+            };
+
+            if (reaches_self(rule.identifier)) {
+               recursive_rules.push_back(rule.identifier);
+            }
+         }
+         return recursive_rules;
+      }
+
+      void emit_file_complexity_comment(
+         std::ostringstream& header,
+         std::string_view base_name,
+         std::size_t public_rule_count,
+         std::size_t synthetic_rule_count,
+         const std::vector<std::string>& recursive_public_rules,
+         const std::vector<std::string>& repeated_storage_rules) {
+         line(header, 0, "/// @file");
+         line(header, 0, "/// @brief Generated parser API for grammar '" + std::string{base_name} + "'.");
+         line(header, 0, "/// @details");
+         line(header, 0, "/// @li Public rules: " + std::to_string(public_rule_count) + ".");
+         line(header, 0, "/// @li Synthetic helper rules introduced during lowering: " + std::to_string(synthetic_rule_count) + ".");
+         line(header, 0, "/// @li Recursive public rules detected from the grammar graph: " + join_names(recursive_public_rules) + ".");
+         line(header, 0, "/// @li Rules with repeated-member storage: " + join_names(repeated_storage_rules) + ".");
+         line(header, 0, "/// @li Every generated parse entry point uses the shared Earley runtime with worst-case O(n^3) time and O(n^2) chart space for input length n.");
+         line(header, 0, "/// @li Highly ambiguous grammars can grow the returned parse forest beyond the core Earley chart.");
+      }
+
+      void emit_rule_complexity_comment(
+         std::ostringstream& header,
+         const class_info& info,
+         const class_complexity_info& complexity,
+         bool recursive) {
+         line(header, 0, "/// @brief Generated AST node for grammar rule '" + info.name + "'.");
+         line(header, 0, "/// @details");
+         line(header, 0, "/// @li `parse(...)` uses the shared Earley runtime with worst-case O(n^3) time and O(n^2) chart space for input length n.");
+         line(header, 0, "/// @li `clone()`, `operator<<`, and `visit_recursive(...)` are O(s) in the size of the reachable subtree.");
+         if (complexity.repeated_members.empty()) {
+            line(header, 0, "/// @li Exclusive node storage is O(1).");
+         } else {
+            line(header, 0, "/// @li Exclusive node storage is O(r) across repeated members `" + join_names(complexity.repeated_members) + "`, plus O(1) fixed members.");
+         }
+         line(header, 0, "/// @li Captured members: " + std::to_string(complexity.member_count())
+            + " total (terminal scalar=" + std::to_string(complexity.terminal_scalars)
+            + ", terminal optional=" + std::to_string(complexity.terminal_optionals)
+            + ", terminal repeated=" + std::to_string(complexity.terminal_vectors)
+            + ", node scalar=" + std::to_string(complexity.node_scalars)
+            + ", node repeated=" + std::to_string(complexity.node_vectors)
+            + ", variants=" + std::to_string(complexity.variant_members) + ").");
+         line(header, 0, recursive
+            ? "/// @li Grammar analysis: this rule participates in a recursive rule cycle."
+            : "/// @li Grammar analysis: this rule does not participate in a recursive rule cycle.");
       }
 
       void register_group_alias(
@@ -464,6 +691,84 @@ namespace cpf {
             }
          }
 
+         std::vector<std::string> ordered_labeled_synthetic_rules;
+         std::set<std::string> labeled_synthetic_rules;
+         for (const auto& rule : grammar.rules) {
+            for (const auto& production : rule.productions) {
+               for (const auto& symbol : production.symbols) {
+                  if (!symbol.has_label() || symbol.kind != symbol_kind::reference) {
+                     continue;
+                  }
+                  if (auto rule_it = rules_by_name.find(symbol.value); rule_it != rules_by_name.end() && rule_it->second->synthetic) {
+                     if (labeled_synthetic_rules.insert(symbol.value).second) {
+                        ordered_labeled_synthetic_rules.push_back(symbol.value);
+                     }
+                  }
+               }
+            }
+         }
+
+         std::unordered_map<std::string, field_info> synthetic_capture_fields;
+         std::unordered_map<std::string, std::vector<variant_alternative_info>> synthetic_capture_production_alternatives;
+         for (const auto& rule_name : ordered_labeled_synthetic_rules) {
+            const auto& synthetic_rule = *rules_by_name.at(rule_name);
+            std::vector<variant_alternative_info> alternatives;
+            std::vector<variant_alternative_info> production_alternatives;
+            std::set<std::string> seen_types;
+
+            for (const auto& production : synthetic_rule.productions) {
+               if (production.symbols.size() != 1 || !production.symbols.front().is_single()) {
+                  throw std::runtime_error{"Synthetic capture rule '" + synthetic_rule.identifier + "' must lower to exactly one single symbol per alternative"};
+               }
+
+               const auto& capture_symbol = production.symbols.front();
+               if (capture_symbol.has_label()) {
+                  throw std::runtime_error{"Synthetic capture rule '" + synthetic_rule.identifier + "' cannot expose nested labeled captures"};
+               }
+               if (capture_symbol.kind == symbol_kind::reference && rules_by_name.at(capture_symbol.value)->synthetic) {
+                  throw std::runtime_error{"Synthetic capture rule '" + synthetic_rule.identifier + "' cannot target another synthetic helper rule"};
+               }
+
+               auto field = field_from_symbol(capture_symbol);
+               variant_alternative_info alternative;
+               alternative.node = is_node_field(field);
+               alternative.resolved_rule = field.resolved_rule;
+               alternative.type = merged_field_type(field);
+               production_alternatives.push_back(alternative);
+               if (seen_types.insert(alternative.type).second) {
+                  alternatives.push_back(std::move(alternative));
+               }
+            }
+
+            field_info merged_field;
+            merged_field.name = "value";
+            if (alternatives.size() == 1) {
+               merged_field.variant_alternatives = alternatives;
+               merged_field.type = alternatives.front().type;
+               merged_field.resolved_rule = alternatives.front().resolved_rule;
+               merged_field.shape = alternatives.front().node ? field_shape::node_scalar : field_shape::terminal_scalar;
+            } else {
+               merged_field.shape = field_shape::capture_variant;
+               merged_field.variant_alternatives = alternatives;
+               merged_field.type = render_variant_type(alternatives);
+            }
+
+            synthetic_capture_fields.emplace(rule_name, std::move(merged_field));
+            synthetic_capture_production_alternatives.emplace(rule_name, std::move(production_alternatives));
+         }
+
+         std::vector<synthetic_capture_info> synthetic_captures;
+         std::unordered_map<std::string, std::size_t> synthetic_capture_by_rule;
+         for (const auto& rule_name : ordered_labeled_synthetic_rules) {
+            synthetic_capture_info capture;
+            capture.id = synthetic_captures.size();
+            capture.rule_name = rule_name;
+            capture.field = synthetic_capture_fields.at(rule_name);
+            capture.production_alternatives = synthetic_capture_production_alternatives.at(rule_name);
+            synthetic_capture_by_rule.emplace(rule_name, capture.id);
+            synthetic_captures.push_back(std::move(capture));
+         }
+
          std::unordered_map<std::string, class_info> classes;
          for (const auto& rule : grammar.rules) {
             if (rule.synthetic) {
@@ -500,32 +805,7 @@ namespace cpf {
                   }
 
                   auto& existing = existing_it->second;
-                  auto existing_is_node = is_node_field(existing);
-                  auto field_is_node = is_node_field(field);
-                  if (existing_is_node != field_is_node) {
-                     throw std::runtime_error{"Rule '" + rule.identifier + "' label '" + field.name + "' has conflicting member types '" + describe_field_type(existing) + "' and '" + describe_field_type(field) + "'"};
-                  }
-
-                  if (!field_shapes_compatible(existing.shape, field.shape)) {
-                     throw std::runtime_error{"Rule '" + rule.identifier + "' label '" + field.name + "' has conflicting member types '" + describe_field_type(existing) + "' and '" + describe_field_type(field) + "'"};
-                  }
-
-                  if (!existing_is_node) {
-                     if ((existing.shape == field_shape::terminal_scalar && field.shape == field_shape::terminal_optional)
-                      || (existing.shape == field_shape::terminal_optional && field.shape == field_shape::terminal_scalar)) {
-                        existing.shape = field_shape::terminal_optional;
-                     }
-                     existing.type = merged_field_type(existing);
-                     return;
-                  }
-
-                  auto common_base = common_rule_base(existing.resolved_rule, field.resolved_rule, bases);
-                  if (!common_base.has_value()) {
-                     throw std::runtime_error{"Rule '" + rule.identifier + "' label '" + field.name + "' cannot resolve a common member type for rules '" + existing.resolved_rule + "' and '" + field.resolved_rule + "'"};
-                  }
-
-                  existing.resolved_rule = *common_base;
-                  existing.type = merged_field_type(existing);
+                  merge_field_resolution(rule.identifier, existing, field, bases);
                };
 
                for (const auto& production : rule.productions) {
@@ -541,7 +821,7 @@ namespace cpf {
                         throw std::runtime_error{"Rule '" + rule.identifier + "' uses label '" + symbol.label + "' more than once in definition " + std::to_string(production.definition)};
                      }
 
-                     auto field = field_from_symbol(symbol);
+                     auto field = field_from_symbol(symbol, synthetic_capture_fields);
                      merge_field(std::move(field));
                   }
 
@@ -592,6 +872,16 @@ namespace cpf {
                continue;
             }
             order_public_rule(rule.identifier);
+         }
+
+         auto recursive_public_rules = collect_recursive_public_rules(grammar);
+         std::set<std::string> recursive_public_rule_set{recursive_public_rules.begin(), recursive_public_rules.end()};
+         std::vector<std::string> repeated_storage_rules;
+         for (const auto& rule_name : ordered_public_rule_names) {
+            const auto complexity = analyze_class_complexity(classes.at(rule_name));
+            if (!complexity.repeated_members.empty()) {
+               repeated_storage_rules.push_back(rule_name);
+            }
          }
 
          std::unordered_map<std::string, family_info> families;
@@ -754,6 +1044,7 @@ namespace cpf {
          }
 
          std::ostringstream header;
+         emit_file_complexity_comment(header, base_name, ordered_public_rule_names.size(), grammar.rules.size() - ordered_public_rule_names.size(), recursive_public_rules, repeated_storage_rules);
          line(header, 0, "#pragma once");
          line(header, 0);
          line(header, 0, "#include <cpflib>");
@@ -763,7 +1054,9 @@ namespace cpf {
          line(header, 0, "#include <string>");
          line(header, 0, "#include <string_view>");
          line(header, 0, "#include <typeinfo>");
+         line(header, 0, "#include <type_traits>");
          line(header, 0, "#include <utility>");
+         line(header, 0, "#include <variant>");
          line(header, 0, "#include <vector>");
          line(header, 0);
          if (!code_namespace.empty()) {
@@ -782,6 +1075,7 @@ namespace cpf {
          for (const auto& rule_name : ordered_public_rule_names) {
             const auto& info = classes.at(rule_name);
             auto base = info.base.empty() ? "cpf::node" : info.base;
+            emit_rule_complexity_comment(header, info, analyze_class_complexity(info), recursive_public_rule_set.contains(info.name));
             line(header, 0, "struct " + info.name + " : " + base + " {");
             line(header, 1, "using parse_result = cpf::parse_result<" + info.name + ">;");
             for (const auto& field : info.fields) {
@@ -855,6 +1149,20 @@ namespace cpf {
                   line(header, 3, "visit_recursive(*child, visitor);");
                   line(header, 2, "}");
                   line(header, 1, "}");
+               } else if (field.shape == field_shape::capture_variant) {
+                  line(header, 1, "std::visit([&](const auto& value) {");
+                  line(header, 2, "using value_t = std::decay_t<decltype(value)>;");
+                  for (const auto& alternative : field.variant_alternatives) {
+                     if (!alternative.node) {
+                        continue;
+                     }
+                     line(header, 2, "if constexpr (std::is_same_v<value_t, " + alternative.type + ">) {");
+                     line(header, 3, "if (value) {");
+                     line(header, 4, "visit_recursive(*value, visitor);");
+                     line(header, 3, "}");
+                     line(header, 2, "}");
+                  }
+                  line(header, 1, "}, node." + field.name + ");");
                }
             }
             line(header, 0, "}");
@@ -988,6 +1296,13 @@ namespace cpf {
             }
          }
 
+         for (std::size_t emitted_index = 0; emitted_index < emitted_productions.size(); ++emitted_index) {
+            const auto& emitted_production = emitted_productions[emitted_index];
+            if (auto capture_it = synthetic_capture_by_rule.find(emitted_production.lhs_name); capture_it != synthetic_capture_by_rule.end()) {
+               synthetic_captures[capture_it->second].production_indices.push_back(emitted_index);
+            }
+         }
+
          std::ostringstream source;
          line(source, 0, "#include \"" + base_name + ".h\"");
          line(source, 0);
@@ -1059,6 +1374,56 @@ namespace cpf {
          line(source, 1, "}};");
          line(source, 1, "std::unique_ptr<cpf::node> build_node(const parse_node_ptr& tree);");
          line(source, 0);
+
+         for (const auto& capture : synthetic_captures) {
+            auto capture_name = "group_capture_" + std::to_string(capture.id);
+            if (capture.field.shape == field_shape::terminal_scalar) {
+               line(source, 1, "cpf::matched_string extract_" + capture_name + "(const parse_node_ptr& tree) {");
+               line(source, 2, "switch (tree->production) {");
+               for (const auto production_index : capture.production_indices) {
+                  line(source, 3, "case " + std::to_string(production_index) + ":");
+                  line(source, 4, "return std::get<cpf::matched_string>(tree->children.front());");
+               }
+               line(source, 3, "default:");
+               line(source, 4, "throw std::runtime_error{\"Unknown labeled group production\"};");
+               line(source, 2, "}");
+               line(source, 1, "}");
+            } else if (capture.field.shape == field_shape::node_scalar) {
+               line(source, 1, "template<typename T>");
+               line(source, 1, "std::unique_ptr<T> extract_" + capture_name + "(const parse_node_ptr& tree) {");
+               line(source, 2, "switch (tree->production) {");
+               for (const auto production_index : capture.production_indices) {
+                  line(source, 3, "case " + std::to_string(production_index) + ": {");
+                  line(source, 4, "auto built = build_node(std::get<parse_node_ptr>(tree->children.front()));");
+                  line(source, 4, "return std::unique_ptr<T>{static_cast<T*>(built.release())};");
+                  line(source, 3, "}");
+               }
+               line(source, 3, "default:");
+               line(source, 4, "throw std::runtime_error{\"Unknown labeled group production\"};");
+               line(source, 2, "}");
+               line(source, 1, "}");
+            } else {
+               line(source, 1, capture.field.type + " extract_" + capture_name + "(const parse_node_ptr& tree) {");
+               line(source, 2, "switch (tree->production) {");
+               for (std::size_t production_offset = 0; production_offset < capture.production_indices.size(); ++production_offset) {
+                  const auto production_index = capture.production_indices[production_offset];
+                  const auto& alternative = capture.production_alternatives[production_offset];
+                  line(source, 3, "case " + std::to_string(production_index) + ": {");
+                  if (alternative.node) {
+                     line(source, 4, "auto built = build_node(std::get<parse_node_ptr>(tree->children.front()));");
+                     line(source, 4, "return " + capture.field.type + "{std::in_place_type<" + alternative.type + ">, " + alternative.type + "{static_cast<" + alternative.resolved_rule + "*>(built.release())}};");
+                  } else {
+                     line(source, 4, "return " + capture.field.type + "{std::in_place_type<" + alternative.type + ">, std::get<cpf::matched_string>(tree->children.front())};");
+                  }
+                  line(source, 3, "}");
+               }
+               line(source, 3, "default:");
+               line(source, 4, "throw std::runtime_error{\"Unknown labeled group production\"};");
+               line(source, 2, "}");
+               line(source, 1, "}");
+            }
+            line(source, 0);
+         }
 
          for (const auto& helper : helpers) {
             auto helper_name = "helper_" + std::to_string(helper.id);
@@ -1336,8 +1701,19 @@ namespace cpf {
                   if (symbol.kind == symbol_kind::reference) {
                      if (symbol.has_label()) {
                         const auto& field = fields_by_rule.at(info.name).at(symbol.label);
-                        line(source, 4, "auto child_" + std::to_string(i) + " = build_node(std::get<parse_node_ptr>(tree->children[" + std::to_string(i) + "]));");
-                        line(source, 4, "node->" + symbol.label + " = std::unique_ptr<" + field.resolved_rule + ">{static_cast<" + field.resolved_rule + "*>(child_" + std::to_string(i) + ".release())};");
+                        if (auto capture_it = synthetic_capture_by_rule.find(symbol.value); capture_it != synthetic_capture_by_rule.end()) {
+                           const auto capture_name = "group_capture_" + std::to_string(capture_it->second);
+                           if (field.shape == field_shape::terminal_scalar) {
+                              line(source, 4, "node->" + symbol.label + " = extract_" + capture_name + "(std::get<parse_node_ptr>(tree->children[" + std::to_string(i) + "]));");
+                           } else if (field.shape == field_shape::capture_variant) {
+                              line(source, 4, "node->" + symbol.label + " = extract_" + capture_name + "(std::get<parse_node_ptr>(tree->children[" + std::to_string(i) + "]));");
+                           } else {
+                              line(source, 4, "node->" + symbol.label + " = extract_" + capture_name + "<" + field.resolved_rule + ">(std::get<parse_node_ptr>(tree->children[" + std::to_string(i) + "]));");
+                           }
+                        } else {
+                           line(source, 4, "auto child_" + std::to_string(i) + " = build_node(std::get<parse_node_ptr>(tree->children[" + std::to_string(i) + "]));");
+                           line(source, 4, "node->" + symbol.label + " = std::unique_ptr<" + field.resolved_rule + ">{static_cast<" + field.resolved_rule + "*>(child_" + std::to_string(i) + ".release())};");
+                        }
                      }
                   } else if (symbol.has_label()) {
                      line(source, 4, "node->" + symbol.label + " = std::get<cpf::matched_string>(tree->children[" + std::to_string(i) + "]); ");
@@ -1446,6 +1822,21 @@ namespace cpf {
                      line(source, 1, "for (const auto& child : " + field.name + ") {");
                      line(source, 2, "copy->" + field.name + ".push_back(child ? child->clone() : nullptr);");
                      line(source, 1, "}");
+                  } else if (field.shape == field_shape::capture_variant) {
+                     line(source, 1, "copy->" + field.name + " = std::visit([](const auto& value) -> " + field.type + " {");
+                     line(source, 2, "using value_t = std::decay_t<decltype(value)>;");
+                     for (const auto& alternative : field.variant_alternatives) {
+                        line(source, 2, "if constexpr (std::is_same_v<value_t, " + alternative.type + ">) {");
+                        if (alternative.node) {
+                           line(source, 3, "auto cloned_value = value ? value->clone() : " + alternative.type + "{};");
+                           line(source, 3, "return " + field.type + "{std::in_place_type<" + alternative.type + ">, std::move(cloned_value)};");
+                        } else {
+                           line(source, 3, "return " + field.type + "{std::in_place_type<" + alternative.type + ">, value};");
+                        }
+                        line(source, 2, "}");
+                     }
+                     line(source, 2, "throw std::runtime_error{\"Unknown labeled group variant alternative\"};");
+                     line(source, 1, "}, " + field.name + ");");
                   } else {
                      line(source, 1, "copy->" + field.name + " = " + field.name + ";");
                   }
@@ -1500,6 +1891,23 @@ namespace cpf {
                      line(source, 2, "}");
                      line(source, 1, "}");
                      line(source, 1, "os << \"]\";");
+                  } else if (field.shape == field_shape::capture_variant) {
+                     line(source, 1, "std::visit([&](const auto& value) {");
+                     line(source, 2, "using value_t = std::decay_t<decltype(value)>;");
+                     for (const auto& alternative : field.variant_alternatives) {
+                        line(source, 2, "if constexpr (std::is_same_v<value_t, " + alternative.type + ">) {");
+                        if (alternative.node) {
+                           line(source, 3, "if (value) {");
+                           line(source, 4, "os << *value;");
+                           line(source, 3, "} else {");
+                           line(source, 4, "os << \"null\";");
+                           line(source, 3, "}");
+                        } else {
+                           line(source, 3, "os << cpf::detail::quoted(value.text);");
+                        }
+                        line(source, 2, "}");
+                     }
+                     line(source, 1, "}, node." + field.name + ");");
                   } else if (field.shape == field_shape::terminal_optional) {
                      line(source, 1, "if (node." + field.name + ") {");
                      line(source, 2, "os << cpf::detail::quoted(node." + field.name + "->text);");
