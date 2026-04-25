@@ -25,15 +25,16 @@ TEST_SUITE("cpflib.complexity") {
       std::vector<double> samples;
       samples.reserve(sizes.size());
       for (const auto size : sizes) {
-         samples.push_back((5.0 * size * std::log(size)) + (2.0 * size) + 7.0);
+         samples.push_back((5.0e-7 * size * std::log(size)) + (2.0e-7 * size) + 7.0e-8);
       }
 
       auto result = cpf::detail::analyze_complexity_samples(sizes, samples);
 
       CHECK(result.big_o == "O(N log N)");
-      CHECK(result.summary.find("time(ns) ~= ") != std::string::npos);
+      CHECK(result.summary.find("time(s) ~= ") != std::string::npos);
       CHECK(result.expression.find("N*log(N)") != std::string::npos);
       CHECK(result.estimate(128.0) > result.estimate(64.0));
+      CHECK(result.relative_root_mean_square_error < 0.02);
    }
 
    TEST_CASE("synthetic square-root samples fit an O(sqrt N) model") {
@@ -140,7 +141,7 @@ TEST_SUITE("cpflib.complexity") {
       CHECK_FALSE(result.summary.empty());
       CHECK(result.summary.find("O(") != std::string::npos);
       CHECK(result.estimate(512.0) > result.estimate(64.0));
-      CHECK(result.sample_times_ns.size() == 4);
+      CHECK(result.sample_times_s.size() == 4);
       CHECK(result.arg_sizes.size() == 4);
       CHECK(result.estimate(256.0) > 0.0);
    }

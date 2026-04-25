@@ -288,15 +288,15 @@ auto analysis = cpf::complexity_of(
     std::vector<double>{32.0, 64.0, 128.0, 256.0});
 
 std::cout << analysis.summary << std::endl;
-std::cout << "Estimated time at n=512: " << analysis.estimate(512.0) << " ns\n";
+std::cout << "Estimated time at n=512: " << analysis.estimate(512.0) << " s\n";
 ```
 
 The returned `cpf::complexity` contains:
 
 - `big_o`: the selected asymptotic family
-- `expression`: the fitted practical expression in nanoseconds
+- `expression`: the fitted practical expression in seconds
 - `summary`: a human-readable description
-- `estimator`: a `std::function<double(double)>` returning estimated nanoseconds for a given input size
+- `estimator`: a `std::function<double(double)>` returning estimated seconds for a given input size
 - `relative_root_mean_square_error`, `coefficients`, and the observed samples for inspection/debugging
 
 ## Example usage

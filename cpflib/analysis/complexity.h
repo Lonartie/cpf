@@ -29,11 +29,11 @@ namespace cpf {
    struct complexity {
       /// @brief Big-O family selected for the fitted model.
       std::string big_o;
-      /// @brief Human-readable fitted expression whose result is measured in nanoseconds.
+      /// @brief Human-readable fitted expression whose result is measured in seconds.
       std::string expression;
       /// @brief Complete human-readable summary of the fitted complexity.
       std::string summary;
-      /// @brief Estimates execution time in nanoseconds for an input size.
+      /// @brief Estimates execution time in seconds for an input size.
       std::function<double(double)> estimator;
       /// @brief Relative root-mean-square fit error for the chosen model.
       double relative_root_mean_square_error = std::numeric_limits<double>::infinity();
@@ -41,12 +41,12 @@ namespace cpf {
       std::vector<double> coefficients;
       /// @brief Observed argument sizes used for fitting.
       std::vector<double> arg_sizes;
-      /// @brief Observed median timings in nanoseconds used for fitting.
-      std::vector<double> sample_times_ns;
+      /// @brief Observed median timings in seconds used for fitting.
+      std::vector<double> sample_times_s;
 
       /// @brief Evaluates the fitted model for a specific input size.
       /// @param input_size User-defined size metric of the input.
-      /// @return Estimated runtime in nanoseconds.
+      /// @return Estimated runtime in seconds.
       [[nodiscard]] auto estimate(double input_size) const -> double {
          return estimator ? estimator(input_size) : 0.0;
       }
@@ -72,8 +72,8 @@ namespace cpf {
          return std::max(sanitize_measurement_size(value), 1.0);
       }
 
-      inline void validate_complexity_inputs(const std::vector<double>& arg_sizes, const std::vector<double>& sample_times_ns) {
-         if (arg_sizes.size() != sample_times_ns.size()) {
+      inline void validate_complexity_inputs(const std::vector<double>& arg_sizes, const std::vector<double>& sample_times_s) {
+         if (arg_sizes.size() != sample_times_s.size()) {
             throw std::invalid_argument{"cpf::complexity_of requires the same number of argument tuples and argument sizes"};
          }
 
@@ -87,11 +87,15 @@ namespace cpf {
             }
          }
 
-         for (const auto duration_ns : sample_times_ns) {
-            if (!std::isfinite(duration_ns) || duration_ns < 0.0) {
+         for (const auto duration_s : sample_times_s) {
+            if (!std::isfinite(duration_s) || duration_s < 0.0) {
                throw std::invalid_argument{"cpf::complexity_of requires finite, non-negative timings"};
             }
          }
+      }
+
+      inline auto positive_scale_denominator(double value) -> double {
+         return std::max(std::abs(value), std::numeric_limits<double>::epsilon());
       }
 
 #if defined(__clang__) || defined(__GNUC__)
@@ -466,7 +470,7 @@ namespace cpf {
       inline auto fit_complexity_model(
          const complexity_model& model,
          const std::vector<double>& arg_sizes,
-         const std::vector<double>& sample_times_ns) -> std::optional<complexity_fit> {
+         const std::vector<double>& sample_times_s) -> std::optional<complexity_fit> {
          auto parameter_count = model.basis_functions.size();
          if (arg_sizes.size() < parameter_count) {
             return std::nullopt;
@@ -496,7 +500,7 @@ namespace cpf {
 
          for (std::size_t sample_index = 0; sample_index < arg_sizes.size(); ++sample_index) {
             for (std::size_t row = 0; row < parameter_count; ++row) {
-               normal_vector[row] += scaled_design[sample_index][row] * sample_times_ns[sample_index];
+               normal_vector[row] += scaled_design[sample_index][row] * sample_times_s[sample_index];
                for (std::size_t column = 0; column < parameter_count; ++column) {
                   normal_matrix[row][column] += scaled_design[sample_index][row] * scaled_design[sample_index][column];
                }
@@ -517,7 +521,7 @@ namespace cpf {
          }
 
          auto squared_error = 0.0;
-         auto mean_time = std::accumulate(sample_times_ns.begin(), sample_times_ns.end(), 0.0) / static_cast<double>(sample_times_ns.size());
+         auto mean_time = std::accumulate(sample_times_s.begin(), sample_times_s.end(), 0.0) / static_cast<double>(sample_times_s.size());
          auto valid_prediction = true;
          for (std::size_t sample_index = 0; sample_index < arg_sizes.size(); ++sample_index) {
             auto predicted = evaluate_model(model, coefficients, arg_sizes[sample_index]);
@@ -525,7 +529,7 @@ namespace cpf {
                valid_prediction = false;
                break;
             }
-            auto residual = predicted - sample_times_ns[sample_index];
+            auto residual = predicted - sample_times_s[sample_index];
             squared_error += residual * residual;
          }
 
@@ -533,13 +537,13 @@ namespace cpf {
             return std::nullopt;
          }
 
-         auto relative_root_mean_square_error = std::sqrt(squared_error / static_cast<double>(sample_times_ns.size()))
-            / std::max(mean_time, 1.0);
+         auto relative_root_mean_square_error = std::sqrt(squared_error / static_cast<double>(sample_times_s.size()))
+            / positive_scale_denominator(mean_time);
 
          auto largest_input = *std::max_element(arg_sizes.begin(), arg_sizes.end());
          auto fitted_at_largest_input = evaluate_model(model, coefficients, largest_input);
          auto dominant_component = coefficients.front() * model.basis_functions.front()(largest_input);
-         auto dominant_share = std::abs(dominant_component) / std::max(std::abs(fitted_at_largest_input), 1.0);
+         auto dominant_share = std::abs(dominant_component) / positive_scale_denominator(fitted_at_largest_input);
 
          auto score = (relative_root_mean_square_error * 5.0)
             + 0.004 * static_cast<double>(parameter_count - 1U)
@@ -561,12 +565,12 @@ namespace cpf {
 
       inline auto analyze_complexity_samples(
          std::vector<double> arg_sizes,
-         std::vector<double> sample_times_ns) -> complexity {
-         validate_complexity_inputs(arg_sizes, sample_times_ns);
+         std::vector<double> sample_times_s) -> complexity {
+         validate_complexity_inputs(arg_sizes, sample_times_s);
 
          std::optional<complexity_fit> best_fit;
          for (const auto& model : complexity_models()) {
-            auto fit = fit_complexity_model(model, arg_sizes, sample_times_ns);
+            auto fit = fit_complexity_model(model, arg_sizes, sample_times_s);
             if (!fit.has_value()) {
                continue;
             }
@@ -586,12 +590,12 @@ namespace cpf {
          complexity result;
          result.big_o = std::string{best_fit->model->big_o};
          result.expression = render_expression(*best_fit->model, best_fit->coefficients);
-         result.summary = result.big_o + ": time(ns) ~= " + result.expression
+         result.summary = result.big_o + ": time(s) ~= " + result.expression
             + " (relative RMSE " + format_percentage(best_fit->relative_root_mean_square_error) + "%)";
          result.relative_root_mean_square_error = best_fit->relative_root_mean_square_error;
          result.coefficients = best_fit->coefficients;
          result.arg_sizes = std::move(arg_sizes);
-         result.sample_times_ns = std::move(sample_times_ns);
+         result.sample_times_s = std::move(sample_times_s);
 
          auto model = *best_fit->model;
          auto coefficients = result.coefficients;
@@ -632,7 +636,7 @@ namespace cpf {
       }
 
       template<typename Func, typename Tuple>
-      auto measure_complexity_sample_ns(Func& func, Tuple& arguments) -> double {
+      auto measure_complexity_sample_s(Func& func, Tuple& arguments) -> double {
          std::vector<double> trials;
          trials.reserve(complexity_trial_count);
 
@@ -646,7 +650,7 @@ namespace cpf {
                end = std::chrono::steady_clock::now();
             } while (iterations < complexity_min_iterations || (end - start) < complexity_min_trial_duration);
 
-            auto elapsed = std::chrono::duration<double, std::nano>{end - start}.count();
+            auto elapsed = std::chrono::duration<double>{end - start}.count();
             trials.push_back(elapsed / static_cast<double>(iterations));
          }
 
@@ -660,7 +664,7 @@ namespace cpf {
    /// @param func Callable to execute.
    /// @param args Argument tuples to pass to the callable.
    /// @param arg_sizes User-defined sizes corresponding to each argument tuple.
-   /// @return Fitted complexity model whose estimator returns nanoseconds.
+   /// @return Fitted complexity model whose estimator returns seconds.
    template<typename Func, typename... Args>
    auto complexity_of(
       Func&& func,
@@ -671,13 +675,13 @@ namespace cpf {
       }
 
       auto callable = std::forward<Func>(func);
-      std::vector<double> sample_times_ns;
-      sample_times_ns.reserve(args.size());
+      std::vector<double> sample_times_s;
+      sample_times_s.reserve(args.size());
       for (auto& argument_tuple : args) {
-         sample_times_ns.push_back(detail::measure_complexity_sample_ns(callable, argument_tuple));
+         sample_times_s.push_back(detail::measure_complexity_sample_s(callable, argument_tuple));
       }
 
-      return detail::analyze_complexity_samples(std::move(arg_sizes), std::move(sample_times_ns));
+      return detail::analyze_complexity_samples(std::move(arg_sizes), std::move(sample_times_s));
    }
 } // namespace cpf
 
