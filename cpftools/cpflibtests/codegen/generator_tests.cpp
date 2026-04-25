@@ -26,7 +26,8 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(generated.header.find("struct number : expression") != std::string::npos);
          CHECK(generated.header.find("static constexpr std::size_t RuleId = ") != std::string::npos);
          CHECK(generated.header.find("static constexpr std::size_t ProductionCount = 5;") != std::string::npos);
-         CHECK(generated.header.find("static std::array<cpf::complexity, 5> Complexity;") != std::string::npos);
+         CHECK(generated.header.find("static auto complexity(std::size_t production_index) -> const cpf::complexity&;") !=
+               std::string::npos);
          CHECK(generated.header.find(
                      "static parse_result parse(std::string_view input, const cpf::parse_options& options = {});") !=
                std::string::npos);
@@ -51,7 +52,7 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(generated.source.find("expression_complexity_inputs_0{{") != std::string::npos);
          CHECK(generated.source.find("compute_generated_rule_complexity<expression>(expression_complexity_inputs_0") !=
                std::string::npos);
-         CHECK(generated.source.find("std::array<cpf::complexity, 5> expression::Complexity{};") != std::string::npos);
+         CHECK(generated.source.find("std::array<cpf::complexity, 5> expression_complexity_cache{};") != std::string::npos);
          CHECK(generated.source.find("cpf::recognize_result recognize_generated(std::string_view input, std::size_t root_rule)") !=
                std::string::npos);
          CHECK(generated.source.find("cpf::parse_result<T> parse_generated(std::string_view input, std::size_t "
@@ -173,7 +174,8 @@ TEST_SUITE("cpflib.code_generator") {
 
       SUBCASE("generated source stamps and preserves matched definitions") {
          CHECK(generated.header.find("static constexpr std::size_t ProductionCount = 2;") != std::string::npos);
-         CHECK(generated.header.find("static std::array<cpf::complexity, 2> Complexity;") != std::string::npos);
+         CHECK(generated.header.find("static auto complexity(std::size_t production_index) -> const cpf::complexity&;") !=
+               std::string::npos);
          CHECK(generated.source.find("node->production_index = 0;") != std::string::npos);
          CHECK(generated.source.find("node->production_index = 1;") != std::string::npos);
          CHECK(generated.source.find("copy->production_index = production_index;") != std::string::npos);
@@ -186,7 +188,7 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(generated.source.find(
                      "compute_generated_rule_complexity<merged_binary>(merged_binary_complexity_inputs_1") !=
                std::string::npos);
-         CHECK(generated.source.find("std::array<cpf::complexity, 2> merged_binary::Complexity{};") !=
+         CHECK(generated.source.find("std::array<cpf::complexity, 2> merged_binary_complexity_cache{};") !=
                std::string::npos);
          CHECK(generated.source.find("auto child_result = merged_greeting::parse(input, options);") !=
                std::string::npos);

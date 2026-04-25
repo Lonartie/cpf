@@ -12,11 +12,10 @@ struct expression : cpf::node {
 
     static constexpr std::size_t RuleId = 0;
     static constexpr std::size_t ProductionCount = 5;
-    static std::array<cpf::complexity, 5> Complexity;
-
     ~expression() override = default;
     static parse_result parse(std::string_view input, const cpf::parse_options& options = {});
     static cpf::recognize_result recognize(std::string_view input);
+    static auto complexity(std::size_t production_index) -> const cpf::complexity&;
     static auto complexity_inputs(std::size_t production_index) -> std::span<const std::string_view>;
     static auto recompute_complexity(std::size_t production_index) -> const cpf::complexity&;
     std::size_t rule_id() const override;
@@ -191,14 +190,14 @@ Each generated node also exposes:
 
 - a stable `RuleId`
 - `ProductionCount`
-- a mutable `Complexity` array
+- `complexity(production_index)`
 - `complexity_inputs(production_index)`
 - `recompute_complexity(production_index)`
 
 Here `production_index` is the zero-based production index stored on parsed nodes, so merged generated node classes can
 keep separate complexity estimates per reduction rule.
 
-`Complexity[production_index]` is intentionally populated lazily. CPF always generates the deterministic sample inputs up front,
+The hidden complexity cache is intentionally populated lazily. CPF always generates the deterministic sample inputs up front,
 but it only fits and stores the corresponding `cpf::complexity` object when `recompute_complexity(production_index)` is called.
 
 ## End-to-end example

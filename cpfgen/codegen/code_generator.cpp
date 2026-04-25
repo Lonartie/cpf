@@ -1148,10 +1148,10 @@ namespace cpf {
                line(header, 0);
             }
             line(header, 1, "~" + info.name + "() override = default;");
-            line(header, 1, "static std::array<cpf::complexity, " + std::to_string(definition_count) + "> Complexity;");
             line(header, 1,
                  "static parse_result parse(std::string_view input, const cpf::parse_options& options = {});");
             line(header, 1, "static cpf::recognize_result recognize(std::string_view input);");
+            line(header, 1, "static auto complexity(std::size_t production_index) -> const cpf::complexity&;");
             line(header, 1, "static auto complexity_inputs(std::size_t production_index) -> std::span<const std::string_view>;");
             line(header, 1, "static auto recompute_complexity(std::size_t production_index) -> const cpf::complexity&;");
             line(header, 1, "std::size_t rule_id() const override;");
@@ -2358,6 +2358,11 @@ namespace cpf {
             }
             line(source, 0, "}");
             line(source, 0);
+            line(source, 0, "namespace {");
+            line(source, 1,
+                 "std::array<cpf::complexity, " + std::to_string(definition_count) + "> " + info.name + "_complexity_cache{};");
+            line(source, 0, "} // namespace");
+            line(source, 0);
             line(source, 0,
                  "auto " + info.name +
                        "::complexity_inputs(std::size_t production_index) -> std::span<const std::string_view> {");
@@ -2377,16 +2382,11 @@ namespace cpf {
             line(source, 0, "}");
             line(source, 0);
             line(source, 0,
-                 "auto " + info.name + "::recompute_complexity(std::size_t production_index) -> const cpf::complexity& {");
+                 "auto " + info.name + "::complexity(std::size_t production_index) -> const cpf::complexity& {");
             line(source, 1, "switch (production_index) {");
             for (std::size_t definition = 0; definition < definition_count; ++definition) {
                line(source, 2, "case " + std::to_string(definition) + ":");
-               line(source, 3,
-                    "Complexity[" + std::to_string(definition) + "] = compute_generated_rule_complexity<" + info.name +
-                          ">(" + info.name + "_complexity_inputs_" + std::to_string(definition) + ", " +
-                          cpp_string_literal(info.name) + ", " + std::to_string(definition) + ", " +
-                          std::to_string(rule_indices.at(info.name)) + ");");
-               line(source, 3, "return Complexity[" + std::to_string(definition) + "];");
+               line(source, 3, "return " + info.name + "_complexity_cache[" + std::to_string(definition) + "];");
             }
             line(source, 2, "default:");
             line(source, 3,
@@ -2396,8 +2396,23 @@ namespace cpf {
             line(source, 0, "}");
             line(source, 0);
             line(source, 0,
-                 "std::array<cpf::complexity, " + std::to_string(definition_count) + "> " + info.name +
-                       "::Complexity{};");
+                 "auto " + info.name + "::recompute_complexity(std::size_t production_index) -> const cpf::complexity& {");
+            line(source, 1, "switch (production_index) {");
+            for (std::size_t definition = 0; definition < definition_count; ++definition) {
+               line(source, 2, "case " + std::to_string(definition) + ":");
+               line(source, 3,
+                    info.name + "_complexity_cache[" + std::to_string(definition) + "] = compute_generated_rule_complexity<" + info.name +
+                          ">(" + info.name + "_complexity_inputs_" + std::to_string(definition) + ", " +
+                          cpp_string_literal(info.name) + ", " + std::to_string(definition) + ", " +
+                          std::to_string(rule_indices.at(info.name)) + ");");
+               line(source, 3, "return " + info.name + "_complexity_cache[" + std::to_string(definition) + "];");
+            }
+            line(source, 2, "default:");
+            line(source, 3,
+                 "throw std::out_of_range{\"Unknown production index \" + std::to_string(production_index) + \" for rule '" +
+                       info.name + "'\"};");
+            line(source, 1, "}");
+            line(source, 0, "}");
             line(source, 0);
             line(source, 0, "std::size_t " + info.name + "::rule_id() const {");
             line(source, 1, "return RuleId;");

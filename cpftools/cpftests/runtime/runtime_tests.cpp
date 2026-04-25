@@ -127,10 +127,10 @@ TEST_SUITE("generated.runtime") {
 
          const auto& expression_recomputed = expression::recompute_complexity(0);
          const auto& recomputed = number::recompute_complexity(0);
-         CHECK(&expression_recomputed == &expression::Complexity[0]);
-         CHECK(&recomputed == &number::Complexity[0]);
-         CHECK_FALSE(expression::Complexity[0].summary.empty());
-         CHECK_FALSE(number::Complexity[0].big_o.empty());
+         CHECK(&expression_recomputed == &expression::complexity(0));
+         CHECK(&recomputed == &number::complexity(0));
+         CHECK_FALSE(expression::complexity(0).summary.empty());
+         CHECK_FALSE(number::complexity(0).big_o.empty());
          CHECK_FALSE(expression_recomputed.summary.empty());
          CHECK_FALSE(recomputed.summary.empty());
          CHECK(recomputed.estimate(8.0) >= 0.0);
@@ -481,8 +481,8 @@ TEST_SUITE("generated.runtime") {
          REQUIRE(greeting_result.forest.size() == 1);
          CHECK(greeting_result.forest.front()->text.text == "hello");
          const auto& recomputed = greeting::recompute_complexity(0);
-         CHECK(&recomputed == &greeting::Complexity[0]);
-         CHECK_FALSE(greeting::Complexity[0].summary.empty());
+         CHECK(&recomputed == &greeting::complexity(0));
+         CHECK_FALSE(greeting::complexity(0).summary.empty());
          CHECK(recomputed.estimate(5.0) >= 0.0);
       }
 
@@ -615,7 +615,6 @@ TEST_SUITE("generated.runtime") {
       }
 
       SUBCASE("complexity samples and stored estimates are tracked per merged definition") {
-         REQUIRE(merged_binary::Complexity.size() == 2);
          auto plus_inputs = merged_binary::complexity_inputs(0);
          auto multiply_inputs = merged_binary::complexity_inputs(1);
          REQUIRE(plus_inputs.size() >= 2);
@@ -625,13 +624,14 @@ TEST_SUITE("generated.runtime") {
 
          const auto& recomputed_plus = merged_binary::recompute_complexity(0);
          const auto& recomputed = merged_binary::recompute_complexity(1);
-         CHECK(&recomputed_plus == &merged_binary::Complexity[0]);
-         CHECK(&recomputed == &merged_binary::Complexity[1]);
-         CHECK_FALSE(merged_binary::Complexity[0].summary.empty());
-         CHECK_FALSE(merged_binary::Complexity[1].summary.empty());
+         CHECK(&recomputed_plus == &merged_binary::complexity(0));
+         CHECK(&recomputed == &merged_binary::complexity(1));
+         CHECK_FALSE(merged_binary::complexity(0).summary.empty());
+         CHECK_FALSE(merged_binary::complexity(1).summary.empty());
          CHECK_FALSE(recomputed.summary.empty());
          CHECK(recomputed.estimate(8.0) >= 0.0);
 
+         CHECK_THROWS_AS(merged_binary::complexity(2), std::out_of_range);
          CHECK_THROWS_AS(merged_binary::complexity_inputs(2), std::out_of_range);
          CHECK_THROWS_AS(merged_binary::recompute_complexity(2), std::out_of_range);
       }

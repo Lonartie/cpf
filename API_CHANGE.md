@@ -81,23 +81,7 @@ Generated `visit(...)`, `visit_recursive(...)`, and `operator<<` fit the rest of
 
 ## Generated API oddities
 
-## 1. `Complexity` as public mutable static state is awkward
-
-Generated nodes expose:
-
-- `static std::array<cpf::complexity, N> Complexity;`
-
-and recomputation mutates it.
-
-### Why this is odd
-
-This exposes global mutable state directly in the public API and likely complicates thread-safety expectations.
-
-### Recommendation
-
-Hide the cache and expose accessor-based APIs instead.
-
-## 2. Group-capture `std::variant<std::unique_ptr<...>>` payloads may be awkward to consume
+## 1. Group-capture `std::variant<std::unique_ptr<...>>` payloads may be awkward to consume
 
 These are type-safe, but less ergonomic than the rest of the inheritance-and-visitor-oriented API.
 
@@ -105,7 +89,7 @@ These are type-safe, but less ergonomic than the rest of the inheritance-and-vis
 
 Consider generating helper visitor functions for such payload members, or prefer a common generated base type when possible.
 
-## 3. `visit_recursive(...)` is read-only only
+## 2. `visit_recursive(...)` is read-only only
 
 The generated traversal helpers operate on const nodes.
 
@@ -125,9 +109,6 @@ The current runtime API is not bad. In fact, its core concepts are fairly strong
 - practical recovery metadata
 - generated visitor and streaming support
 
-### Odd parts
-
-- complexity metadata uses confusing terminology
 
 ## Final recommendation
 
