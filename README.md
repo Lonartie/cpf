@@ -1,8 +1,8 @@
 # CPF
 
 CPF is a parser generation framework that reads a `.cpf` grammar and emits a matching C++20 header/source pair.
-It targets C++20 and is intended for fast parser iteration and prototyping. The generated parser uses the earley
-algorithm and produces a lazy parse forest that can be traversed and queried for syntax nodes, errors, and ambiguities.
+It is intended for fast parser iteration and prototyping. The generated parser uses the earley algorithm and 
+produces a lazy parse forest that can be traversed and queried for syntax nodes, errors, and ambiguities.
 
 > Disclaimer: This project makes heavy use of AI as almost all of the code is AI-generated.
 
