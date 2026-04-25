@@ -36,6 +36,7 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(generated.header.find(
                      "static auto recompute_complexity(std::size_t rule_id) -> const cpf::complexity&;") !=
                std::string::npos);
+         CHECK(generated.header.find("std::unique_ptr<expression> clone() const;") != std::string::npos);
          CHECK(generated.header.find("cpf::matched_string value;") != std::string::npos);
          CHECK(generated.header.find("std::unique_ptr<expression> left;") != std::string::npos);
          CHECK(generated.header.find("template<typename Visitor>") != std::string::npos);
@@ -80,6 +81,7 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(generated.source.find("bool validate_generated_tree(const parse_node_ptr& tree)") != std::string::npos);
          CHECK(generated.source.find("rejected by precedence/associativity constraints") != std::string::npos);
          CHECK(generated.source.find("definition_of_generated_tree(const parse_node_ptr& tree)") != std::string::npos);
+         CHECK(generated.source.find("std::unique_ptr<expression> expression::clone() const") != std::string::npos);
          CHECK(generated.source.find("std::unique_ptr<cpf::node> number::clone_node() const") != std::string::npos);
           CHECK(generated.source.find("copy_damage_to(*copy);") != std::string::npos);
           CHECK(generated.source.find("successful_children += child_result.forest.size();") != std::string::npos);

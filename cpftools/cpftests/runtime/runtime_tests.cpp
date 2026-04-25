@@ -349,7 +349,8 @@ TEST_SUITE("generated.runtime") {
       SUBCASE("cloning and recursive visiting traverse the full tree") {
          auto result = expression::parse("1 + 2 * 3");
          REQUIRE(result.success);
-         auto cloned = result.forest.front()->clone();
+         const auto& root = *result.forest.front();
+         auto cloned = root.clone();
          REQUIRE(cloned != nullptr);
          CHECK(visit(*cloned, calculator_visitor{}) == 7);
 

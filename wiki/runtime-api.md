@@ -20,7 +20,7 @@ struct expression : cpf::node {
     static auto recompute_complexity(std::size_t rule_id) -> const cpf::complexity&;
     std::size_t rule_id() const override;
     const std::type_info& type() const override;
-    std::unique_ptr<expression> clone();
+    std::unique_ptr<expression> clone() const;
 };
 ```
 

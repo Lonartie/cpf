@@ -1155,7 +1155,7 @@ namespace cpf {
             line(header, 1, "static auto recompute_complexity(std::size_t rule_id) -> const cpf::complexity&;");
             line(header, 1, "std::size_t rule_id() const override;");
             line(header, 1, "const std::type_info& type() const override;");
-            line(header, 1, "std::unique_ptr<" + info.name + "> clone();");
+            line(header, 1, "std::unique_ptr<" + info.name + "> clone() const;");
             if (!info.base_rule) {
                line(header, 0);
                line(header, 1, "protected:");
@@ -2338,7 +2338,7 @@ namespace cpf {
             line(source, 1, "return typeid(" + info.name + ");");
             line(source, 0, "}");
             line(source, 0);
-            line(source, 0, "std::unique_ptr<" + info.name + "> " + info.name + "::clone() {");
+            line(source, 0, "std::unique_ptr<" + info.name + "> " + info.name + "::clone() const {");
             line(source, 1, "auto cloned = this->clone_node();");
             line(source, 1,
                  "return release_built_node_as<" + info.name + ">(std::move(cloned));");
