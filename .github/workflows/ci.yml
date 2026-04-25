@@ -1,0 +1,126 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.name }} (${{ matrix.build_type }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux GCC
+            os: ubuntu-latest
+            c_compiler: gcc
+            cxx_compiler: g++
+          - name: Linux Clang
+            os: ubuntu-latest
+            c_compiler: clang
+            cxx_compiler: clang++
+          - name: macOS Clang
+            os: macos-latest
+            c_compiler: clang
+            cxx_compiler: clang++
+          - name: Windows MSVC
+            os: windows-latest
+            c_compiler: cl
+            cxx_compiler: cl
+        build_type:
+          - Debug
+          - Release
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up MSVC environment
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Show tool versions
+        run: |
+          cmake --version
+          ninja --version
+          ctest --version
+
+      - name: Configure (Unix-like)
+        if: runner.os != 'Windows'
+        env:
+          CC: ${{ matrix.c_compiler }}
+          CXX: ${{ matrix.cxx_compiler }}
+        run: >-
+          cmake
+          -S .
+          -B build
+          -G Ninja
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+          -DCPF_BUILD_BENCHMARKS=OFF
+
+      - name: Configure (Windows)
+        if: runner.os == 'Windows'
+        run: >-
+          cmake
+          -S .
+          -B build
+          -G Ninja
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+          -DCPF_BUILD_BENCHMARKS=OFF
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Run tests
+        run: ctest --test-dir build --build-config ${{ matrix.build_type }} --output-on-failure
+
+  clang-format:
+    name: clang-format
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install clang-format
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes clang-format
+
+      - name: Verify formatting
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          import sys
+
+          repo = Path('.')
+          tracked = subprocess.check_output(['git', 'ls-files'], text=True).splitlines()
+          include_exact = {'cpfgen/cpfgenlib', 'cpflib/cpflib'}
+          files = []
+          for rel in tracked:
+             if rel.startswith(('cmake-build-', 'build/', 'cpftools/vendor/')):
+                continue
+             if rel in include_exact or rel.endswith(('.cpp', '.h')):
+                files.append(str(repo / rel))
+
+          if not files:
+             print('No C++ files selected for clang-format', file=sys.stderr)
+             sys.exit(1)
+
+          normal = [path for path in files if path.endswith(('.cpp', '.h'))]
+          extensionless = [path for path in files if path.endswith('/cpflib') or path.endswith('/cpfgenlib')]
+
+          subprocess.run(['clang-format', '--style=file', '--dry-run', '--Werror', *normal], check=True)
+          if extensionless:
+             subprocess.run(
+                ['clang-format', '--style=file', '--assume-filename=header.h', '--dry-run', '--Werror', *extensionless],
+                check=True,
+             )
+          PY
+
+

@@ -1,5 +1,6 @@
 #include <cpfgenlib>
 
+#include <system_error>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -21,8 +22,33 @@ namespace {
       stream << content;
    }
 
-   [[nodiscard]] std::string escape_depfile_path(const std::filesystem::path& path) {
-      auto text = path.string();
+   [[nodiscard]] std::filesystem::path depfile_path_for(const std::filesystem::path& value,
+                                                        const std::filesystem::path& depfile_directory) {
+      auto error = std::error_code{};
+      auto absolute_value = std::filesystem::absolute(value, error);
+      if (error) {
+         absolute_value = value;
+         error.clear();
+      }
+
+      auto absolute_depfile_directory = std::filesystem::absolute(depfile_directory, error);
+      if (error) {
+         absolute_depfile_directory = depfile_directory;
+      }
+
+      auto normalized_value = absolute_value.lexically_normal();
+      auto normalized_depfile_directory = absolute_depfile_directory.lexically_normal();
+      auto relative_value = normalized_value.lexically_relative(normalized_depfile_directory);
+      if (!relative_value.empty()) {
+         return relative_value;
+      }
+
+      return normalized_value;
+   }
+
+   [[nodiscard]] std::string escape_depfile_path(const std::filesystem::path& path,
+                                                 const std::filesystem::path& depfile_directory) {
+      auto text = depfile_path_for(path, depfile_directory).generic_string();
       std::string escaped;
       escaped.reserve(text.size() * 2);
       for (char ch: text) {
@@ -35,6 +61,9 @@ namespace {
                break;
             case '$':
                escaped += "$$";
+               break;
+            case ':':
+               escaped += "\\:";
                break;
             default:
                escaped += ch;
@@ -52,9 +81,11 @@ namespace {
          throw std::runtime_error{"Unable to write depfile '" + path.string() + "'"};
       }
 
-      stream << escape_depfile_path(generated_header) << ' ' << escape_depfile_path(generated_source) << ':';
+      auto depfile_directory = path.parent_path();
+      stream << escape_depfile_path(generated_header, depfile_directory) << ' '
+             << escape_depfile_path(generated_source, depfile_directory) << ':';
       for (const auto& dependency: dependencies) {
-         stream << ' ' << escape_depfile_path(dependency);
+         stream << ' ' << escape_depfile_path(dependency, depfile_directory);
       }
       stream << '\n';
    }

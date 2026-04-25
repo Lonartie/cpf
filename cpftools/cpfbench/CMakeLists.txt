@@ -18,8 +18,14 @@ CPMAddPackage(
         "BENCHMARK_ENABLE_WERROR OFF"
 )
 
-target_compile_options(benchmark PRIVATE -Wno-error=c2y-extensions -Wno-c2y-extensions)
-target_compile_options(benchmark_main PRIVATE -Wno-error=c2y-extensions -Wno-c2y-extensions)
+if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|AppleClang")
+    if (TARGET benchmark)
+        target_compile_options(benchmark PRIVATE -Wno-error=c2y-extensions -Wno-c2y-extensions)
+    endif ()
+    if (TARGET benchmark_main)
+        target_compile_options(benchmark_main PRIVATE -Wno-error=c2y-extensions -Wno-c2y-extensions)
+    endif ()
+endif ()
 
 add_executable(cpfbench
         main.cpp

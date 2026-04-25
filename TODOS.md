@@ -2,21 +2,7 @@
 
 This file is an ordered roadmap rather than a flat checklist. Items at the top are the most practical near-term investments.
 
-## 1. GitHub Actions for CI testing
-
-**Idea** Set up GitHub Actions to build and test the project automatically on every relevant change.
-
-**Considerations**
-
-* Build on macOS and Linux first
-* Run the full test suite in Debug and Release
-* Add formatter and warning checks once the workflow is stable
-
-**Impact** High impact, low-to-medium implementation effort.
-
-**Value** This gives the project a reliable quality gate and makes future changes much safer.
-
-## 2. Sanitizer and compiler matrix in CI
+## 1. Sanitizer and compiler matrix in CI
 
 **Idea** Extend CI with sanitizer jobs and a broader compiler matrix.
 
@@ -30,7 +16,7 @@ This file is an ordered roadmap rather than a flat checklist. Items at the top a
 
 **Value** This reduces the risk of undefined behavior, memory bugs, and platform-specific regressions in parser and runtime code.
 
-## 3. Grammar diagnostics and linting
+## 2. Grammar diagnostics and linting
 
 **Idea** Add static analysis for grammars before or during generation.
 
@@ -44,7 +30,7 @@ This file is an ordered roadmap rather than a flat checklist. Items at the top a
 
 **Value** This makes grammar authoring much easier and helps users fix structural issues before runtime.
 
-## 4. Ambiguity diagnostics and inspection tools
+## 3. Ambiguity diagnostics and inspection tools
 
 **Idea** Go beyond ambiguity failure and provide useful diagnostics for ambiguous parses.
 
@@ -58,7 +44,7 @@ This file is an ordered roadmap rather than a flat checklist. Items at the top a
 
 **Value** This would be one of the most useful differentiators of CPF because ambiguous grammars are otherwise very hard to debug.
 
-## 5. Grammar ergonomics: skip rules, token definitions, and lexer-like conveniences
+## 4. Grammar ergonomics: skip rules, token definitions, and lexer-like conveniences
 
 **Idea** Improve the grammar language so larger grammars are easier to read and maintain.
 
@@ -72,7 +58,7 @@ This file is an ordered roadmap rather than a flat checklist. Items at the top a
 
 **Value** This reduces grammar noise and makes CPF feel much more practical for real-world inputs.
 
-## 6. Parse forest introspection API
+## 5. Parse forest introspection API
 
 **Idea** Expose controlled access to opaque parse forest data without forcing AST materialization.
 
@@ -86,7 +72,7 @@ This file is an ordered roadmap rather than a flat checklist. Items at the top a
 
 **Value** This builds directly on the lazy parse forest design and enables better tooling, diagnostics, and analysis.
 
-## 7. Error recovery and partial parsing
+## 6. Error recovery and partial parsing
 
 **Idea** Allow CPF to continue usefully after syntax errors instead of only failing hard.
 
@@ -100,7 +86,7 @@ This file is an ordered roadmap rather than a flat checklist. Items at the top a
 
 **Value** This is essential for interactive tooling and makes CPF much more useful outside of batch parsing.
 
-## 8. Golden tests for generated code
+## 7. Golden tests for generated code
 
 **Idea** Add snapshot-style tests for representative generated outputs.
 
@@ -114,7 +100,7 @@ This file is an ordered roadmap rather than a flat checklist. Items at the top a
 
 **Value** This gives strong regression protection for a code generator, where small changes can have wide effects.
 
-## 9. Benchmark regression tracking
+## 8. Benchmark regression tracking
 
 **Idea** Turn benchmarking into an ongoing regression-detection tool instead of a manual inspection step.
 
@@ -128,7 +114,7 @@ This file is an ordered roadmap rather than a flat checklist. Items at the top a
 
 **Value** This makes the benchmark work already in the repository much more actionable.
 
-## 10. AST and visitor ergonomics improvements
+## 9. AST and visitor ergonomics improvements
 
 **Idea** Improve the usability of generated ASTs and visitors for downstream consumers.
 
@@ -142,7 +128,7 @@ This file is an ordered roadmap rather than a flat checklist. Items at the top a
 
 **Value** This improves developer experience and makes generated parsers easier to inspect and integrate.
 
-## 11. Better grammar language expressiveness
+## 10. Better grammar language expressiveness
 
 **Idea** Lift current language limitations and add better constructs for larger grammars.
 
@@ -156,7 +142,7 @@ This file is an ordered roadmap rather than a flat checklist. Items at the top a
 
 **Value** This expands what users can express naturally without awkward grammar workarounds.
 
-## 12. Cookbook and architecture documentation in `wiki`
+## 11. Cookbook and architecture documentation in `wiki`
 
 **Idea** Expand the documentation from reference material into practical and contributor-oriented guides.
 
@@ -170,7 +156,7 @@ This file is an ordered roadmap rather than a flat checklist. Items at the top a
 
 **Value** This helps both users and contributors become productive much faster.
 
-## 13. Code generation customization hooks
+## 12. Code generation customization hooks
 
 **Idea** Allow users to adapt generated code shape without forking the generator.
 
@@ -183,7 +169,7 @@ This file is an ordered roadmap rather than a flat checklist. Items at the top a
 
 **Value** This makes CPF easier to adopt in more opinionated codebases and larger systems.
 
-## 14. Generated CST mode in addition to AST mode
+## 13. Generated CST mode in addition to AST mode
 
 **Idea** Support concrete syntax tree generation alongside the existing AST-oriented mode.
 
@@ -196,7 +182,7 @@ This file is an ordered roadmap rather than a flat checklist. Items at the top a
 
 **Value** This opens the door to formatters, refactoring tools, and editor workflows that need lossless syntax preservation.
 
-## 15. Incremental parsing and reusable parse state
+## 14. Incremental parsing and reusable parse state
 
 **Idea** Reuse parse work across small edits instead of reparsing the full input every time.
 
@@ -210,7 +196,7 @@ This file is an ordered roadmap rather than a flat checklist. Items at the top a
 
 **Value** This would make CPF much more compelling for interactive tooling and language-server scenarios.
 
-## 16. Alternate parsing backends or specialized fast paths
+## 15. Alternate parsing backends or specialized fast paths
 
 **Idea** Investigate specialized parsing strategies for grammar subsets that can run faster than the general path.
 
@@ -223,7 +209,7 @@ This file is an ordered roadmap rather than a flat checklist. Items at the top a
 
 **Value** This could broaden CPF from a flexible parser generator into a more performance-adaptive platform.
 
-## 17. Grammar packaging and multi-root workflows
+## 16. Grammar packaging and multi-root workflows
 
 **Idea** Improve support for large grammar ecosystems and reusable grammar modules.
 

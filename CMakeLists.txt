@@ -1,15 +1,25 @@
 cmake_minimum_required(VERSION 3.24)
 project(cpf LANGUAGES CXX)
 
+include(CheckIPOSupported)
 include(CTest)
 
 option(CPF_BUILD_BENCHMARKS "Build cpfbench parser benchmarks" ON)
+option(CPF_ENABLE_IPO "Enable interprocedural optimization when supported" ON)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
+
+if (CPF_ENABLE_IPO)
+    check_ipo_supported(RESULT cpf_ipo_supported OUTPUT cpf_ipo_output)
+    if (cpf_ipo_supported)
+        set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
+    else ()
+        message(STATUS "Interprocedural optimization disabled: ${cpf_ipo_output}")
+    endif ()
+endif ()
 
 add_library(cpf_project_options INTERFACE)
 target_compile_features(cpf_project_options INTERFACE cxx_std_20)
