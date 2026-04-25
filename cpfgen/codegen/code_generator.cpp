@@ -1230,6 +1230,19 @@ namespace cpf {
                line(header, 1, "}");
                line(header, 0, "}");
                line(header, 0);
+               line(header, 0, "template<typename Visitor>");
+               line(header, 0, "void visit_recursive(" + info.name + "& node, Visitor&& visitor) {");
+               line(header, 1, "switch (node.rule_id()) {");
+               for (const auto& descendant: concrete_descendants) {
+                  line(header, 2, "case " + descendant + "::RuleId:");
+                  line(header, 3, "visit_recursive(static_cast<" + descendant + "&>(node), visitor);");
+                  line(header, 3, "return;");
+               }
+               line(header, 2, "default:");
+               line(header, 3, "throw std::bad_cast{};");
+               line(header, 1, "}");
+               line(header, 0, "}");
+               line(header, 0);
                continue;
             }
 
@@ -1254,6 +1267,38 @@ namespace cpf {
                   line(header, 1, "}");
                } else if (field.shape == field_shape::capture_variant) {
                   line(header, 1, "std::visit([&](const auto& value) {");
+                  line(header, 2, "using value_t = std::decay_t<decltype(value)>;");
+                  for (const auto& alternative: field.variant_alternatives) {
+                     if (!alternative.node) {
+                        continue;
+                     }
+                     line(header, 2, "if constexpr (std::is_same_v<value_t, " + alternative.type + ">) {");
+                     line(header, 3, "if (value) {");
+                     line(header, 4, "visit_recursive(*value, visitor);");
+                     line(header, 3, "}");
+                     line(header, 2, "}");
+                  }
+                  line(header, 1, "}, node." + field.name + ");");
+               }
+            }
+            line(header, 0, "}");
+            line(header, 0);
+            line(header, 0, "template<typename Visitor>");
+            line(header, 0, "void visit_recursive(" + info.name + "& node, Visitor&& visitor) {");
+            line(header, 1, "std::forward<Visitor>(visitor)(node);");
+            for (const auto& field: info.fields) {
+               if (field.shape == field_shape::node_scalar) {
+                  line(header, 1, "if (node." + field.name + ") {");
+                  line(header, 2, "visit_recursive(*node." + field.name + ", visitor);");
+                  line(header, 1, "}");
+               } else if (field.shape == field_shape::node_vector) {
+                  line(header, 1, "for (auto& child : node." + field.name + ") {");
+                  line(header, 2, "if (child) {");
+                  line(header, 3, "visit_recursive(*child, visitor);");
+                  line(header, 2, "}");
+                  line(header, 1, "}");
+               } else if (field.shape == field_shape::capture_variant) {
+                  line(header, 1, "std::visit([&](auto& value) {");
                   line(header, 2, "using value_t = std::decay_t<decltype(value)>;");
                   for (const auto& alternative: field.variant_alternatives) {
                      if (!alternative.node) {

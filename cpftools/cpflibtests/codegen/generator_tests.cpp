@@ -44,6 +44,7 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(generated.header.find("std::unique_ptr<expression> left;") != std::string::npos);
          CHECK(generated.header.find("template<typename Visitor>") != std::string::npos);
          CHECK(generated.header.find("switch (node.rule_id())") != std::string::npos);
+         CHECK(generated.header.find("void visit_recursive(expression& node, Visitor&& visitor)") != std::string::npos);
       }
 
       SUBCASE("source output wires parser, errors, and cloning") {

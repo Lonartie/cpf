@@ -27,7 +27,7 @@ Each generated rule also gets:
 
 - `operator<<`
 - `visit(...)`
-- `visit_recursive(...)`
+- `visit_recursive(...)` for both const traversal and in-place mutation
 
 Generated rules also expose `recognize(...)` for syntax-only validation without building a forest of lazy parse trees.
 

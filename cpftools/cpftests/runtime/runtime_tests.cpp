@@ -396,6 +396,21 @@ TEST_SUITE("generated.runtime") {
          CHECK(visited == std::vector<std::string>{"addition", "number", "multiplication", "number", "number"});
       }
 
+      SUBCASE("mutable recursive visiting can rewrite the AST in place") {
+         auto result = expression::parse("1 + 2 * 3");
+         REQUIRE(result.success);
+         REQUIRE(result.forest.size() == 1);
+
+         visit_recursive(*result.forest.front(), [](auto& node) {
+            using node_t = std::decay_t<decltype(node)>;
+            if constexpr (std::is_same_v<node_t, number>) {
+               node.value.text = "1";
+            }
+         });
+
+         CHECK(visit(*result.forest.front(), calculator_visitor{}) == 2);
+      }
+
       SUBCASE("parse failures expose structured error details") {
          auto result = expression::parse("1 +");
 
