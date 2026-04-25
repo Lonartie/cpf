@@ -9,6 +9,24 @@
 #include <typeinfo>
 
 namespace {
+   constexpr std::array<cpf::detail::parser_symbol, 2> recover_ab_symbols{{
+         {cpf::detail::parser_symbol_kind::literal, 0, "a", nullptr},
+         {cpf::detail::parser_symbol_kind::literal, 0, "b", nullptr}
+   }};
+   constexpr std::array<cpf::detail::production_spec, 1> recover_grammar_productions{{
+         {0, "start", "start -> 'a' 'b'", recover_ab_symbols.data(), recover_ab_symbols.size()}
+   }};
+   constexpr std::array<std::size_t, 1> recover_grammar_rule_production_indices{{0}};
+   constexpr std::array<std::size_t, 1> recover_grammar_rule_production_offsets{{0}};
+   constexpr std::array<std::size_t, 1> recover_grammar_rule_production_counts{{1}};
+   constexpr cpf::detail::grammar_spec recover_grammar_spec{
+         recover_grammar_productions.data(),
+         recover_grammar_productions.size(),
+         1,
+         recover_grammar_rule_production_indices.data(),
+         recover_grammar_rule_production_offsets.data(),
+         recover_grammar_rule_production_counts.data()};
+
    constexpr std::array<cpf::detail::parser_symbol, 1> optional_start_symbols{{
          {cpf::detail::parser_symbol_kind::nonterminal, 1, "opt_a", nullptr}
    }};
@@ -54,8 +72,8 @@ TEST_SUITE("cpflib.runtime") {
    TEST_CASE("parse results can represent ambiguous parses as multiple trees") {
       cpf::parse_result<fake_node> result;
       result.success = true;
-      result.forest.push_back(std::make_unique<fake_node>("first"));
-      result.forest.push_back(std::make_unique<fake_node>("second"));
+      result.forest.emplace_back(std::make_unique<fake_node>("first"));
+      result.forest.emplace_back(std::make_unique<fake_node>("second"));
 
       REQUIRE(result.forest.size() == 2);
       CHECK(result.forest[0]->value == "first");
@@ -88,6 +106,7 @@ TEST_SUITE("cpflib.runtime") {
 
       auto error = tracker.build("1 + * 2");
 
+      CHECK(error.offset == 4);
       CHECK(error.line == 1);
       CHECK(error.column == 5);
       CHECK(error.found == "\"*\"");
@@ -150,5 +169,51 @@ TEST_SUITE("cpflib.runtime") {
             CHECK(std::get<cpf::matched_string>(helper->children.front()).text == "a");
          }
       }
+   }
+
+   TEST_CASE("earley_parse keeps ignored invalid input inside one recovered tree") {
+      auto result = cpf::detail::earley_parse("a!b", recover_grammar_spec, 0, true);
+
+      REQUIRE(result.success);
+      CHECK(result.partial);
+      REQUIRE(result.forest.size() == 1);
+      REQUIRE(result.tree_partial.size() == 1);
+      CHECK(result.tree_partial.front());
+
+      const auto& root = result.forest.front();
+      REQUIRE(root != nullptr);
+      CHECK(root->partial);
+      CHECK(root->children.size() == 2);
+      REQUIRE(root->damage.size() == 1);
+      CHECK(root->damage.front().range.begin.offset == 1);
+      CHECK(root->damage.front().range.end.offset == 2);
+      CHECK(root->damage.front().reason == cpf::node_damage_reason::ignored_invalid_input);
+      CHECK(root->damage.front().detail == "\"!\"");
+      CHECK(root->damage.front().message.find("could not match \"b\"") != std::string::npos);
+      CHECK(std::get<cpf::matched_string>(root->children[0]).text == "a");
+      CHECK(std::get<cpf::matched_string>(root->children[1]).text == "b");
+   }
+
+   TEST_CASE("earley_parse can insert a virtual literal inside one recovered tree") {
+      auto result = cpf::detail::earley_parse("a", recover_grammar_spec, 0, true);
+
+      REQUIRE(result.success);
+      CHECK(result.partial);
+      REQUIRE(result.forest.size() == 1);
+
+      const auto& root = result.forest.front();
+      REQUIRE(root != nullptr);
+      CHECK(root->partial);
+      REQUIRE(root->children.size() == 2);
+      REQUIRE(root->damage.size() == 1);
+      CHECK(root->damage.front().reason == cpf::node_damage_reason::inserted_virtual_token);
+      CHECK(root->damage.front().detail == "\"b\"");
+      CHECK(root->damage.front().message.find("available tokens") != std::string::npos);
+      CHECK(root->damage.front().message.find("\"b\"") != std::string::npos);
+
+      const auto inserted = std::get<cpf::matched_string>(root->children[1]);
+      CHECK(inserted.text == "b");
+      CHECK(inserted.range.begin.offset == 1);
+      CHECK(inserted.range.end.offset == 1);
    }
 }

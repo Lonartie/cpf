@@ -23,7 +23,7 @@ namespace {
    }
 
    [[nodiscard]] std::filesystem::path depfile_path_for(const std::filesystem::path& value,
-                                                        const std::filesystem::path& depfile_directory) {
+                                                        const std::filesystem::path& working_directory) {
       auto error = std::error_code{};
       auto absolute_value = std::filesystem::absolute(value, error);
       if (error) {
@@ -31,14 +31,14 @@ namespace {
          error.clear();
       }
 
-      auto absolute_depfile_directory = std::filesystem::absolute(depfile_directory, error);
+      auto absolute_working_directory = std::filesystem::absolute(working_directory, error);
       if (error) {
-         absolute_depfile_directory = depfile_directory;
+         absolute_working_directory = working_directory;
       }
 
       auto normalized_value = absolute_value.lexically_normal();
-      auto normalized_depfile_directory = absolute_depfile_directory.lexically_normal();
-      auto relative_value = normalized_value.lexically_relative(normalized_depfile_directory);
+      auto normalized_working_directory = absolute_working_directory.lexically_normal();
+      auto relative_value = normalized_value.lexically_relative(normalized_working_directory);
       if (!relative_value.empty()) {
          return relative_value;
       }
@@ -47,8 +47,8 @@ namespace {
    }
 
    [[nodiscard]] std::string escape_depfile_path(const std::filesystem::path& path,
-                                                 const std::filesystem::path& depfile_directory) {
-      auto text = depfile_path_for(path, depfile_directory).generic_string();
+                                                 const std::filesystem::path& working_directory) {
+      auto text = depfile_path_for(path, working_directory).generic_string();
       std::string escaped;
       escaped.reserve(text.size() * 2);
       for (char ch: text) {
@@ -81,11 +81,11 @@ namespace {
          throw std::runtime_error{"Unable to write depfile '" + path.string() + "'"};
       }
 
-      auto depfile_directory = path.parent_path();
-      stream << escape_depfile_path(generated_header, depfile_directory) << ' '
-             << escape_depfile_path(generated_source, depfile_directory) << ':';
+      auto working_directory = std::filesystem::current_path();
+      stream << escape_depfile_path(generated_header, working_directory) << ' '
+             << escape_depfile_path(generated_source, working_directory) << ':';
       for (const auto& dependency: dependencies) {
-         stream << ' ' << escape_depfile_path(dependency, depfile_directory);
+         stream << ' ' << escape_depfile_path(dependency, working_directory);
       }
       stream << '\n';
    }

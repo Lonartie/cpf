@@ -4,6 +4,7 @@
 #include <cctype>
 #include <cstddef>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <regex>
@@ -22,6 +23,8 @@
 namespace cpf {
    /// @brief Describes the furthest parse failure that occurred while parsing input.
    struct parse_error {
+      /// @brief Zero-based byte offset of the parse error.
+      std::size_t offset = 0;
       /// @brief One-based line number of the parse error.
       std::size_t line = 1;
       /// @brief One-based column number of the parse error.
@@ -42,6 +45,8 @@ namespace cpf {
       bool build_ast = true;
       /// @brief When true, parsing fails as soon as multiple valid derivations are detected.
       bool error_on_ambiguity = false;
+      /// @brief When true, parsing may return damaged AST trees recovered around syntax errors.
+      bool allow_partial = false;
    };
 
    /// @brief One position within an input source.
@@ -60,10 +65,39 @@ namespace cpf {
       source_position end;
    };
 
+   /// @brief Classifies how a damaged parse region was recovered.
+   enum class node_damage_reason {
+      ignored_invalid_input,
+      inserted_virtual_token
+   };
+
+   /// @brief Returns a stable textual name for one node damage reason.
+   [[nodiscard]] constexpr auto to_string(node_damage_reason reason) -> std::string_view {
+      switch (reason) {
+         case node_damage_reason::ignored_invalid_input:
+            return "ignored invalid input";
+         case node_damage_reason::inserted_virtual_token:
+            return "inserted virtual token";
+      }
+      return "unknown";
+   }
+
    /// @brief Captured terminal text together with the source range it matched.
    struct matched_string {
       std::string text;
       source_range range;
+   };
+
+   /// @brief Damage annotation attached to a partially recovered AST node.
+   struct node_damage {
+      /// @brief Source range associated with the damage.
+      source_range range;
+      /// @brief Structured classification of the recovery action.
+      node_damage_reason reason = node_damage_reason::ignored_invalid_input;
+      /// @brief Optional human-readable detail associated with the recovery action.
+      std::string detail;
+      /// @brief Human-readable explanation of why recovery was needed and how it was applied.
+      std::string message;
    };
 
    /// @brief Base class for all generated model nodes.
@@ -83,10 +117,26 @@ namespace cpf {
       /// @return The type information of the concrete node instance.
       [[nodiscard]] virtual const std::type_info& type() const = 0;
 
+      /// @brief True when this node was recovered from a damaged parse.
+      [[nodiscard]] auto is_damaged() const -> bool { return !m_damage.empty(); }
+
+      /// @brief Damage annotations attached to this node.
+      [[nodiscard]] auto damage() const -> const std::vector<node_damage>& { return m_damage; }
+
+      /// @brief Adds one damage annotation to this node.
+      void add_damage(node_damage damage) { m_damage.push_back(std::move(damage)); }
+
    protected:
       /// @brief Clones the concrete node through the base interface.
       /// @return A newly allocated deep copy of the node.
       [[nodiscard]] virtual std::unique_ptr<node> clone_node() const = 0;
+
+      template<typename T> friend class parse_tree;
+
+      void copy_damage_to(node& other) const { other.m_damage = m_damage; }
+
+   private:
+      std::vector<node_damage> m_damage;
    };
 
    template<typename T> class parse_tree;
@@ -96,6 +146,9 @@ namespace cpf {
       using parse_node_ptr = std::shared_ptr<const parse_node>;
 
       template<typename T> [[nodiscard]] auto opaque_tree_of(const parse_tree<T>& tree) -> const parse_node_ptr&;
+
+      [[nodiscard]] auto repaired_input_of(const parse_node_ptr& tree, std::string_view input)
+            -> std::optional<std::string>;
    } // namespace detail
 
    /// @brief Lazy handle for one parse tree in a returned forest.
@@ -113,9 +166,13 @@ namespace cpf {
       }
 
       parse_tree(detail::parse_node_ptr opaque_tree, std::size_t tree_definition, source_range tree_range,
-                 std::function<std::unique_ptr<T>()> materializer) :
-          definition{tree_definition}, range{std::move(tree_range)}, m_opaque_tree{std::move(opaque_tree)},
-          m_materialize{std::move(materializer)} {}
+                 std::function<std::unique_ptr<T>()> materializer,
+                 std::vector<node_damage> pending_damage = {}, bool tree_partial = false,
+                 std::function<void(const T&, std::vector<const node*>&)> damage_indexer = {}) :
+          definition{tree_definition}, range{std::move(tree_range)}, partial{tree_partial},
+          m_opaque_tree{std::move(opaque_tree)}, m_materialize{std::move(materializer)},
+          m_pending_damage{std::move(pending_damage)},
+          m_damage_indexer{std::move(damage_indexer)} {}
 
       [[nodiscard]] auto get() const -> T* {
          ensure_materialized();
@@ -128,8 +185,24 @@ namespace cpf {
 
       [[nodiscard]] auto has_materialized() const -> bool { return static_cast<bool>(m_materialized); }
 
+      [[nodiscard]] auto damaged_nodes() const -> const std::vector<const node*>& {
+         ensure_materialized();
+         ensure_damage_indexed();
+         return m_damaged_nodes;
+      }
+
+      [[nodiscard]] auto repaired_input(std::string_view input) const -> std::optional<std::string> {
+         if (!partial || m_opaque_tree == nullptr) {
+            return std::string{input};
+         }
+         return detail::repaired_input_of(m_opaque_tree, input);
+      }
+
+      [[nodiscard]] auto root_damage() const -> const std::vector<node_damage>& { return m_pending_damage; }
+
       std::size_t definition = 0;
       source_range range;
+      bool partial = false;
 
    private:
       template<typename U>
@@ -141,23 +214,44 @@ namespace cpf {
          }
          auto built = m_materialize();
          if (built != nullptr) {
+            for (const auto& damage: m_pending_damage) {
+               built->add_damage(damage);
+            }
             m_materialized = std::shared_ptr<T>{built.release()};
          }
       }
 
+      void ensure_damage_indexed() const {
+         if (m_damage_indexed || m_materialized == nullptr) {
+            return;
+         }
+         if (m_damage_indexer) {
+            m_damage_indexer(*m_materialized, m_damaged_nodes);
+         } else if (m_materialized->is_damaged()) {
+            m_damaged_nodes.push_back(m_materialized.get());
+         }
+         m_damage_indexed = true;
+      }
+
       detail::parse_node_ptr m_opaque_tree;
       std::function<std::unique_ptr<T>()> m_materialize;
+      std::vector<node_damage> m_pending_damage;
+      std::function<void(const T&, std::vector<const node*>&)> m_damage_indexer;
       mutable std::shared_ptr<T> m_materialized;
+      mutable std::vector<const node*> m_damaged_nodes;
+      mutable bool m_damage_indexed = false;
    };
 
    /// @brief Result of parsing an input string into a forest of lazy parse-tree handles.
    /// @tparam T Root node type produced by the parse entry point.
    template<typename T> struct parse_result {
-      /// @brief True when parsing consumed the full input successfully.
+      /// @brief True when parsing produced either a complete or a partially recovered forest.
       bool success = false;
+      /// @brief True when at least one returned tree is partially recovered.
+      bool partial = false;
       /// @brief All parse trees produced for the input.
       std::vector<parse_tree<T>> forest;
-      /// @brief Error details when @ref success is false.
+      /// @brief Summary error details for encountered syntax damage.
       parse_error error;
    };
 
@@ -270,6 +364,7 @@ namespace cpf {
          [[nodiscard]] parse_error build(std::string_view input) const {
             parse_error error;
             auto location = locate(input, furthest_);
+            error.offset = location.offset;
             error.line = location.line;
             error.column = location.column;
             error.expected.assign(expected_.begin(), expected_.end());
@@ -326,12 +421,45 @@ namespace cpf {
 
       inline auto make_ambiguity_error(std::string_view rule_name) -> parse_error {
          parse_error error;
-         error.expected.push_back("unambiguous parse");
+         error.expected.emplace_back("unambiguous parse");
          error.found = "<ambiguous parse>";
          error.notes.push_back("multiple valid derivations were detected while parsing rule '" +
                                std::string{rule_name} + "'");
          error_tracker::finalize(error);
          return error;
+      }
+
+      inline auto make_node_damage(std::string_view input, std::size_t begin_offset, std::size_t end_offset,
+                                   node_damage_reason reason, std::string detail = {}, std::string message = {})
+          -> node_damage {
+         return node_damage{make_source_range(input, begin_offset, end_offset), reason, std::move(detail),
+                            std::move(message)};
+      }
+
+      inline auto make_inserted_damage(std::string_view input, std::size_t offset, std::string expected) -> node_damage {
+         auto detail = std::move(expected);
+         return make_node_damage(input, offset, offset, node_damage_reason::inserted_virtual_token,
+                                 detail,
+                                 "recovery inserted one of the available tokens at this position: " + detail);
+      }
+
+      inline auto make_ignored_damage(std::string_view input, std::size_t begin_offset, std::size_t end_offset,
+                                      std::string expected) -> node_damage {
+         auto detail = quoted(input.substr(begin_offset, end_offset - begin_offset));
+         auto message = expected == "<end of input>"
+                              ? "recovery ignored trailing input because parsing had already completed"
+                              : "recovery ignored input because it could not match " + expected;
+         return make_node_damage(input, begin_offset, end_offset, node_damage_reason::ignored_invalid_input,
+                                 std::move(detail), std::move(message));
+      }
+
+      inline void rebase_source_position(source_position& position, std::string_view input, std::size_t offset) {
+         position = locate(input, offset + position.offset);
+      }
+
+      inline void rebase_source_range(source_range& range, std::string_view input, std::size_t offset) {
+         rebase_source_position(range.begin, input, offset);
+         rebase_source_position(range.end, input, offset);
       }
 
       inline bool starts_with(std::string_view input, std::size_t position, std::string_view literal) {
@@ -404,6 +532,8 @@ namespace cpf {
          std::size_t end = 0;
          source_range range;
          std::vector<parse_value> children;
+         std::vector<node_damage> damage;
+         bool partial = false;
       };
 
       template<typename T> [[nodiscard]] auto opaque_tree_of(const parse_tree<T>& tree) -> const parse_node_ptr& {
@@ -412,7 +542,10 @@ namespace cpf {
 
       struct parse_forest {
          bool success = false;
+         bool partial = false;
          std::vector<parse_node_ptr> forest;
+         std::vector<bool> tree_partial;
+         std::vector<std::vector<node_damage>> tree_damage;
          parse_error error;
       };
 
@@ -477,6 +610,26 @@ namespace cpf {
          }
       };
 
+      struct production_step_key {
+         std::size_t production = 0;
+         std::size_t symbol_index = 0;
+         std::size_t position = 0;
+         std::size_t end = 0;
+
+         [[nodiscard]] bool operator==(const production_step_key&) const = default;
+      };
+
+      struct production_step_key_hash {
+         [[nodiscard]] auto operator()(const production_step_key& key) const noexcept -> std::size_t {
+            auto seed = std::size_t{0};
+            hash_combine(seed, key.production);
+            hash_combine(seed, key.symbol_index);
+            hash_combine(seed, key.position);
+            hash_combine(seed, key.end);
+            return seed;
+         }
+      };
+
       struct terminal_match {
          std::size_t end = 0;
          matched_string text;
@@ -487,6 +640,32 @@ namespace cpf {
             return std::get<matched_string>(value).range;
          }
          return std::get<parse_node_ptr>(value)->range;
+      }
+
+      struct input_patch {
+         std::size_t offset = 0;
+         std::size_t erase_count = 0;
+         std::string insert_text;
+      };
+
+      struct consumed_interval {
+         std::size_t begin = 0;
+         std::size_t end = 0;
+      };
+
+      struct repaired_input_plan {
+         std::vector<input_patch> patches;
+         std::vector<consumed_interval> consumed;
+         bool saw_damage = false;
+      };
+
+      inline void extend_range(source_range& target, const source_range& candidate) {
+         if (candidate.begin.offset < target.begin.offset) {
+            target.begin = candidate.begin;
+         }
+         if (candidate.end.offset > target.end.offset) {
+            target.end = candidate.end;
+         }
       }
 
       inline std::size_t skip_space_position(std::string_view input, std::size_t position) {
@@ -544,6 +723,170 @@ namespace cpf {
             return match;
          }
          return std::nullopt;
+      }
+
+      inline auto virtual_terminal(std::string_view input, std::size_t position, std::string_view text) -> matched_string {
+         matched_string match;
+         match.text = std::string{text};
+         auto token_start = skip_space_position(input, position);
+         match.range = make_source_range(input, token_start, token_start);
+         return match;
+      }
+
+      inline auto ignored_symbol_end(std::string_view input, std::size_t position, std::size_t limit) -> std::size_t {
+         auto current = skip_space_position(input, position);
+         if (current >= limit) {
+            return current;
+         }
+         return std::min(limit, current + 1);
+      }
+
+      inline auto whitespace_only(std::string_view input, std::size_t begin, std::size_t end) -> bool {
+         if (begin > end || end > input.size()) {
+            return false;
+         }
+         for (auto index = begin; index < end; ++index) {
+            if (std::isspace(static_cast<unsigned char>(input[index])) == 0) {
+               return false;
+            }
+         }
+         return true;
+      }
+
+      inline auto append_consumed_interval(repaired_input_plan& plan, std::size_t begin, std::size_t end,
+                                           std::size_t input_size) -> bool {
+         if (begin > end || end > input_size) {
+            return false;
+         }
+         if (begin == end) {
+            return true;
+         }
+         plan.consumed.push_back(consumed_interval{begin, end});
+         return true;
+      }
+
+      inline auto collect_repaired_input_plan(const parse_node_ptr& tree, std::string_view input,
+                                              repaired_input_plan& plan) -> bool {
+         if (tree == nullptr) {
+            return false;
+         }
+
+         for (const auto& damage: tree->damage) {
+            const auto begin = damage.range.begin.offset;
+            const auto end = damage.range.end.offset;
+            if (begin > end || end > input.size()) {
+               return false;
+            }
+
+            if (damage.reason == node_damage_reason::ignored_invalid_input) {
+               if (begin == end || (damage.detail != quoted(input.substr(begin, end - begin)))) {
+                  return false;
+               }
+               plan.saw_damage = true;
+               plan.patches.push_back(input_patch{begin, end - begin, {}});
+               if (!append_consumed_interval(plan, begin, end, input.size())) {
+                  return false;
+               }
+            } else if (damage.reason == node_damage_reason::inserted_virtual_token) {
+               if (begin != end) {
+                  return false;
+               }
+               plan.saw_damage = true;
+            }
+         }
+
+         for (const auto& child: tree->children) {
+            if (const auto* text = std::get_if<matched_string>(&child)) {
+               const auto begin = text->range.begin.offset;
+               const auto end = text->range.end.offset;
+               if (begin > end || end > input.size()) {
+                  return false;
+               }
+               if (begin != end) {
+                  if (input.substr(begin, end - begin) != text->text) {
+                     return false;
+                  }
+                  if (!append_consumed_interval(plan, begin, end, input.size())) {
+                     return false;
+                  }
+               } else if (!text->text.empty()) {
+                  plan.patches.push_back(input_patch{begin, 0, text->text});
+               }
+            } else if (!collect_repaired_input_plan(std::get<parse_node_ptr>(child), input, plan)) {
+               return false;
+            }
+         }
+
+         return true;
+      }
+
+      inline auto validate_repaired_input_plan(std::string_view input, const repaired_input_plan& plan) -> bool {
+         auto consumed = plan.consumed;
+         std::sort(consumed.begin(), consumed.end(), [](const auto& lhs, const auto& rhs) {
+            if (lhs.begin != rhs.begin) {
+               return lhs.begin < rhs.begin;
+            }
+            return lhs.end < rhs.end;
+         });
+
+         auto cursor = std::size_t{0};
+         for (const auto& interval: consumed) {
+            if (interval.begin < cursor || !whitespace_only(input, cursor, interval.begin)) {
+               return false;
+            }
+            cursor = interval.end;
+         }
+         if (!whitespace_only(input, cursor, input.size())) {
+            return false;
+         }
+
+         auto removals = std::vector<consumed_interval>{};
+         for (const auto& patch: plan.patches) {
+            if (patch.offset > input.size() || patch.erase_count > (input.size() - patch.offset)) {
+               return false;
+            }
+            if (patch.erase_count != 0) {
+               removals.push_back(consumed_interval{patch.offset, patch.offset + patch.erase_count});
+            }
+         }
+         std::sort(removals.begin(), removals.end(), [](const auto& lhs, const auto& rhs) {
+            if (lhs.begin != rhs.begin) {
+               return lhs.begin < rhs.begin;
+            }
+            return lhs.end < rhs.end;
+         });
+         for (std::size_t index = 1; index < removals.size(); ++index) {
+            if (removals[index].begin < removals[index - 1].end) {
+               return false;
+            }
+         }
+
+         return true;
+      }
+
+      inline auto apply_repaired_input_plan(std::string_view input, repaired_input_plan plan) -> std::string {
+         auto output = std::string{input};
+         std::sort(plan.patches.begin(), plan.patches.end(), [](const auto& lhs, const auto& rhs) {
+            if (lhs.offset != rhs.offset) {
+               return lhs.offset > rhs.offset;
+            }
+            return lhs.erase_count > rhs.erase_count;
+         });
+         for (const auto& patch: plan.patches) {
+            output.replace(patch.offset, patch.erase_count, patch.insert_text);
+         }
+         return output;
+      }
+
+      inline auto repaired_input_of(const parse_node_ptr& tree, std::string_view input) -> std::optional<std::string> {
+         auto plan = repaired_input_plan{};
+         if (!collect_repaired_input_plan(tree, input, plan) || !plan.saw_damage) {
+            return std::nullopt;
+         }
+         if (!validate_repaired_input_plan(input, plan)) {
+            return std::nullopt;
+         }
+         return apply_repaired_input_plan(input, std::move(plan));
       }
 
       struct inspect_result {
@@ -700,14 +1043,23 @@ namespace cpf {
          return prepared;
       }
 
-      inline parse_forest earley_parse(std::string_view input, const grammar_spec& grammar, std::size_t root_rule) {
-         parse_forest result;
-         auto prepared = prepare_earley_parse(input, grammar, root_rule);
-         if (!prepared.has_root_production) {
-            result.error = prepared.error;
-            return result;
+      inline auto collect_root_ends(std::string_view input, const prepared_parse& prepared, std::size_t root_rule,
+                                    bool require_full_input) -> std::vector<std::size_t> {
+         auto ends = std::vector<std::size_t>{};
+         for (std::size_t end = 0; end < prepared.chart.size(); ++end) {
+            if (require_full_input && skip_space_position(input, end) != input.size()) {
+               continue;
+            }
+            if (prepared.completed_rules.contains(span_key{root_rule, 0, end})) {
+               ends.push_back(end);
+            }
          }
+         return ends;
+      }
 
+      inline auto build_root_forest(std::string_view input, const grammar_spec& grammar, std::size_t root_rule,
+                                    const prepared_parse& prepared, const std::vector<std::size_t>& root_ends)
+          -> std::vector<parse_node_ptr> {
          using node_list = std::vector<parse_node_ptr>;
 
          const auto empty_nodes = node_list{};
@@ -764,7 +1116,7 @@ namespace cpf {
                         range.end = range_of(children.back()).end;
                      }
                      nodes.push_back(std::make_shared<parse_node>(
-                           parse_node{production.lhs, production_index, start, end, range, children}));
+                           parse_node{production.lhs, production_index, start, end, range, children, {}, false}));
                   }
                   return;
                }
@@ -804,21 +1156,308 @@ namespace cpf {
             return production_cache.emplace(key, std::move(nodes)).first->second;
          };
 
-         for (std::size_t end = 0; end < prepared.chart.size(); ++end) {
-            if (skip_space_position(input, end) != input.size()) {
-               continue;
-            }
+         auto forest = std::vector<parse_node_ptr>{};
+         for (auto end: root_ends) {
             const auto& trees = build_rule(root_rule, 0, end);
-            result.forest.insert(result.forest.end(), trees.begin(), trees.end());
+            forest.insert(forest.end(), trees.begin(), trees.end());
          }
 
-         if (!result.forest.empty()) {
-            result.success = true;
+         return forest;
+      }
+
+      constexpr auto impossible_recovery_cost = std::numeric_limits<std::size_t>::max() / 4;
+
+      struct recovered_tree_candidate {
+         parse_node_ptr tree;
+         std::size_t cost = impossible_recovery_cost;
+         std::string signature;
+         bool partial = false;
+      };
+
+      struct recovered_suffix_candidate {
+         std::vector<parse_value> children;
+         std::vector<node_damage> damage;
+         std::size_t cost = impossible_recovery_cost;
+         std::string signature;
+         bool partial = false;
+      };
+
+      inline void keep_recovered_tree_candidate(std::vector<recovered_tree_candidate>& candidates,
+                                                recovered_tree_candidate candidate) {
+         if (candidate.tree == nullptr || candidate.cost >= impossible_recovery_cost) {
+            return;
+         }
+         if (candidates.empty() || candidate.cost < candidates.front().cost) {
+            candidates.clear();
+            candidates.push_back(std::move(candidate));
+         }
+      }
+
+      inline void keep_recovered_suffix_candidate(std::vector<recovered_suffix_candidate>& candidates,
+                                                  recovered_suffix_candidate candidate) {
+         if (candidate.cost >= impossible_recovery_cost) {
+            return;
+         }
+         if (candidates.empty() || candidate.cost < candidates.front().cost) {
+            candidates.clear();
+            candidates.push_back(std::move(candidate));
+         }
+      }
+
+      inline auto literal_signature(const matched_string& text, bool virtual_match) -> std::string {
+         return std::string{virtual_match ? "V" : "T"} + "(" + text.text + "@" +
+                std::to_string(text.range.begin.offset) + ":" + std::to_string(text.range.end.offset) + ")";
+      }
+
+      inline auto damage_signature(const node_damage& damage) -> std::string {
+         return "D(" + std::to_string(damage.range.begin.offset) + ":" + std::to_string(damage.range.end.offset) +
+                ":" + std::string{cpf::to_string(damage.reason)} + ":" + damage.detail + ":" + damage.message +
+                ")";
+      }
+
+      inline auto production_children_range(std::string_view input, std::size_t start, std::size_t end,
+                                            const std::vector<parse_value>& children,
+                                            const std::vector<node_damage>& damage) -> source_range {
+         auto range = make_source_range(input, start, end);
+         auto have_component = false;
+         for (const auto& child: children) {
+            auto child_range = range_of(child);
+            if (!have_component) {
+               range = child_range;
+               have_component = true;
+            } else {
+               extend_range(range, child_range);
+            }
+         }
+         for (const auto& entry: damage) {
+            if (!have_component) {
+               range = entry.range;
+               have_component = true;
+            } else {
+               extend_range(range, entry.range);
+            }
+         }
+         return range;
+      }
+
+      inline auto recover_full_input(std::string_view input, const grammar_spec& grammar, std::size_t root_rule,
+                                     const prepared_parse& prepared) -> parse_forest {
+         parse_forest result;
+         result.error = prepared.error;
+         if (!prepared.has_root_production) {
             return result;
          }
 
-         result.error = prepared.error;
+         auto rule_cache = std::unordered_map<span_key, std::vector<recovered_tree_candidate>, span_key_hash>{};
+         auto step_cache =
+               std::unordered_map<production_step_key, std::vector<recovered_suffix_candidate>, production_step_key_hash>{};
+         auto rule_in_progress = std::unordered_set<span_key, span_key_hash>{};
+         auto step_in_progress = std::unordered_set<production_step_key, production_step_key_hash>{};
+
+         std::function<const std::vector<recovered_tree_candidate>&(std::size_t, std::size_t, std::size_t)> build_rule;
+         std::function<const std::vector<recovered_suffix_candidate>&(std::size_t, std::size_t, std::size_t, std::size_t)>
+               build_step;
+
+         build_step = [&](std::size_t production_index, std::size_t symbol_index, std::size_t position,
+                          std::size_t end) -> const std::vector<recovered_suffix_candidate>& {
+            static const auto empty = std::vector<recovered_suffix_candidate>{};
+            auto key = production_step_key{production_index, symbol_index, position, end};
+            if (step_in_progress.contains(key)) {
+               return empty;
+            }
+            if (auto cache = step_cache.find(key); cache != step_cache.end()) {
+               return cache->second;
+            }
+
+            step_in_progress.insert(key);
+            const auto& production = grammar.productions[production_index];
+            auto candidates = std::vector<recovered_suffix_candidate>{};
+
+            if (symbol_index == production.symbol_count) {
+               auto trailing = skip_space_position(input, position);
+               if (trailing == end) {
+                  keep_recovered_suffix_candidate(candidates, recovered_suffix_candidate{{}, {}, 0, "", false});
+               }
+               if (trailing < end) {
+                  const auto ignored_end = ignored_symbol_end(input, position, end);
+                  if (ignored_end > trailing) {
+                     const auto& suffixes = build_step(production_index, symbol_index, ignored_end, end);
+                     for (const auto& suffix: suffixes) {
+                        auto damage = make_ignored_damage(input, trailing, ignored_end, "<end of input>");
+                        auto candidate = recovered_suffix_candidate{suffix.children, suffix.damage,
+                                                                    suffix.cost + 1,
+                                                                    damage_signature(damage) + suffix.signature,
+                                                                    true};
+                        candidate.damage.insert(candidate.damage.begin(), std::move(damage));
+                        keep_recovered_suffix_candidate(candidates, std::move(candidate));
+                     }
+                  }
+               }
+
+               step_in_progress.erase(key);
+               return step_cache.emplace(key, std::move(candidates)).first->second;
+            }
+
+            auto skipped = skip_space_position(input, position);
+            if (skipped < end) {
+               const auto ignored_end = ignored_symbol_end(input, position, end);
+               if (ignored_end > skipped) {
+                  const auto& suffixes = build_step(production_index, symbol_index, ignored_end, end);
+                  for (const auto& suffix: suffixes) {
+                     auto damage = make_ignored_damage(input, skipped, ignored_end,
+                                                       describe_expected_symbol(production.symbols[symbol_index]));
+                     auto candidate = recovered_suffix_candidate{suffix.children, suffix.damage,
+                                                                 suffix.cost + 1,
+                                                                 damage_signature(damage) + suffix.signature,
+                                                                 true};
+                     candidate.damage.insert(candidate.damage.begin(), std::move(damage));
+                     keep_recovered_suffix_candidate(candidates, std::move(candidate));
+                  }
+               }
+            }
+
+            const auto& symbol = production.symbols[symbol_index];
+            if (symbol.kind == parser_symbol_kind::nonterminal) {
+               for (std::size_t child_end = position; child_end <= end; ++child_end) {
+                  const auto& child_candidates = build_rule(symbol.value, position, child_end);
+                  if (child_candidates.empty()) {
+                     continue;
+                  }
+                  const auto& suffixes = build_step(production_index, symbol_index + 1, child_end, end);
+                  if (suffixes.empty()) {
+                     continue;
+                  }
+                  for (const auto& child: child_candidates) {
+                     for (const auto& suffix: suffixes) {
+                        auto candidate = recovered_suffix_candidate{suffix.children,
+                                                                    suffix.damage,
+                                                                    child.cost + suffix.cost,
+                                                                    "N(" + child.signature + ")" + suffix.signature,
+                                                                    child.partial || suffix.partial};
+                        candidate.children.insert(candidate.children.begin(), child.tree);
+                        keep_recovered_suffix_candidate(candidates, std::move(candidate));
+                     }
+                  }
+               }
+            } else {
+               if (auto match = match_terminal(input, position, symbol); match.has_value() && match->end <= end) {
+                  const auto& suffixes = build_step(production_index, symbol_index + 1, match->end, end);
+                  for (const auto& suffix: suffixes) {
+                     auto candidate = recovered_suffix_candidate{suffix.children,
+                                                                 suffix.damage,
+                                                                 suffix.cost,
+                                                                 literal_signature(match->text, false) + suffix.signature,
+                                                                 suffix.partial};
+                     candidate.children.insert(candidate.children.begin(), match->text);
+                     keep_recovered_suffix_candidate(candidates, std::move(candidate));
+                  }
+               }
+
+               if (symbol.kind == parser_symbol_kind::literal) {
+                  const auto& suffixes = build_step(production_index, symbol_index + 1, position, end);
+                  for (const auto& suffix: suffixes) {
+                     auto inserted = virtual_terminal(input, position, symbol.text);
+                     auto damage = make_inserted_damage(input, inserted.range.begin.offset, quoted(symbol.text));
+                     auto candidate = recovered_suffix_candidate{suffix.children,
+                                                                 suffix.damage,
+                                                                 suffix.cost + 1,
+                                                                 literal_signature(inserted, true) + damage_signature(damage) +
+                                                                       suffix.signature,
+                                                                 true};
+                     candidate.children.insert(candidate.children.begin(), inserted);
+                     candidate.damage.insert(candidate.damage.begin(), std::move(damage));
+                     keep_recovered_suffix_candidate(candidates, std::move(candidate));
+                  }
+               }
+            }
+
+            step_in_progress.erase(key);
+            return step_cache.emplace(key, std::move(candidates)).first->second;
+         };
+
+         build_rule = [&](std::size_t rule, std::size_t start, std::size_t end) -> const std::vector<recovered_tree_candidate>& {
+            static const auto empty = std::vector<recovered_tree_candidate>{};
+            auto key = span_key{rule, start, end};
+            if (rule_in_progress.contains(key)) {
+               return empty;
+            }
+            if (auto cache = rule_cache.find(key); cache != rule_cache.end()) {
+               return cache->second;
+            }
+
+            rule_in_progress.insert(key);
+            auto nodes = std::vector<recovered_tree_candidate>{};
+            const auto rule_begin = grammar.rule_production_offsets[rule];
+            const auto rule_count = grammar.rule_production_counts[rule];
+            for (std::size_t offset = 0; offset < rule_count; ++offset) {
+               const auto production_index = grammar.rule_production_indices[rule_begin + offset];
+               const auto& suffixes = build_step(production_index, 0, start, end);
+               for (const auto& suffix: suffixes) {
+                  auto range = production_children_range(input, start, end, suffix.children, suffix.damage);
+                  auto partial = suffix.partial || !suffix.damage.empty();
+                  auto tree = std::make_shared<parse_node>(parse_node{rule,
+                                                                      production_index,
+                                                                      start,
+                                                                      end,
+                                                                      range,
+                                                                      suffix.children,
+                                                                      suffix.damage,
+                                                                      partial});
+                  keep_recovered_tree_candidate(nodes, recovered_tree_candidate{tree,
+                                                                                suffix.cost,
+                                                                                std::to_string(production_index) +
+                                                                                      "{" + suffix.signature + "}",
+                                                                                partial});
+               }
+            }
+
+            rule_in_progress.erase(key);
+            return rule_cache.emplace(key, std::move(nodes)).first->second;
+         };
+
+         const auto& recovered = build_rule(root_rule, 0, input.size());
+         if (recovered.empty() || recovered.front().cost == 0) {
+            return result;
+         }
+
+         result.success = true;
+         result.partial = true;
+         result.forest.reserve(recovered.size());
+         result.tree_partial.reserve(recovered.size());
+         result.tree_damage.resize(recovered.size());
+         for (const auto& candidate: recovered) {
+            result.forest.push_back(candidate.tree);
+            result.tree_partial.push_back(candidate.partial);
+         }
          return result;
+      }
+
+      inline parse_forest earley_parse(std::string_view input, const grammar_spec& grammar, std::size_t root_rule,
+                                       bool allow_partial = false) {
+         auto prepared = prepare_earley_parse(input, grammar, root_rule);
+         if (!prepared.has_root_production) {
+            parse_forest result;
+            result.error = prepared.error;
+            return result;
+         }
+
+         auto full_ends = collect_root_ends(input, prepared, root_rule, true);
+         if (!full_ends.empty()) {
+            parse_forest result;
+            result.success = true;
+            result.forest = build_root_forest(input, grammar, root_rule, prepared, full_ends);
+            result.tree_partial.assign(result.forest.size(), false);
+            result.tree_damage.resize(result.forest.size());
+            return result;
+         }
+
+         if (!allow_partial) {
+            parse_forest result;
+            result.error = prepared.error;
+            return result;
+         }
+
+         return recover_full_input(input, grammar, root_rule, prepared);
       }
 
       inline recognize_result earley_recognize(std::string_view input, const grammar_spec& grammar,

@@ -2063,6 +2063,9 @@ namespace cpf {
                line(source, 4, "auto node = std::make_unique<" + info.name + ">();");
                line(source, 4, "node->definition = " + std::to_string(production.definition) + ";");
                line(source, 4, "node->range = tree->range;");
+               line(source, 4, "for (const auto& damage : tree->damage) {");
+               line(source, 5, "node->add_damage(damage);");
+               line(source, 4, "}");
                for (std::size_t i = 0; i < emitted_production.lowered_symbols.size(); ++i) {
                   const auto& lowered_symbol = emitted_production.lowered_symbols[i];
                   const auto& symbol = *lowered_symbol.source;
@@ -2132,13 +2135,15 @@ namespace cpf {
               "cpf::parse_result<T> parse_generated(std::string_view input, std::size_t root_rule, const "
               "cpf::parse_options& options) {");
          line(source, 2, "cpf::parse_result<T> result;");
-         line(source, 2, "auto forest = cpf::detail::earley_parse(input, grammar_spec, root_rule);");
+         line(source, 2, "auto forest = cpf::detail::earley_parse(input, grammar_spec, root_rule, options.allow_partial);");
          line(source, 2, "if (!forest.success) {");
          line(source, 3, "result.error = std::move(forest.error);");
          line(source, 3, "return result;");
          line(source, 2, "}");
+         line(source, 2, "result.partial = forest.partial;");
          line(source, 2, "auto valid_tree_count = std::size_t{0};");
-         line(source, 2, "for (const auto& tree : forest.forest) {");
+         line(source, 2, "for (std::size_t tree_index = 0; tree_index < forest.forest.size(); ++tree_index) {");
+         line(source, 3, "const auto& tree = forest.forest[tree_index];");
          line(source, 3, "if (!validate_generated_tree(tree)) {");
          line(source, 4, "continue;");
          line(source, 3, "}");
@@ -2155,6 +2160,13 @@ namespace cpf {
               "result.forest.emplace_back(tree, definition_of_generated_tree(tree), tree->range, [tree]() {");
          line(source, 5, "auto built = build_node(tree);");
          line(source, 5, "return release_built_node_as<T>(std::move(built));");
+         line(source, 4,
+              "}, forest.tree_damage[tree_index], forest.tree_partial[tree_index], [](const T& root, std::vector<const cpf::node*>& damaged_nodes) {");
+         line(source, 5, "visit_recursive(root, [&](auto& current) {");
+         line(source, 6, "if (current.is_damaged()) {");
+         line(source, 7, "damaged_nodes.push_back(&current);");
+         line(source, 6, "}");
+         line(source, 5, "});");
          line(source, 4, "});");
          line(source, 3, "}");
          line(source, 2, "}");
@@ -2187,27 +2199,68 @@ namespace cpf {
                line(source, 1, "cpf::parse_error best_error;");
                line(source, 1, "auto have_error = false;");
                line(source, 1, "auto successful_children = std::size_t{0};");
+               line(source, 1, "auto have_partial_success = false;");
                for (const auto& child: families.at(info.name).direct_children) {
                   line(source, 1, "{");
                   line(source, 2, "auto child_result = " + child + "::parse(input, options);");
                   line(source, 2, "if (child_result.success) {");
-                  line(source, 3, "++successful_children;");
-                  line(source, 3, "if (options.error_on_ambiguity && successful_children > 1) {");
-                  line(source, 4, "result.success = false;");
-                  line(source, 4, "result.forest.clear();");
-                  line(source, 4,
+                  line(source, 3, "if (!child_result.partial) {");
+                  line(source, 4, "if (have_partial_success) {");
+                  line(source, 5, "have_partial_success = false;");
+                  line(source, 5, "successful_children = 0;");
+                  line(source, 5, "result.partial = false;");
+                  line(source, 5, "result.forest.clear();");
+                  line(source, 4, "}");
+                  line(source, 4, "result.success = true;");
+                  line(source, 4, "successful_children += child_result.forest.size();");
+                  line(source, 4, "if (options.error_on_ambiguity && successful_children > 1) {");
+                  line(source, 5, "result.success = false;");
+                  line(source, 5, "result.partial = false;");
+                  line(source, 5, "result.forest.clear();");
+                  line(source, 5,
                        "result.error = cpf::detail::make_ambiguity_error(" + cpp_string_literal(info.name) + ");");
-                  line(source, 4, "return result;");
-                  line(source, 3, "}");
-                  line(source, 3, "result.success = true;");
-                  line(source, 3, "if (options.build_ast) {");
-                  line(source, 4, "for (const auto& tree : child_result.forest) {");
-                  line(source, 5, "auto opaque = cpf::detail::opaque_tree_of(tree);");
-                  line(source, 5, "result.forest.emplace_back(opaque, tree.definition, tree.range, [opaque]() {");
-                  line(source, 6, "auto built = build_node(opaque);");
+                  line(source, 5, "return result;");
+                  line(source, 4, "}");
+                  line(source, 4, "if (options.build_ast) {");
+                  line(source, 5, "for (const auto& tree : child_result.forest) {");
+                  line(source, 6, "auto opaque = cpf::detail::opaque_tree_of(tree);");
                   line(source, 6,
+                       "result.forest.emplace_back(opaque, tree.definition, tree.range, [opaque]() {");
+                  line(source, 7, "auto built = build_node(opaque);");
+                  line(source, 7,
                        "return release_built_node_as<" + info.name + ">(std::move(built));");
-                  line(source, 5, "});");
+                  line(source, 6,
+                       "}, tree.root_damage(), tree.partial, [](const " + info.name + "& root, std::vector<const cpf::node*>& damaged_nodes) {");
+                  line(source, 7, "visit_recursive(root, [&](auto& current) {");
+                  line(source, 8, "if (current.is_damaged()) {");
+                  line(source, 9, "damaged_nodes.push_back(&current);");
+                  line(source, 8, "}");
+                  line(source, 7, "});");
+                  line(source, 6, "});");
+                  line(source, 5, "}");
+                  line(source, 4, "}");
+                  line(source, 3, "} else if (!result.success && !have_partial_success) {");
+                  line(source, 4, "result.success = true;");
+                  line(source, 4, "result.partial = true;");
+                  line(source, 4, "have_partial_success = true;");
+                  line(source, 4, "successful_children = child_result.forest.size();");
+                  line(source, 4, "if (options.build_ast) {");
+                  line(source, 5, "for (const auto& tree : child_result.forest) {");
+                  line(source, 6, "auto opaque = cpf::detail::opaque_tree_of(tree);");
+                  line(source, 6,
+                       "result.forest.emplace_back(opaque, tree.definition, tree.range, [opaque]() {");
+                  line(source, 7, "auto built = build_node(opaque);");
+                  line(source, 7,
+                       "return release_built_node_as<" + info.name + ">(std::move(built));");
+                  line(source, 6,
+                       "}, tree.root_damage(), tree.partial, [](const " + info.name + "& root, std::vector<const cpf::node*>& damaged_nodes) {");
+                  line(source, 7, "visit_recursive(root, [&](auto& current) {");
+                  line(source, 8, "if (current.is_damaged()) {");
+                  line(source, 9, "damaged_nodes.push_back(&current);");
+                  line(source, 8, "}");
+                  line(source, 7, "});");
+                  line(source, 6, "});");
+                  line(source, 5, "}");
                   line(source, 4, "}");
                   line(source, 3, "}");
                   line(source, 2, "} else if (!have_error) {");
@@ -2297,6 +2350,7 @@ namespace cpf {
                line(source, 1, "auto copy = std::make_unique<" + info.name + ">();");
                line(source, 1, "copy->definition = definition;");
                line(source, 1, "copy->range = range;");
+               line(source, 1, "copy_damage_to(*copy);");
                for (const auto& field: info.fields) {
                   if (field.shape == field_shape::node_scalar) {
                      line(source, 1, render_child_clone_expression(field));

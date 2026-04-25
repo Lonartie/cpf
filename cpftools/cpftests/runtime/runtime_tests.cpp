@@ -158,6 +158,167 @@ TEST_SUITE("generated.runtime") {
          CHECK(result.error.message.find("repeated_token") != std::string::npos);
       }
 
+      SUBCASE("allow_partial keeps ignored invalid input inside one recovered tree") {
+         cpf::parse_options options;
+         options.allow_partial = true;
+
+         auto result = expression::parse("1 + * 2 + 3", options);
+
+         REQUIRE(result.success);
+         CHECK(result.partial);
+         REQUIRE(result.forest.size() == 1);
+         CHECK(result.forest.front().partial);
+         CHECK(visit(*result.forest.front(), calculator_visitor{}) == 6);
+
+         auto visited_numbers = std::size_t{0};
+         auto visited_additions = std::size_t{0};
+         visit_recursive(*result.forest.front(), [&](const auto& node) {
+            using node_t = std::decay_t<decltype(node)>;
+            if constexpr (std::is_same_v<node_t, number>) {
+               ++visited_numbers;
+            } else if constexpr (std::is_same_v<node_t, addition>) {
+               ++visited_additions;
+            }
+         });
+         CHECK(visited_numbers == 3);
+         CHECK(visited_additions >= 1);
+
+         auto saw_ignored = false;
+         auto saw_ignored_message = false;
+         auto damage_count = std::size_t{0};
+         for (const auto* damaged_node: result.forest.front().damaged_nodes()) {
+            REQUIRE(damaged_node != nullptr);
+            for (const auto& damage: damaged_node->damage()) {
+               ++damage_count;
+               if (damage.reason == cpf::node_damage_reason::ignored_invalid_input &&
+                   damage.range.begin.offset == 4 && damage.range.end.offset == 5) {
+                  saw_ignored = true;
+                  if (damage.message.find("could not match") != std::string::npos) {
+                     saw_ignored_message = true;
+                  }
+               }
+            }
+         }
+         CHECK(damage_count >= 1);
+         CHECK(saw_ignored);
+         CHECK(saw_ignored_message);
+         auto repaired = result.forest.front().repaired_input("1 + * 2 + 3");
+         REQUIRE(repaired.has_value());
+         CHECK(*repaired == "1 +  2 + 3");
+         CHECK(result.forest.front().repaired_input("1 + 2 + 3") == std::nullopt);
+
+         auto cloned = result.forest.front()->clone();
+         REQUIRE(cloned != nullptr);
+         auto cloned_damage_count = std::size_t{0};
+         visit_recursive(*cloned, [&](const auto& node) {
+            if (node.is_damaged()) {
+               cloned_damage_count += node.damage().size();
+            }
+         });
+         CHECK(cloned_damage_count == damage_count);
+      }
+
+      SUBCASE("allow_partial can insert virtual literals inside one recovered tree") {
+         cpf::parse_options options;
+         options.allow_partial = true;
+
+         auto result = grouped_sentence::parse("(hi", options);
+
+         REQUIRE(result.success);
+         CHECK(result.partial);
+         REQUIRE(result.forest.size() == 1);
+         CHECK(result.forest.front().partial);
+         CHECK(result.forest.front()->open.text == "(");
+         CHECK(result.forest.front()->text.text == "hi");
+         CHECK(result.forest.front()->close.text == ")");
+         CHECK(result.forest.front()->close.range.begin.offset == 3);
+         CHECK(result.forest.front()->close.range.end.offset == 3);
+
+         std::vector<std::string> visited;
+         visit_recursive(*result.forest.front(), [&](const auto& node) {
+            using node_t = std::decay_t<decltype(node)>;
+            if constexpr (std::is_same_v<node_t, grouped_sentence>) {
+               visited.emplace_back("grouped_sentence");
+            }
+         });
+         CHECK(visited == std::vector<std::string>{"grouped_sentence"});
+
+         auto saw_inserted = false;
+         auto saw_inserted_message = false;
+         for (const auto* damaged_node: result.forest.front().damaged_nodes()) {
+            REQUIRE(damaged_node != nullptr);
+            for (const auto& damage: damaged_node->damage()) {
+               if (damage.reason == cpf::node_damage_reason::inserted_virtual_token) {
+                  saw_inserted = true;
+                  if (damage.message.find("available tokens") != std::string::npos) {
+                     saw_inserted_message = true;
+                  }
+               }
+            }
+         }
+         CHECK(saw_inserted);
+         CHECK(saw_inserted_message);
+         auto repaired = result.forest.front().repaired_input("(hi");
+         REQUIRE(repaired.has_value());
+         CHECK(*repaired == "(hi)");
+         CHECK(result.forest.front().repaired_input("(bye") == std::nullopt);
+      }
+
+      SUBCASE("allow_partial supports multiple damaged regions inside one recovered tree") {
+         cpf::parse_options options;
+         options.allow_partial = true;
+
+         auto result = expression::parse("1 + * 2 + ) 3", options);
+
+         REQUIRE(result.success);
+         CHECK(result.partial);
+         REQUIRE(result.forest.size() == 1);
+         CHECK(result.forest.front().partial);
+         CHECK(visit(*result.forest.front(), calculator_visitor{}) == 6);
+
+         auto saw_star = false;
+         auto saw_paren = false;
+         auto damage_count = std::size_t{0};
+         for (const auto* damaged_node: result.forest.front().damaged_nodes()) {
+            REQUIRE(damaged_node != nullptr);
+            for (const auto& damage: damaged_node->damage()) {
+               ++damage_count;
+               if (damage.reason == cpf::node_damage_reason::ignored_invalid_input && damage.range.begin.offset == 4) {
+                  saw_star = true;
+               }
+               if (damage.reason == cpf::node_damage_reason::ignored_invalid_input && damage.range.begin.offset == 10) {
+                  saw_paren = true;
+               }
+            }
+         }
+         CHECK(damage_count >= 2);
+         CHECK(saw_star);
+         CHECK(saw_paren);
+      }
+
+      SUBCASE("allow_partial can validate partial recovery without building AST nodes") {
+         cpf::parse_options options;
+         options.allow_partial = true;
+         options.build_ast = false;
+
+         auto result = expression::parse("1 + * 2 + 3", options);
+
+         REQUIRE(result.success);
+         CHECK(result.partial);
+         CHECK(result.forest.empty());
+      }
+
+      SUBCASE("repaired_input returns the original input when the tree has no damages") {
+         auto result = expression::parse(" 1 + 2 * 3 ");
+
+         REQUIRE(result.success);
+         REQUIRE(result.forest.size() == 1);
+         CHECK_FALSE(result.forest.front().partial);
+         auto repaired = result.forest.front().repaired_input(" 1 + 2 * 3 ");
+         REQUIRE(repaired.has_value());
+         CHECK(*repaired == " 1 + 2 * 3 ");
+      }
+
       SUBCASE("nodes and terminal members expose their matched source ranges") {
          auto result = expression::parse(" 1 + 23 ");
          REQUIRE(result.success);
@@ -196,11 +357,11 @@ TEST_SUITE("generated.runtime") {
          visit_recursive(*cloned, [&](const auto& node) {
             using node_t = std::decay_t<decltype(node)>;
             if constexpr (std::is_same_v<node_t, addition>) {
-               visited.push_back("addition");
+               visited.emplace_back("addition");
             } else if constexpr (std::is_same_v<node_t, multiplication>) {
-               visited.push_back("multiplication");
+               visited.emplace_back("multiplication");
             } else if constexpr (std::is_same_v<node_t, number>) {
-               visited.push_back("number");
+               visited.emplace_back("number");
             }
          });
 

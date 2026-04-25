@@ -81,6 +81,7 @@ This file is an ordered roadmap rather than a flat checklist. Items at the top a
 * Return useful diagnostics for incomplete or malformed input
 * Support editor and IDE use cases
 * Investigate sync points and token insertion/deletion strategies
+* Return partial ASTs and parse forests where possible
 
 **Impact** Very high impact, high implementation effort.
 

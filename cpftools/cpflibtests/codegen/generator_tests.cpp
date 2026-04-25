@@ -51,6 +51,7 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(generated.source.find("std::array<cpf::complexity, 5> expression::Complexity{};") != std::string::npos);
          CHECK(generated.source.find("cpf::parse_result<T> parse_generated(std::string_view input, std::size_t "
                                      "root_rule, const cpf::parse_options& options)") != std::string::npos);
+          CHECK(generated.source.find("options.allow_partial") != std::string::npos);
          CHECK(generated.source.find("auto valid_tree_count = std::size_t{0};") != std::string::npos);
          CHECK(generated.source.find("if (!validate_generated_tree(tree))") != std::string::npos);
          CHECK(generated.source.find(
@@ -59,13 +60,16 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(generated.source.find(
                      "result.forest.emplace_back(tree, definition_of_generated_tree(tree), tree->range") !=
                std::string::npos);
+          CHECK(generated.source.find("for (const auto& damage : tree->damage)") != std::string::npos);
+          CHECK(generated.source.find("node->add_damage(damage);") != std::string::npos);
          CHECK(generated.source.find(
                      "auto expression::complexity_inputs(std::size_t rule_id) -> std::span<const std::string_view>") !=
                std::string::npos);
          CHECK(generated.source.find(
                      "auto expression::recompute_complexity(std::size_t rule_id) -> const cpf::complexity&") !=
                std::string::npos);
-         CHECK(generated.source.find("cpf::detail::earley_parse(input, grammar_spec,") != std::string::npos);
+          CHECK(generated.source.find("cpf::detail::earley_parse(input, grammar_spec, root_rule, options.allow_partial)") !=
+                std::string::npos);
          CHECK(generated.source.find("expression -> addition") != std::string::npos);
          CHECK(generated.source.find("const std::regex regex_0{") != std::string::npos);
          CHECK(generated.source.find("std::unique_ptr<cpf::node> build_node(const parse_node_ptr& tree)") !=
@@ -77,6 +81,9 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(generated.source.find("rejected by precedence/associativity constraints") != std::string::npos);
          CHECK(generated.source.find("definition_of_generated_tree(const parse_node_ptr& tree)") != std::string::npos);
          CHECK(generated.source.find("std::unique_ptr<cpf::node> number::clone_node() const") != std::string::npos);
+          CHECK(generated.source.find("copy_damage_to(*copy);") != std::string::npos);
+          CHECK(generated.source.find("successful_children += child_result.forest.size();") != std::string::npos);
+          CHECK(generated.source.find("partial_candidates") == std::string::npos);
       }
    }
 
