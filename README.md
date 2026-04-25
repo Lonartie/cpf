@@ -1,6 +1,10 @@
 # CPF
 
 CPF is a parser generation framework that reads a `.cpf` grammar and emits a matching C++20 header/source pair.
+It is intended to be a parser generator for quick iteration and prototyping. Even though efforts were made to 
+keep the generated parser efficient, performance is not the primary goal.
+
+> Disclaimer: This project makes heavy use of AI as almost all of the code is AI-generated.
 
 Generated code includes:
 
@@ -254,6 +258,12 @@ cmake -S . -B build
 cmake --build build
 ```
 
+Benchmarks are built by default. To skip them in constrained environments:
+
+```zsh
+cmake -S . -B build -DCPF_BUILD_BENCHMARKS=OFF
+```
+
 ## CMake helper
 
 When `cpflib` is part of a project, it exposes:
@@ -276,3 +286,54 @@ Run the full test suite with:
 ```zsh
 ctest --test-dir build --output-on-failure
 ```
+
+## Benchmarks
+
+CPF ships a `cpfbench` executable under `cpftools/cpfbench` that measures generated parser runtime with Google Benchmark.
+
+The benchmark target currently covers:
+
+- the generated calculator parser
+- a generated simple C-like translation-unit parser
+
+List available benchmarks:
+
+```zsh
+./build/cpftools/cpfbench/cpfbench --benchmark_list_tests=true
+```
+
+Run the full suite and save CSV output:
+
+```zsh
+./build/cpftools/cpfbench/cpfbench --benchmark_out=./build/cpftools/cpfbench/benchmark-results.csv --benchmark_out_format=csv
+```
+
+Run only one benchmark suite:
+
+```zsh
+./build/cpftools/cpfbench/cpfbench --benchmark_filter='^calculator/.*'
+./build/cpftools/cpfbench/cpfbench --benchmark_filter='^simple_c/.*'
+```
+
+The benchmark executable prints a compact table by default with three benchmark rows:
+
+- `calculator parse`
+- `calculator parse + eval`
+- `simple_c parse`
+
+The table includes `min`, `avg`, `max`, and `iter/s` from the smallest configured input size in each benchmark family, plus the fitted asymptotic complexity for the full family.
+
+You can still override the repetition count from the command line:
+
+```zsh
+./build/cpftools/cpfbench/cpfbench --benchmark_repetitions=3
+```
+
+The benchmark names include an input-size suffix such as `/chars:25`, and each run is labeled as `small`, `medium`, or `large` in the benchmark output.
+
+The included benchmark grammars live at:
+
+- `cpftools/cpfbench/fixtures/grammars/calculator.cpf`
+- `cpftools/cpfbench/fixtures/grammars/simple_c.cpf`
+
+The simple C-like benchmark grammar intentionally stays small and parser-focused: functions, blocks, variable declarations, assignments, `if` / `else`, `while`, returns, identifiers, numbers, and infix expressions.

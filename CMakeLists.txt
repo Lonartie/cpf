@@ -3,6 +3,8 @@ project(cpf LANGUAGES CXX)
 
 include(CTest)
 
+option(CPF_BUILD_BENCHMARKS "Build cpfbench parser benchmarks" ON)
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
