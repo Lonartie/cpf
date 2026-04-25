@@ -2,6 +2,7 @@ include(${CMAKE_CURRENT_LIST_DIR}/cmake/cpf.cmake)
 
 add_library(cpflib STATIC
         codegen/code_generator.cpp
+        parser/grammar_loader.cpp
         parser/grammar_parser.cpp
         model/grammar.cpp
 )

@@ -4,5 +4,6 @@
 #include "runtime/runtime.h"
 #include "utils/traits.h"
 #include "model/grammar.h"
+#include "parser/grammar_loader.h"
 #include "parser/grammar_parser.h"
 #include "codegen/code_generator.h"

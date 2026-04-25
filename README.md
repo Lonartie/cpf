@@ -110,6 +110,34 @@ For grouped syntax specifically:
 - labels on groups themselves are currently rejected
 - quantified groups are intended for parse-shaping; labeled captures inside quantified groups are currently rejected because CPF does not yet have a tuple/list capture model for repeated grouped substructures
 
+## Multi-file grammars
+
+Grammar files can import other grammar files:
+
+```text
+import 'imports/imported_expr.cpf';
+import 'imports/imported_words.cpf';
+
+imported_bundle_message -> imported_bundle_greeting | imported_bundle_parting;
+```
+
+Import rules:
+
+- imports use `import 'relative/path/to/file.cpf';`
+- paths are resolved relative to the importing file
+- imports are expanded depth-first at the point where they appear
+- already-loaded files are only imported once
+- import cycles are rejected with a clear error
+
+Public API support:
+
+```c++
+auto loaded = cpf::load_grammar_file("/path/to/root.cpf");
+auto generated = cpf::generate_code(loaded.parsed_grammar, "root");
+```
+
+`loaded.dependencies` contains the root file plus every transitively imported grammar file.
+
 Rules may also be declared multiple times. CPF merges every production for the same identifier into one generated node type while keeping per-production attributes and defaults intact.
 
 ```text
@@ -277,6 +305,8 @@ cmake --build build
 
 If the output directory is omitted, `cpfgen` writes the generated files next to the grammar file.
 
+When the input grammar uses imports, `cpfgen` loads the full transitive grammar graph before generating code.
+
 ## CMake integration
 
 When `cpflib` is added to a CMake project, it exposes the helper:
@@ -290,6 +320,7 @@ The helper:
 - runs `cpfgen` for each listed grammar
 - adds the generated `.cpp` files to the target sources
 - adds the generated header directory to the target include paths
+- tracks imported grammar files as generated dependencies, so edits to imported `.cpf` files trigger regeneration
 
 Example:
 

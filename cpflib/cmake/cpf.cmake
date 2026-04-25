@@ -36,11 +36,13 @@ function(cpf_link_grammars target)
 
       set(generated_header ${generated_directory}/${grammar_stem}.h)
       set(generated_source ${generated_directory}/${grammar_stem}.cpp)
+      set(generated_depfile ${generated_directory}/${grammar_stem}.d)
 
       add_custom_command(
               OUTPUT ${generated_header} ${generated_source}
+              DEPFILE ${generated_depfile}
               COMMAND ${CMAKE_COMMAND} -E make_directory ${generated_directory}
-              COMMAND $<TARGET_FILE:cpfgen> ${grammar_absolute} ${generated_directory}
+              COMMAND $<TARGET_FILE:cpfgen> ${grammar_absolute} ${generated_directory} --depfile ${generated_depfile}
               DEPENDS cpfgen ${grammar_absolute}
               VERBATIM
       )

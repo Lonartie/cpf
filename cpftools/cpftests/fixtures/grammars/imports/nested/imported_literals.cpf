@@ -1,0 +1,3 @@
+imported_bundle_word -> 'hello':value | 'hi':value;
+imported_bundle_suffix -> '!':value;
+

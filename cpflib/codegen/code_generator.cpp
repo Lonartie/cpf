@@ -524,6 +524,27 @@ namespace cpf {
             }
          }
 
+         std::vector<std::string> ordered_public_rule_names;
+         std::set<std::string> ordered_public_seen;
+         std::function<void(std::string_view)> order_public_rule = [&](std::string_view name) {
+            auto name_text = std::string{name};
+            if (ordered_public_seen.contains(name_text) || !classes.contains(name_text)) {
+               return;
+            }
+            const auto& info = classes.at(name_text);
+            if (!info.base.empty()) {
+               order_public_rule(info.base);
+            }
+            ordered_public_seen.insert(name_text);
+            ordered_public_rule_names.push_back(name_text);
+         };
+         for (const auto& rule : grammar.rules) {
+            if (rule.synthetic) {
+               continue;
+            }
+            order_public_rule(rule.identifier);
+         }
+
          std::unordered_map<std::string, family_info> families;
          for (const auto& rule : grammar.rules) {
             if (rule.synthetic) {
@@ -705,11 +726,8 @@ namespace cpf {
          }
          line(header, 0);
 
-         for (const auto& rule : grammar.rules) {
-            if (rule.synthetic) {
-               continue;
-            }
-            const auto& info = classes.at(rule.identifier);
+         for (const auto& rule_name : ordered_public_rule_names) {
+            const auto& info = classes.at(rule_name);
             auto base = info.base.empty() ? "cpf::node" : info.base;
             line(header, 0, "struct " + info.name + " : " + base + " {");
             line(header, 1, "using parse_result = cpf::parse_result<" + info.name + ">;");

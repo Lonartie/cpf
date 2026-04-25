@@ -2,6 +2,7 @@
 #include "calculator.h"
 #include "error_choice.h"
 #include "grouped.h"
+#include "imported_bundle.h"
 #include "message.h"
 #include "merged_definitions.h"
 #include "quantified.h"
@@ -45,6 +46,20 @@ namespace {
       std::string operator()(const quant_digit& node) const { return node.text.text; }
    };
 
+   struct imported_bundle_visitor {
+      std::string operator()(const imported_bundle_word& node) const {
+         return node.value.text;
+      }
+
+      std::string operator()(const imported_bundle_greeting& node) const {
+         return visit(*node.text, *this) + node.suffix->value.text;
+      }
+
+      std::string operator()(const imported_bundle_parting& node) const {
+         return node.text.text;
+      }
+   };
+
    int evaluate(std::string_view input) {
       auto result = expression::parse(input);
       REQUIRE(result.success);
@@ -63,7 +78,7 @@ namespace {
       std::vector<std::string> result;
       for (const auto& value : values) {
          REQUIRE(value != nullptr);
-         result.push_back(visit(*value, quant_choice_visitor{}));
+         result.emplace_back(visit(*value, quant_choice_visitor{}));
       }
       return result;
    }
@@ -409,6 +424,27 @@ TEST_SUITE("generated.runtime") {
 
          auto too_short = grouped_exact::parse("haha");
          CHECK_FALSE(too_short.success);
+      }
+   }
+
+   TEST_CASE("imported grammars behave like one logical grammar file") {
+      SUBCASE("transitive relative imports contribute generated rules") {
+         auto hello = imported_bundle_message::parse("hello!");
+         REQUIRE(hello.success);
+         REQUIRE(hello.forest.size() == 1);
+         CHECK(visit(*hello.forest.front(), imported_bundle_visitor{}) == "hello!");
+
+         auto hi = imported_bundle_message::parse("hi!");
+         REQUIRE(hi.success);
+         REQUIRE(hi.forest.size() == 1);
+         CHECK(visit(*hi.forest.front(), imported_bundle_visitor{}) == "hi!");
+      }
+
+      SUBCASE("imported sibling files can define additional concrete alternatives") {
+         auto bye = imported_bundle_message::parse("bye");
+         REQUIRE(bye.success);
+         REQUIRE(bye.forest.size() == 1);
+         CHECK(visit(*bye.forest.front(), imported_bundle_visitor{}) == "bye");
       }
    }
 }

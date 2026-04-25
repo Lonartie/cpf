@@ -2,6 +2,18 @@
 
 #include "support/doctest.h"
 
+#include <filesystem>
+#include <fstream>
+
+namespace {
+   void write_file(const std::filesystem::path& path, std::string_view content) {
+      std::filesystem::create_directories(path.parent_path());
+      std::ofstream stream{path};
+      REQUIRE(stream.good());
+      stream << content;
+   }
+}
+
 TEST_SUITE("cpflib.grammar_parser") {
    TEST_CASE("calculator grammar is parsed into the expected rule model") {
       auto grammar = cpf::parse_grammar(R"(
@@ -288,6 +300,86 @@ TEST_SUITE("cpflib.grammar_parser") {
 
          REQUIRE_FALSE(message.empty());
          CHECK(message.find("Quantified groups cannot contain labeled captures") != std::string::npos);
+      }
+   }
+
+   TEST_CASE("grammar loader expands imports across multiple files") {
+      auto test_directory = std::filesystem::temp_directory_path() / "cpf_import_loader_tests";
+      std::filesystem::remove_all(test_directory);
+
+      SUBCASE("relative imports are loaded depth-first and merged") {
+         write_file(test_directory / "parts" / "numbers.cpf", R"(
+            imported_number -> r'[0-9]+':value;
+         )");
+         write_file(test_directory / "parts" / "expr.cpf", R"(
+            import 'numbers.cpf';
+            imported_expr -> imported_number;
+         )");
+         write_file(test_directory / "root.cpf", R"(
+            import 'parts/expr.cpf';
+            imported_root -> imported_expr;
+         )");
+
+         auto loaded = cpf::load_grammar_file(test_directory / "root.cpf");
+         CHECK(loaded.dependencies.size() == 3);
+         CHECK(loaded.parsed_grammar.find_rule("imported_root") != nullptr);
+         CHECK(loaded.parsed_grammar.find_rule("imported_expr") != nullptr);
+         CHECK(loaded.parsed_grammar.find_rule("imported_number") != nullptr);
+      }
+
+      SUBCASE("rules declared in different imported files merge like repeated in-file definitions") {
+         write_file(test_directory / "first.cpf", R"(
+            shared_expr -> shared_number;
+            shared_number -> '1':value;
+         )");
+         write_file(test_directory / "second.cpf", R"(
+            shared_expr -> shared_other;
+            shared_other -> '2':value;
+         )");
+         write_file(test_directory / "root.cpf", R"(
+            import 'first.cpf';
+            import 'second.cpf';
+         )");
+
+         auto grammar = cpf::parse_grammar_file(test_directory / "root.cpf");
+         auto* shared_expr = grammar.find_rule("shared_expr");
+         REQUIRE(shared_expr != nullptr);
+         REQUIRE(shared_expr->productions.size() == 2);
+         CHECK(shared_expr->productions[0].definition == 0);
+         CHECK(shared_expr->productions[1].definition == 1);
+      }
+
+      SUBCASE("duplicate imports are loaded only once") {
+         write_file(test_directory / "leaf.cpf", R"(
+            imported_leaf -> 'x':value;
+         )");
+         write_file(test_directory / "left.cpf", R"(
+            import 'leaf.cpf';
+            imported_left -> imported_leaf;
+         )");
+         write_file(test_directory / "right.cpf", R"(
+            import 'leaf.cpf';
+            imported_right -> imported_leaf;
+         )");
+         write_file(test_directory / "root.cpf", R"(
+            import 'left.cpf';
+            import 'right.cpf';
+         )");
+
+         auto loaded = cpf::load_grammar_file(test_directory / "root.cpf");
+         CHECK(loaded.dependencies.size() == 4);
+         CHECK(loaded.parsed_grammar.find_rule("imported_leaf") != nullptr);
+      }
+
+      SUBCASE("import cycles report a clear loader error") {
+         write_file(test_directory / "first.cpf", "import 'second.cpf';\ncycle_first -> 'a':value;\n");
+         write_file(test_directory / "second.cpf", "import 'first.cpf';\ncycle_second -> 'b':value;\n");
+
+         CHECK_THROWS_WITH_AS(
+            cpf::load_grammar_file(test_directory / "first.cpf"),
+            doctest::Contains("Grammar import cycle detected"),
+            std::runtime_error
+         );
       }
    }
 
