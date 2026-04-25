@@ -457,8 +457,15 @@ TEST_SUITE("cpflib.grammar_parser") {
 
       SUBCASE("double-quoted imports preserve escaped quotes and relative resolution") {
          auto quoted_directory = test_directory / "quoted imports";
-         write_file(quoted_directory / "child\"grammar.cpf", "quoted_child -> \"x\":value;\n");
-         write_file(quoted_directory / "root.cpf", "import \"child\\\"grammar.cpf\";\nquoted_root -> quoted_child;\n");
+#if defined(_WIN32)
+         auto child_path = quoted_directory / "child_grammar.cpf";
+         auto root_source = std::string{"import \"child_grammar.cpf\";\nquoted_root -> quoted_child;\n"};
+#else
+         auto child_path = quoted_directory / "child\"grammar.cpf";
+         auto root_source = std::string{"import \"child\\\"grammar.cpf\";\nquoted_root -> quoted_child;\n"};
+#endif
+         write_file(child_path, "quoted_child -> \"x\":value;\n");
+         write_file(quoted_directory / "root.cpf", root_source);
 
          auto loaded = cpf::load_grammar_file(quoted_directory / "root.cpf");
          CHECK(loaded.dependencies.size() == 2);

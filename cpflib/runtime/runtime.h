@@ -620,8 +620,9 @@ namespace cpf {
                const auto& production = grammar.productions[production_index];
 
                if (dot == production.symbol_count) {
-                  for (const auto& parent_item: prepared.chart[start].items) {
-                     const auto [parent_index, parent_dot, parent_start] = parent_item;
+                  for (std::size_t parent_item_index = 0; parent_item_index < prepared.chart[start].items.size();
+                       ++parent_item_index) {
+                     const auto [parent_index, parent_dot, parent_start] = prepared.chart[start].items[parent_item_index];
                      const auto& parent = grammar.productions[parent_index];
                      if (parent_dot >= parent.symbol_count) {
                         continue;
@@ -728,7 +729,7 @@ namespace cpf {
             }
 
             rule_in_progress.insert(key);
-            auto& nodes = rule_cache[key];
+            auto nodes = node_list{};
             if (auto completed = prepared.completed_rules.find(key); completed != prepared.completed_rules.end()) {
                for (auto production_index: completed->second) {
                   const auto& produced = build_production(production_index, start, end);
@@ -736,7 +737,7 @@ namespace cpf {
                }
             }
             rule_in_progress.erase(key);
-            return nodes;
+            return rule_cache.emplace(key, std::move(nodes)).first->second;
          };
 
          build_production = [&](std::size_t production_index, std::size_t start, std::size_t end) -> const node_list& {
@@ -750,7 +751,7 @@ namespace cpf {
 
             production_in_progress.insert(key);
             const auto& production = grammar.productions[production_index];
-            auto& nodes = production_cache[key];
+            auto nodes = node_list{};
             std::vector<parse_value> children;
 
             std::function<void(std::size_t, std::size_t)> enumerate = [&](std::size_t symbol_index,
@@ -800,7 +801,7 @@ namespace cpf {
 
             enumerate(0, start);
             production_in_progress.erase(key);
-            return nodes;
+            return production_cache.emplace(key, std::move(nodes)).first->second;
          };
 
          for (std::size_t end = 0; end < prepared.chart.size(); ++end) {

@@ -2,11 +2,36 @@
 
 #include "support/doctest.h"
 
+#include <array>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <typeinfo>
 
 namespace {
+   constexpr std::array<cpf::detail::parser_symbol, 1> optional_start_symbols{{
+         {cpf::detail::parser_symbol_kind::nonterminal, 1, "opt_a", nullptr}
+   }};
+   constexpr std::array<cpf::detail::parser_symbol, 0> optional_empty_symbols{{}};
+   constexpr std::array<cpf::detail::parser_symbol, 1> optional_value_symbols{{
+         {cpf::detail::parser_symbol_kind::literal, 0, "a", nullptr}
+   }};
+   constexpr std::array<cpf::detail::production_spec, 3> optional_grammar_productions{{
+         {0, "start", "start -> opt_a", optional_start_symbols.data(), optional_start_symbols.size()},
+         {1, "opt_a", "opt_a -> /* empty */", optional_empty_symbols.data(), optional_empty_symbols.size()},
+         {1, "opt_a", "opt_a -> 'a'", optional_value_symbols.data(), optional_value_symbols.size()}
+   }};
+   constexpr std::array<std::size_t, 3> optional_grammar_rule_production_indices{{0, 1, 2}};
+   constexpr std::array<std::size_t, 2> optional_grammar_rule_production_offsets{{0, 1}};
+   constexpr std::array<std::size_t, 2> optional_grammar_rule_production_counts{{1, 2}};
+   constexpr cpf::detail::grammar_spec optional_grammar_spec{
+         optional_grammar_productions.data(),
+         optional_grammar_productions.size(),
+         2,
+         optional_grammar_rule_production_indices.data(),
+         optional_grammar_rule_production_offsets.data(),
+         optional_grammar_rule_production_counts.data()};
+
    struct fake_node final : cpf::node {
       static constexpr std::size_t RuleId = 7;
 
@@ -99,5 +124,31 @@ TEST_SUITE("cpflib.runtime") {
       CHECK(merged.message.find("\"world\"") != std::string::npos);
       CHECK(merged.message.find("while parsing rule 'say_hello'") != std::string::npos);
       CHECK(merged.message.find("while parsing rule 'say_world'") != std::string::npos);
+   }
+
+   TEST_CASE("earley_parse keeps optional helper productions stable for empty and present inputs") {
+      for (auto input: {std::string_view{}, std::string_view{"a"}}) {
+         auto result = cpf::detail::earley_parse(input, optional_grammar_spec, 0);
+
+         REQUIRE(result.success);
+         REQUIRE(result.forest.size() == 1);
+
+         const auto& root = result.forest.front();
+         REQUIRE(root != nullptr);
+         CHECK(root->production == 0);
+         REQUIRE(root->children.size() == 1);
+
+         const auto& helper = std::get<cpf::detail::parse_node_ptr>(root->children.front());
+         REQUIRE(helper != nullptr);
+
+         if (input.empty()) {
+            CHECK(helper->production == 1);
+            CHECK(helper->children.empty());
+         } else {
+            CHECK(helper->production == 2);
+            REQUIRE(helper->children.size() == 1);
+            CHECK(std::get<cpf::matched_string>(helper->children.front()).text == "a");
+         }
+      }
    }
 }

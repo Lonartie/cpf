@@ -24,7 +24,8 @@ cmake --build build
 Run the test suite:
 
 ```zsh
-ctest --test-dir build --output-on-failure
+./build/cpftools/cpflibtests/cpflibtests
+./build/cpftools/cpftests/cpftests
 ```
 
 Generate parser code from a grammar:

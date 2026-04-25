@@ -1,10 +1,10 @@
 #include <cpfgenlib>
 
-#include <system_error>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <string_view>
+#include <system_error>
 
 namespace {
    [[nodiscard]] int print_usage() {

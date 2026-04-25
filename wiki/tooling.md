@@ -22,10 +22,13 @@ cmake -S . -B build -DCPF_BUILD_BENCHMARKS=OFF
 Run the full test suite with:
 
 ```zsh
-ctest --test-dir build --output-on-failure
+./build/cpftools/cpflibtests/cpflibtests
+./build/cpftools/cpftests/cpftests
 ```
 
-The test tools live under `cpftools` and use the vendored `doctest` single-header distribution.
+The test tools live under `cpftools` and use the vendored `doctest` single-header distribution. Running the
+executables directly produces the underlying doctest failure output, which is usually easier to diagnose than the
+aggregated CTest summary.
 
 ## Benchmarks
 

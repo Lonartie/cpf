@@ -440,13 +440,19 @@ TEST_SUITE("generated.runtime") {
          auto empty = maybe_choice::parse("");
          REQUIRE(empty.success);
          REQUIRE(empty.forest.size() == 1);
-         CHECK(empty.forest.front()->value == nullptr);
+         auto& empty_tree = empty.forest.front();
+         CHECK_FALSE(empty_tree.has_materialized());
+         CHECK(empty_tree->value == nullptr);
+         CHECK(empty_tree.has_materialized());
 
          auto present = maybe_choice::parse("a");
          REQUIRE(present.success);
          REQUIRE(present.forest.size() == 1);
-         REQUIRE(present.forest.front()->value != nullptr);
-         CHECK(visit(*present.forest.front()->value, quant_choice_visitor{}) == "a");
+         auto& present_tree = present.forest.front();
+         CHECK_FALSE(present_tree.has_materialized());
+         REQUIRE(present_tree->value != nullptr);
+         CHECK(present_tree.has_materialized());
+         CHECK(visit(*present_tree->value, quant_choice_visitor{}) == "a");
       }
 
       SUBCASE("zero-or-more references produce an empty-or-filled vector") {

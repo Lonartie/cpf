@@ -70,6 +70,8 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(generated.source.find("const std::regex regex_0{") != std::string::npos);
          CHECK(generated.source.find("std::unique_ptr<cpf::node> build_node(const parse_node_ptr& tree)") !=
                std::string::npos);
+         CHECK(generated.source.find("std::unique_ptr<T> release_built_node_as(std::unique_ptr<cpf::node> built)") !=
+               std::string::npos);
          CHECK(generated.source.find("bool validate_generated_node(const cpf::node& node)") != std::string::npos);
          CHECK(generated.source.find("bool validate_generated_tree(const parse_node_ptr& tree)") != std::string::npos);
          CHECK(generated.source.find("rejected by precedence/associativity constraints") != std::string::npos);
@@ -157,7 +159,7 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(generated.source.find("copy->definition = definition;") != std::string::npos);
          CHECK(generated.source.find("switch (value.definition)") != std::string::npos);
          CHECK(generated.source.find(
-                     "std::unique_ptr<merged_message>{static_cast<merged_message*>(child_0.release())}") !=
+                     "release_built_node_as<merged_message>(std::move(child_0))") !=
                std::string::npos);
          CHECK(generated.source.find("merged_binary_complexity_inputs_0{{") != std::string::npos);
          CHECK(generated.source.find("merged_binary_complexity_inputs_1{{") != std::string::npos);
@@ -247,6 +249,16 @@ TEST_SUITE("cpflib.code_generator") {
       SUBCASE("source output lowers quantified syntax through helper extractors") {
          CHECK(generated.source.find("extract_helper_") != std::string::npos);
          CHECK(generated.source.find("Unknown quantified helper production") != std::string::npos);
+         CHECK(generated.source.find("release_built_node_as<T>(std::move(built))") != std::string::npos);
+         CHECK(generated.source.find("parse_node_ptr node_child_at(const parse_node_ptr& tree, std::size_t index)") !=
+               std::string::npos);
+         CHECK(generated.source.find("cpf::matched_string matched_child_at(const parse_node_ptr& tree, std::size_t index)") !=
+               std::string::npos);
+         CHECK(generated.source.find("Generated parse tree missing node child") != std::string::npos);
+         CHECK(generated.source.find("Generated parse tree child is not a terminal") != std::string::npos);
+         CHECK(generated.source.find("build_node(node_child_at(tree, 0))") != std::string::npos);
+         CHECK(generated.source.find("matched_child_at(tree, 0)") != std::string::npos);
+         CHECK(generated.source.find("tree->children.front()") == std::string::npos);
          CHECK(generated.source.find("node->value = extract_helper_") != std::string::npos);
          CHECK(generated.source.find("node->values = extract_helper_") != std::string::npos);
          CHECK(generated.source.find("node->digits = extract_helper_") != std::string::npos);
@@ -300,6 +312,8 @@ TEST_SUITE("cpflib.code_generator") {
       CHECK(generated.source.find("extract_group_capture_") != std::string::npos);
       CHECK(generated.source.find("node->value = extract_group_capture_") != std::string::npos);
       CHECK(generated.source.find("node->payload = extract_group_capture_") != std::string::npos);
+      CHECK(generated.source.find("else if constexpr (std::is_same_v<value_t, std::unique_ptr<grouped_choice_farewell>>)") !=
+            std::string::npos);
    }
 
    TEST_CASE("generated code can be wrapped in an explicit C++ namespace") {

@@ -88,7 +88,7 @@ TEST_SUITE("cpflib.complexity") {
       CHECK(result.big_o == "O(2^N)");
       CHECK(result.expression.find("2^N") != std::string::npos);
       CHECK(result.estimate(9.0) > result.estimate(8.0));
-      CHECK(std::isfinite(result.estimate(128.0)) != 0);
+      CHECK(std::isfinite(result.estimate(128.0)));
    }
 
    TEST_CASE("synthetic factorial samples fit an O(N!) model") {
@@ -104,7 +104,7 @@ TEST_SUITE("cpflib.complexity") {
       CHECK(result.big_o == "O(N!)");
       CHECK(result.expression.find("N!") != std::string::npos);
       CHECK(result.estimate(9.0) > result.estimate(8.0));
-      CHECK(std::isfinite(result.estimate(256.0)) != 0);
+      CHECK(std::isfinite(result.estimate(256.0)));
    }
 
    TEST_CASE("complexity_of validates the provided input vectors") {

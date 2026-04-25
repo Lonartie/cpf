@@ -1569,15 +1569,50 @@ namespace cpf {
          line(source, 1, "}");
          line(source, 1, "std::unique_ptr<cpf::node> build_node(const parse_node_ptr& tree);");
          line(source, 0);
+         line(source, 1, "template<typename T>");
+         line(source, 1, "std::unique_ptr<T> release_built_node_as(std::unique_ptr<cpf::node> built) {");
+         line(source, 2, "if (built == nullptr) {");
+         line(source, 3, "return nullptr;");
+         line(source, 2, "}");
+         line(source, 2, "auto* raw = dynamic_cast<T*>(built.get());");
+         line(source, 2, "if (raw == nullptr) {");
+         line(source, 3, "throw std::runtime_error{\"Generated node cast failed\"};");
+         line(source, 2, "}");
+         line(source, 2, "built.release();");
+         line(source, 2, "return std::unique_ptr<T>{raw};");
+         line(source, 1, "}");
+         line(source, 0);
+         line(source, 1, "parse_node_ptr node_child_at(const parse_node_ptr& tree, std::size_t index) {");
+         line(source, 2, "if (index >= tree->children.size()) {");
+         line(source, 3, "throw std::runtime_error{\"Generated parse tree missing node child\"};");
+         line(source, 2, "}");
+         line(source, 2, "const auto* child = std::get_if<parse_node_ptr>(&tree->children[index]);");
+         line(source, 2, "if (child == nullptr || *child == nullptr) {");
+         line(source, 3, "throw std::runtime_error{\"Generated parse tree child is not a node\"};");
+         line(source, 2, "}");
+         line(source, 2, "return *child;");
+         line(source, 1, "}");
+         line(source, 0);
+         line(source, 1, "cpf::matched_string matched_child_at(const parse_node_ptr& tree, std::size_t index) {");
+         line(source, 2, "if (index >= tree->children.size()) {");
+         line(source, 3, "throw std::runtime_error{\"Generated parse tree missing terminal child\"};");
+         line(source, 2, "}");
+         line(source, 2, "const auto* child = std::get_if<cpf::matched_string>(&tree->children[index]);");
+         line(source, 2, "if (child == nullptr) {");
+         line(source, 3, "throw std::runtime_error{\"Generated parse tree child is not a terminal\"};");
+         line(source, 2, "}");
+         line(source, 2, "return *child;");
+         line(source, 1, "}");
+         line(source, 0);
 
          for (const auto& capture: synthetic_captures) {
             auto capture_name = "group_capture_" + std::to_string(capture.id);
             if (capture.field.shape == field_shape::terminal_scalar) {
                line(source, 1, "cpf::matched_string extract_" + capture_name + "(const parse_node_ptr& tree) {");
                line(source, 2, "switch (tree->production) {");
-               for (const auto production_index: capture.production_indices) {
-                  line(source, 3, "case " + std::to_string(production_index) + ":");
-                  line(source, 4, "return std::get<cpf::matched_string>(tree->children.front());");
+               for (const auto capture_production_index: capture.production_indices) {
+                  line(source, 3, "case " + std::to_string(capture_production_index) + ":");
+                  line(source, 4, "return matched_child_at(tree, 0);");
                }
                line(source, 3, "default:");
                line(source, 4, "throw std::runtime_error{\"Unknown labeled group production\"};");
@@ -1587,10 +1622,10 @@ namespace cpf {
                line(source, 1, "template<typename T>");
                line(source, 1, "std::unique_ptr<T> extract_" + capture_name + "(const parse_node_ptr& tree) {");
                line(source, 2, "switch (tree->production) {");
-               for (const auto production_index: capture.production_indices) {
-                  line(source, 3, "case " + std::to_string(production_index) + ": {");
-                  line(source, 4, "auto built = build_node(std::get<parse_node_ptr>(tree->children.front()));");
-                  line(source, 4, "return std::unique_ptr<T>{static_cast<T*>(built.release())};");
+               for (const auto capture_production_index: capture.production_indices) {
+                  line(source, 3, "case " + std::to_string(capture_production_index) + ": {");
+                  line(source, 4, "auto built = build_node(node_child_at(tree, 0));");
+                  line(source, 4, "return release_built_node_as<T>(std::move(built));");
                   line(source, 3, "}");
                }
                line(source, 3, "default:");
@@ -1602,19 +1637,18 @@ namespace cpf {
                line(source, 2, "switch (tree->production) {");
                for (std::size_t production_offset = 0; production_offset < capture.production_indices.size();
                     ++production_offset) {
-                  const auto production_index = capture.production_indices[production_offset];
+                  const auto capture_production_index = capture.production_indices[production_offset];
                   const auto& alternative = capture.production_alternatives[production_offset];
-                  line(source, 3, "case " + std::to_string(production_index) + ": {");
+                  line(source, 3, "case " + std::to_string(capture_production_index) + ": {");
                   if (alternative.node) {
-                     line(source, 4, "auto built = build_node(std::get<parse_node_ptr>(tree->children.front()));");
+                     line(source, 4, "auto built = build_node(node_child_at(tree, 0));");
                      line(source, 4,
-                          "return " + capture.field.type + "{std::in_place_type<" + alternative.type + ">, " +
-                                alternative.type + "{static_cast<" + alternative.resolved_rule +
-                                "*>(built.release())}};");
+                           "return " + capture.field.type + "{std::in_place_type<" + alternative.type + ">, " +
+                                "release_built_node_as<" + alternative.resolved_rule + ">(std::move(built))};");
                   } else {
                      line(source, 4,
                           "return " + capture.field.type + "{std::in_place_type<" + alternative.type +
-                                ">, std::get<cpf::matched_string>(tree->children.front())};");
+                                ">, matched_child_at(tree, 0)};");
                   }
                   line(source, 3, "}");
                }
@@ -1636,8 +1670,8 @@ namespace cpf {
                   line(source, 3, "case " + std::to_string(helper.production_indices[0]) + ":");
                   line(source, 4, "return nullptr;");
                   line(source, 3, "case " + std::to_string(helper.production_indices[1]) + ": {");
-                  line(source, 4, "auto built = build_node(std::get<parse_node_ptr>(tree->children.front()));");
-                  line(source, 4, "return std::unique_ptr<T>{static_cast<T*>(built.release())};");
+                  line(source, 4, "auto built = build_node(node_child_at(tree, 0));");
+                  line(source, 4, "return release_built_node_as<T>(std::move(built));");
                   line(source, 3, "}");
                   line(source, 3, "default:");
                   line(source, 4, "throw std::runtime_error{\"Unknown quantified helper production\"};");
@@ -1653,31 +1687,31 @@ namespace cpf {
                      line(source, 3, "case " + std::to_string(helper.production_indices[0]) + ":");
                      line(source, 4, "return;");
                      line(source, 3, "case " + std::to_string(helper.production_indices[1]) + ": {");
-                     line(source, 4, "auto built = build_node(std::get<parse_node_ptr>(tree->children[0]));");
-                     line(source, 4, "values.push_back(std::unique_ptr<T>{static_cast<T*>(built.release())});");
+                     line(source, 4, "auto built = build_node(node_child_at(tree, 0));");
+                     line(source, 4, "values.push_back(release_built_node_as<T>(std::move(built)));");
                      line(source, 4,
-                          "collect_" + helper_name + "(std::get<parse_node_ptr>(tree->children[1]), values);");
+                          "collect_" + helper_name + "(node_child_at(tree, 1), values);");
                      line(source, 4, "return;");
                      line(source, 3, "}");
                   } else if (helper.kind == helper_kind::one_or_more) {
                      line(source, 3, "case " + std::to_string(helper.production_indices[0]) + ": {");
-                     line(source, 4, "auto built = build_node(std::get<parse_node_ptr>(tree->children[0]));");
-                     line(source, 4, "values.push_back(std::unique_ptr<T>{static_cast<T*>(built.release())});");
+                     line(source, 4, "auto built = build_node(node_child_at(tree, 0));");
+                     line(source, 4, "values.push_back(release_built_node_as<T>(std::move(built)));");
                      line(source, 4, "return;");
                      line(source, 3, "}");
                      line(source, 3, "case " + std::to_string(helper.production_indices[1]) + ": {");
-                     line(source, 4, "auto built = build_node(std::get<parse_node_ptr>(tree->children[0]));");
-                     line(source, 4, "values.push_back(std::unique_ptr<T>{static_cast<T*>(built.release())});");
+                     line(source, 4, "auto built = build_node(node_child_at(tree, 0));");
+                     line(source, 4, "values.push_back(release_built_node_as<T>(std::move(built)));");
                      line(source, 4,
-                          "collect_" + helper_name + "(std::get<parse_node_ptr>(tree->children[1]), values);");
+                          "collect_" + helper_name + "(node_child_at(tree, 1), values);");
                      line(source, 4, "return;");
                      line(source, 3, "}");
                   } else {
                      line(source, 3, "case " + std::to_string(helper.production_indices[0]) + ":");
                      for (std::size_t i = 0; i < helper.exact_count; ++i) {
                         line(source, 4,
-                             "{ auto built = build_node(std::get<parse_node_ptr>(tree->children[" + std::to_string(i) +
-                                   "])); values.push_back(std::unique_ptr<T>{static_cast<T*>(built.release())}); }");
+                             "{ auto built = build_node(node_child_at(tree, " + std::to_string(i) +
+                                   ")); values.push_back(release_built_node_as<T>(std::move(built))); }");
                      }
                      line(source, 4, "return;");
                   }
@@ -1700,7 +1734,7 @@ namespace cpf {
                line(source, 3, "case " + std::to_string(helper.production_indices[0]) + ":");
                line(source, 4, "return std::nullopt;");
                line(source, 3, "case " + std::to_string(helper.production_indices[1]) + ":");
-               line(source, 4, "return std::get<cpf::matched_string>(tree->children.front());");
+               line(source, 4, "return matched_child_at(tree, 0);");
                line(source, 3, "default:");
                line(source, 4, "throw std::runtime_error{\"Unknown quantified helper production\"};");
                line(source, 2, "}");
@@ -1714,23 +1748,22 @@ namespace cpf {
                   line(source, 3, "case " + std::to_string(helper.production_indices[0]) + ":");
                   line(source, 4, "return;");
                   line(source, 3, "case " + std::to_string(helper.production_indices[1]) + ":");
-                  line(source, 4, "values.push_back(std::get<cpf::matched_string>(tree->children[0]));");
-                  line(source, 4, "collect_" + helper_name + "(std::get<parse_node_ptr>(tree->children[1]), values);");
+                  line(source, 4, "values.push_back(matched_child_at(tree, 0));");
+                  line(source, 4, "collect_" + helper_name + "(node_child_at(tree, 1), values);");
                   line(source, 4, "return;");
                } else if (helper.kind == helper_kind::one_or_more) {
                   line(source, 3, "case " + std::to_string(helper.production_indices[0]) + ":");
-                  line(source, 4, "values.push_back(std::get<cpf::matched_string>(tree->children[0]));");
+                  line(source, 4, "values.push_back(matched_child_at(tree, 0));");
                   line(source, 4, "return;");
                   line(source, 3, "case " + std::to_string(helper.production_indices[1]) + ":");
-                  line(source, 4, "values.push_back(std::get<cpf::matched_string>(tree->children[0]));");
-                  line(source, 4, "collect_" + helper_name + "(std::get<parse_node_ptr>(tree->children[1]), values);");
+                  line(source, 4, "values.push_back(matched_child_at(tree, 0));");
+                  line(source, 4, "collect_" + helper_name + "(node_child_at(tree, 1), values);");
                   line(source, 4, "return;");
                } else {
                   line(source, 3, "case " + std::to_string(helper.production_indices[0]) + ":");
                   for (std::size_t i = 0; i < helper.exact_count; ++i) {
                      line(source, 4,
-                          "values.push_back(std::get<cpf::matched_string>(tree->children[" + std::to_string(i) +
-                                "]));");
+                          "values.push_back(matched_child_at(tree, " + std::to_string(i) + "));");
                   }
                   line(source, 4, "return;");
                }
@@ -1837,7 +1870,7 @@ namespace cpf {
                   line(source, 3, "case " + std::to_string(emitted_index) + ":");
                   line(source, 4,
                        "return precedence_of_" + family.name +
-                             "_tree(std::get<parse_node_ptr>(tree->children.front()));");
+                             "_tree(node_child_at(tree, 0));");
                   continue;
                }
 
@@ -1991,12 +2024,12 @@ namespace cpf {
                   const auto precedence = std::to_string(infix_definition->precedence);
                   const auto left_associative = infix_definition->associativity == "left" ? "true" : "false";
                   line(source, 4,
-                       "if (!validate_" + info.base + "_child_tree(std::get<parse_node_ptr>(tree->children[0]), " +
+                       "if (!validate_" + info.base + "_child_tree(node_child_at(tree, 0), " +
                              precedence + ", " + left_associative + ", true)) {");
                   line(source, 5, "return false;");
                   line(source, 4, "}");
                   line(source, 4,
-                       "if (!validate_" + info.base + "_child_tree(std::get<parse_node_ptr>(tree->children[2]), " +
+                       "if (!validate_" + info.base + "_child_tree(node_child_at(tree, 2), " +
                              precedence + ", " + left_associative + ", false)) {");
                   line(source, 5, "return false;");
                   line(source, 4, "}");
@@ -2025,7 +2058,7 @@ namespace cpf {
             const auto& info = classes.at(rule.identifier);
             line(source, 3, "case " + std::to_string(emitted_index) + ": {");
             if (info.base_rule) {
-               line(source, 4, "return build_node(std::get<parse_node_ptr>(tree->children.front()));");
+               line(source, 4, "return build_node(node_child_at(tree, 0));");
             } else {
                line(source, 4, "auto node = std::make_unique<" + info.name + ">();");
                line(source, 4, "node->definition = " + std::to_string(production.definition) + ";");
@@ -2042,11 +2075,11 @@ namespace cpf {
                      if (field.shape == field_shape::terminal_optional || field.shape == field_shape::terminal_vector) {
                         line(source, 4,
                              "node->" + symbol.label + " = extract_" + helper_name +
-                                   "(std::get<parse_node_ptr>(tree->children[" + std::to_string(i) + "]));");
+                                    "(node_child_at(tree, " + std::to_string(i) + "));");
                      } else if (field.shape == field_shape::node_scalar || field.shape == field_shape::node_vector) {
                         line(source, 4,
                              "node->" + symbol.label + " = extract_" + helper_name + "<" + field.resolved_rule +
-                                   ">(std::get<parse_node_ptr>(tree->children[" + std::to_string(i) + "]));");
+                                    ">(node_child_at(tree, " + std::to_string(i) + "));");
                      }
                      continue;
                   }
@@ -2060,31 +2093,28 @@ namespace cpf {
                            if (field.shape == field_shape::terminal_scalar) {
                               line(source, 4,
                                    "node->" + symbol.label + " = extract_" + capture_name +
-                                         "(std::get<parse_node_ptr>(tree->children[" + std::to_string(i) + "]));");
+                                          "(node_child_at(tree, " + std::to_string(i) + "));");
                            } else if (field.shape == field_shape::capture_variant) {
                               line(source, 4,
                                    "node->" + symbol.label + " = extract_" + capture_name +
-                                         "(std::get<parse_node_ptr>(tree->children[" + std::to_string(i) + "]));");
+                                          "(node_child_at(tree, " + std::to_string(i) + "));");
                            } else {
                               line(source, 4,
                                    "node->" + symbol.label + " = extract_" + capture_name + "<" + field.resolved_rule +
-                                         ">(std::get<parse_node_ptr>(tree->children[" + std::to_string(i) + "]));");
+                                          ">(node_child_at(tree, " + std::to_string(i) + "));");
                            }
                         } else {
                            line(source, 4,
                                 "auto child_" + std::to_string(i) +
-                                      " = build_node(std::get<parse_node_ptr>(tree->children[" + std::to_string(i) +
-                                      "]));");
+                                       " = build_node(node_child_at(tree, " + std::to_string(i) + "));");
                            line(source, 4,
-                                "node->" + symbol.label + " = std::unique_ptr<" + field.resolved_rule +
-                                      ">{static_cast<" + field.resolved_rule + "*>(child_" + std::to_string(i) +
-                                      ".release())};");
+                                "node->" + symbol.label + " = release_built_node_as<" + field.resolved_rule +
+                                      ">(std::move(child_" + std::to_string(i) + "));" );
                         }
                      }
                   } else if (symbol.has_label()) {
                      line(source, 4,
-                          "node->" + symbol.label + " = std::get<cpf::matched_string>(tree->children[" +
-                                std::to_string(i) + "]); ");
+                          "node->" + symbol.label + " = matched_child_at(tree, " + std::to_string(i) + ");");
                   }
                }
                line(source, 4, "return node;");
@@ -2124,7 +2154,7 @@ namespace cpf {
          line(source, 4,
               "result.forest.emplace_back(tree, definition_of_generated_tree(tree), tree->range, [tree]() {");
          line(source, 5, "auto built = build_node(tree);");
-         line(source, 5, "return std::unique_ptr<T>{static_cast<T*>(built.release())};");
+         line(source, 5, "return release_built_node_as<T>(std::move(built));");
          line(source, 4, "});");
          line(source, 3, "}");
          line(source, 2, "}");
@@ -2176,7 +2206,7 @@ namespace cpf {
                   line(source, 5, "result.forest.emplace_back(opaque, tree.definition, tree.range, [opaque]() {");
                   line(source, 6, "auto built = build_node(opaque);");
                   line(source, 6,
-                       "return std::unique_ptr<" + info.name + ">{static_cast<" + info.name + "*>(built.release())};");
+                       "return release_built_node_as<" + info.name + ">(std::move(built));");
                   line(source, 5, "});");
                   line(source, 4, "}");
                   line(source, 3, "}");
@@ -2258,7 +2288,7 @@ namespace cpf {
             line(source, 0, "std::unique_ptr<" + info.name + "> " + info.name + "::clone() {");
             line(source, 1, "auto cloned = this->clone_node();");
             line(source, 1,
-                 "return std::unique_ptr<" + info.name + ">{static_cast<" + info.name + "*>(cloned.release())};");
+                 "return release_built_node_as<" + info.name + ">(std::move(cloned));");
             line(source, 0, "}");
             line(source, 0);
 
@@ -2278,8 +2308,10 @@ namespace cpf {
                      line(source, 1,
                           "copy->" + field.name + " = std::visit([](const auto& value) -> " + field.type + " {");
                      line(source, 2, "using value_t = std::decay_t<decltype(value)>;");
+                     auto first_alternative = true;
                      for (const auto& alternative: field.variant_alternatives) {
-                        line(source, 2, "if constexpr (std::is_same_v<value_t, " + alternative.type + ">) {");
+                        line(source, 2, std::string{first_alternative ? "if constexpr" : "else if constexpr"} +
+                                              " (std::is_same_v<value_t, " + alternative.type + ">) {");
                         if (alternative.node) {
                            line(source, 3, "auto cloned_value = value ? value->clone() : " + alternative.type + "{};");
                            line(source, 3,
@@ -2290,8 +2322,15 @@ namespace cpf {
                                 "return " + field.type + "{std::in_place_type<" + alternative.type + ">, value};");
                         }
                         line(source, 2, "}");
+                        first_alternative = false;
                      }
-                     line(source, 2, "throw std::runtime_error{\"Unknown labeled group variant alternative\"};");
+                     if (first_alternative) {
+                        line(source, 2, "throw std::runtime_error{\"Unknown labeled group variant alternative\"};");
+                     } else {
+                        line(source, 2, "else {");
+                        line(source, 3, "throw std::runtime_error{\"Unknown labeled group variant alternative\"};");
+                        line(source, 2, "}");
+                     }
                      line(source, 1, "}, " + field.name + ");");
                   } else {
                      line(source, 1, "copy->" + field.name + " = " + field.name + ";");

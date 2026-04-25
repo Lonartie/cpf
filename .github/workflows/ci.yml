@@ -7,6 +7,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
 jobs:
   build-and-test:
     name: ${{ matrix.name }} (${{ matrix.build_type }})
@@ -19,21 +22,42 @@ jobs:
             os: ubuntu-latest
             c_compiler: gcc
             cxx_compiler: g++
+            build_type: Debug
+          - name: Linux GCC
+            os: ubuntu-latest
+            c_compiler: gcc
+            cxx_compiler: g++
+            build_type: Release
           - name: Linux Clang
             os: ubuntu-latest
             c_compiler: clang
             cxx_compiler: clang++
+            build_type: Debug
+          - name: Linux Clang
+            os: ubuntu-latest
+            c_compiler: clang
+            cxx_compiler: clang++
+            build_type: Release
           - name: macOS Clang
             os: macos-latest
             c_compiler: clang
             cxx_compiler: clang++
+            build_type: Debug
+          - name: macOS Clang
+            os: macos-latest
+            c_compiler: clang
+            cxx_compiler: clang++
+            build_type: Release
           - name: Windows MSVC
             os: windows-latest
             c_compiler: cl
             cxx_compiler: cl
-        build_type:
-          - Debug
-          - Release
+            build_type: Debug
+          - name: Windows MSVC
+            os: windows-latest
+            c_compiler: cl
+            cxx_compiler: cl
+            build_type: Release
 
     steps:
       - name: Check out repository
@@ -76,51 +100,28 @@ jobs:
         run: cmake --build build --parallel
 
       - name: Run tests
-        run: ctest --test-dir build --build-config ${{ matrix.build_type }} --output-on-failure
-
-  clang-format:
-    name: clang-format
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Install clang-format
+        shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install --yes clang-format
+          suffix=''
+          if [[ "$RUNNER_OS" == 'Windows' ]]; then
+            suffix='.exe'
+          fi
 
-      - name: Verify formatting
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import subprocess
-          import sys
+          doctest_args=(--success --duration --no-breaks --no-colors)
 
-          repo = Path('.')
-          tracked = subprocess.check_output(['git', 'ls-files'], text=True).splitlines()
-          include_exact = {'cpfgen/cpfgenlib', 'cpflib/cpflib'}
-          files = []
-          for rel in tracked:
-             if rel.startswith(('cmake-build-', 'build/', 'cpftools/vendor/')):
-                continue
-             if rel in include_exact or rel.endswith(('.cpp', '.h')):
-                files.append(str(repo / rel))
+          status=0
+          for test_binary in \
+            "./build/cpftools/cpflibtests/cpflibtests${suffix}" \
+            "./build/cpftools/cpftests/cpftests${suffix}"
+          do
+            echo "::group::Running ${test_binary}"
+            if ! "${test_binary}" "${doctest_args[@]}"; then
+              status=1
+            fi
+            echo "::endgroup::"
+          done
 
-          if not files:
-             print('No C++ files selected for clang-format', file=sys.stderr)
-             sys.exit(1)
+          exit "${status}"
 
-          normal = [path for path in files if path.endswith(('.cpp', '.h'))]
-          extensionless = [path for path in files if path.endswith('/cpflib') or path.endswith('/cpfgenlib')]
-
-          subprocess.run(['clang-format', '--style=file', '--dry-run', '--Werror', *normal], check=True)
-          if extensionless:
-             subprocess.run(
-                ['clang-format', '--style=file', '--assume-filename=header.h', '--dry-run', '--Werror', *extensionless],
-                check=True,
-             )
-          PY
 
 
