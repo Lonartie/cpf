@@ -79,73 +79,7 @@ Generated `visit(...)`, `visit_recursive(...)`, and `operator<<` fit the rest of
 
 ## Consistency and usability issues
 
-## 1. `definition` is too vague a public name
-
-`cpf::node` exposes public field:
-
-- `std::size_t definition`
-
-This actually means something like a production index or matched alternative index.
-
-### Why this is odd
-
-The word `definition` is vague. In context it seems to mean the production within a rule that matched.
-
-### Recommendation
-
-Rename to something clearer, such as:
-
-- `production_index`
-- `alternative_index`
-- `reduction_index`
-
-`production_index` is probably the clearest.
-
-## 2. Complexity APIs use misleading parameter names
-
-Generated node APIs expose:
-
-- `complexity_inputs(std::size_t rule_id)`
-- `recompute_complexity(std::size_t rule_id)`
-
-But the parameter is not a rule id like `RuleId`. It is the per-rule definition/production index.
-
-### Why this is odd
-
-This is one of the clearest naming mismatches in the API.
-
-### Recommendation
-
-Rename the parameter and probably the conceptual model:
-
-- `complexity_inputs(std::size_t definition_index)`
-- `recompute_complexity(std::size_t definition_index)`
-
-or introduce more explicit function names like `complexity_inputs_for_definition(...)`.
-
-## 3. `parse_tree<T>` exposes mutable metadata fields publicly
-
-Public fields today:
-
-- `definition`
-- `range`
-- `partial`
-
-### Why this is odd
-
-These look like metadata snapshots, but they are mutable and can drift away from the actual materialized tree state.
-
-### Recommendation
-
-Prefer accessor methods instead:
-
-- `definition() const`
-- `range() const`
-- `is_partial() const`
-
-The same general concern applies to public mutable metadata on `cpf::node`.
-
-## 4. `parse_tree<T>` copy semantics are surprising
+## 1. `parse_tree<T>` copy semantics are surprising
 
 The type is copyable, but copying behaves differently depending on when it happens:
 
@@ -163,7 +97,7 @@ Choose a more explicit model:
 - make the handle move-only
 - or store all lazy state in shared state so copies behave uniformly
 
-## 5. `root_damage()` looks like public plumbing, not consumer API
+## 2. `root_damage()` looks like public plumbing, not consumer API
 
 `parse_tree<T>::root_damage()` appears to exist for generated-code plumbing, not for ordinary users.
 
@@ -171,7 +105,7 @@ Choose a more explicit model:
 
 Remove it from the public consumer API surface or make it internal-only.
 
-## 6. `node::add_damage(...)` probably should not be public
+## 3. `node::add_damage(...)` probably should not be public
 
 Consumers can currently mutate parser-generated damage metadata directly.
 
@@ -183,7 +117,7 @@ That makes it harder to distinguish parser-produced damage from user-authored an
 
 Make `add_damage(...)` protected or internal-only unless user-authored damage annotations are an intentional public feature.
 
-## 7. `type()` is likely redundant
+## 4. `type()` is likely redundant
 
 `cpf::node` currently requires:
 
@@ -196,7 +130,7 @@ But the runtime already has RTTI via a polymorphic base, and the generated API m
 
 Consider removing `type()` unless there is a strong documented use case for it.
 
-## 8. `parse_error` does not align well with `source_position`
+## 5. `parse_error` does not align well with `source_position`
 
 `parse_error` stores:
 
@@ -214,7 +148,7 @@ Prefer:
 
 This would make error positions align with the rest of the API.
 
-## 9. `parse_error.found` is too stringly typed
+## 6. `parse_error.found` is too stringly typed
 
 Examples of values currently include:
 
@@ -231,7 +165,7 @@ Consumers have to string-match sentinel values to understand the kind of failure
 
 Introduce structured error kinds and keep `message` as the display string.
 
-## 10. `repaired_input(...)` has a slightly misleading name
+## 7. `repaired_input(...)` has a slightly misleading name
 
 The method is useful, but it is not a simple accessor. It reconstructs a repaired form of caller-provided input and may fail if the provided text no longer structurally matches the tree.
 
@@ -247,7 +181,7 @@ My recommendation would be `try_repair_input(...)`
 
 ## Generated API oddities
 
-## 11. `Complexity` as public mutable static state is awkward
+## 8. `Complexity` as public mutable static state is awkward
 
 Generated nodes expose:
 
@@ -263,21 +197,7 @@ This exposes global mutable state directly in the public API and likely complica
 
 Hide the cache and expose accessor-based APIs instead.
 
-## 12. `RuleId`, `ReductionCount`, and `definition` do not read as one coherent naming system
-
-These concepts are related, but the naming family is inconsistent.
-
-### Recommendation
-
-If a rename pass happens, make them read as one set of concepts, for example:
-
-- `RuleId`
-- `ProductionCount`
-- `production_index`
-
-or normalize them more aggressively to project-wide naming.
-
-## 13. Group-capture `std::variant<std::unique_ptr<...>>` payloads may be awkward to consume
+## 9. Group-capture `std::variant<std::unique_ptr<...>>` payloads may be awkward to consume
 
 These are type-safe, but less ergonomic than the rest of the inheritance-and-visitor-oriented API.
 
@@ -285,7 +205,7 @@ These are type-safe, but less ergonomic than the rest of the inheritance-and-vis
 
 Consider generating helper visitor functions for such payload members, or prefer a common generated base type when possible.
 
-## 14. `visit_recursive(...)` is read-only only
+## 10. `visit_recursive(...)` is read-only only
 
 The generated traversal helpers operate on const nodes.
 

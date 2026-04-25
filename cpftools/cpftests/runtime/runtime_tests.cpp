@@ -186,7 +186,7 @@ TEST_SUITE("generated.runtime") {
          CHECK(result.status == cpf::parse_status::partial_success);
          REQUIRE(result.error.has_value());
          REQUIRE(result.forest.size() == 1);
-         CHECK(result.forest.front().partial);
+         CHECK(result.forest.front().is_partial());
          CHECK(visit(*result.forest.front(), calculator_visitor{}) == 6);
 
          auto visited_numbers = std::size_t{0};
@@ -248,7 +248,7 @@ TEST_SUITE("generated.runtime") {
          CHECK(result.status == cpf::parse_status::partial_success);
          REQUIRE(result.error.has_value());
          REQUIRE(result.forest.size() == 1);
-         CHECK(result.forest.front().partial);
+         CHECK(result.forest.front().is_partial());
          CHECK(result.forest.front()->open.text == "(");
          CHECK(result.forest.front()->text.text == "hi");
          CHECK(result.forest.front()->close.text == ")");
@@ -296,7 +296,7 @@ TEST_SUITE("generated.runtime") {
          CHECK(result.status == cpf::parse_status::partial_success);
          REQUIRE(result.error.has_value());
          REQUIRE(result.forest.size() == 1);
-         CHECK(result.forest.front().partial);
+         CHECK(result.forest.front().is_partial());
          CHECK(visit(*result.forest.front(), calculator_visitor{}) == 6);
 
          auto saw_star = false;
@@ -340,7 +340,7 @@ TEST_SUITE("generated.runtime") {
          CHECK(result.status == cpf::parse_status::success);
          CHECK_FALSE(result.error.has_value());
          REQUIRE(result.forest.size() == 1);
-         CHECK_FALSE(result.forest.front().partial);
+         CHECK_FALSE(result.forest.front().is_partial());
          auto repaired = result.forest.front().repaired_input(" 1 + 2 * 3 ");
          REQUIRE(repaired.has_value());
          CHECK(*repaired == " 1 + 2 * 3 ");
@@ -554,26 +554,26 @@ TEST_SUITE("generated.runtime") {
    }
 
    TEST_CASE("merged concrete rule definitions keep one generated type and mark the matched definition") {
-      SUBCASE("ambiguous same-type parses remain distinguishable through node::definition") {
+      SUBCASE("ambiguous same-type parses remain distinguishable through node::production_index") {
          auto result = repeated_token::parse("x");
 
          REQUIRE(result.success);
          REQUIRE(result.forest.size() == 2);
 
-         std::vector<std::size_t> definitions;
+         std::vector<std::size_t> production_indices;
          for (const auto& tree: result.forest) {
-            definitions.push_back(tree->definition);
+            production_indices.push_back(tree->production_index);
             CHECK(tree->text.text == "x");
          }
 
-         CHECK(definitions == std::vector<std::size_t>{0, 1});
+         CHECK(production_indices == std::vector<std::size_t>{0, 1});
       }
 
       SUBCASE("shared labeled references resolve to the nearest common generated base") {
          auto exclamation = merged_wrapper::parse("bye!");
          REQUIRE(exclamation.success);
          REQUIRE(exclamation.forest.size() == 1);
-         CHECK(exclamation.forest.front()->definition == 0);
+         CHECK(exclamation.forest.front()->production_index == 0);
          CHECK(exclamation.forest.front()->suffix.text == "!");
          REQUIRE(exclamation.forest.front()->payload != nullptr);
          CHECK(dynamic_cast<const merged_farewell*>(exclamation.forest.front()->payload.get()) != nullptr);
@@ -581,14 +581,14 @@ TEST_SUITE("generated.runtime") {
          auto question = merged_wrapper::parse("hello?");
          REQUIRE(question.success);
          REQUIRE(question.forest.size() == 1);
-         CHECK(question.forest.front()->definition == 1);
+         CHECK(question.forest.front()->production_index == 1);
          CHECK(question.forest.front()->suffix.text == "?");
          REQUIRE(question.forest.front()->payload != nullptr);
          CHECK(dynamic_cast<const merged_greeting*>(question.forest.front()->payload.get()) != nullptr);
 
          auto cloned = question.forest.front()->clone();
          REQUIRE(cloned != nullptr);
-         CHECK(cloned->definition == 1);
+         CHECK(cloned->production_index == 1);
          REQUIRE(cloned->payload != nullptr);
          CHECK(dynamic_cast<const merged_greeting*>(cloned->payload.get()) != nullptr);
       }
@@ -603,12 +603,12 @@ TEST_SUITE("generated.runtime") {
 
          auto* root = dynamic_cast<const merged_binary*>(result.forest.front().get());
          REQUIRE(root != nullptr);
-         CHECK(root->definition == 0);
+         CHECK(root->production_index == 0);
          REQUIRE(root->right != nullptr);
 
          auto* right = dynamic_cast<const merged_binary*>(root->right.get());
          REQUIRE(right != nullptr);
-         CHECK(right->definition == 1);
+         CHECK(right->production_index == 1);
       }
 
       SUBCASE("complexity samples and stored estimates are tracked per merged definition") {
@@ -744,7 +744,7 @@ TEST_SUITE("generated.runtime") {
          CHECK(std::holds_alternative<std::unique_ptr<grouped_choice_greeting>>(hello.forest.front()->payload));
          const auto& greeting = std::get<std::unique_ptr<grouped_choice_greeting>>(hello.forest.front()->payload);
          REQUIRE(greeting != nullptr);
-         CHECK(greeting->definition == 0);
+         CHECK(greeting->production_index == 0);
 
          auto bye = grouped_choice_payload::parse("bye");
          REQUIRE(bye.success);

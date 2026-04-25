@@ -72,7 +72,7 @@ namespace cpfbench {
          }
 
          benchmark::DoNotOptimize(result.forest.size());
-         benchmark::DoNotOptimize(result.forest.front().definition);
+         benchmark::DoNotOptimize(result.forest.front().production_index());
       }
 
       detail::set_items_processed(state);

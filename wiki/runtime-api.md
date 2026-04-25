@@ -11,14 +11,14 @@ struct expression : cpf::node {
     using parse_result = cpf::parse_result<expression>;
 
     static constexpr std::size_t RuleId = 0;
-    static constexpr std::size_t ReductionCount = 5;
+    static constexpr std::size_t ProductionCount = 5;
     static std::array<cpf::complexity, 5> Complexity;
 
     ~expression() override = default;
     static parse_result parse(std::string_view input, const cpf::parse_options& options = {});
     static cpf::recognize_result recognize(std::string_view input);
-    static auto complexity_inputs(std::size_t rule_id) -> std::span<const std::string_view>;
-    static auto recompute_complexity(std::size_t rule_id) -> const cpf::complexity&;
+    static auto complexity_inputs(std::size_t production_index) -> std::span<const std::string_view>;
+    static auto recompute_complexity(std::size_t production_index) -> const cpf::complexity&;
     std::size_t rule_id() const override;
     const std::type_info& type() const override;
     std::unique_ptr<expression> clone() const;
@@ -35,7 +35,7 @@ Generated rules also expose `recognize(...)` for syntax-only validation without 
 
 Every generated node inherits:
 
-- `std::size_t definition`
+- `std::size_t production_index`
 - `cpf::source_range range`
 
 ## Parse configuration
@@ -81,13 +81,13 @@ When `allow_partial = true`, `success` may also be true for a recovered parse. I
 
 - `parse_result::partial` is true when at least one returned tree is recovered
 - `parse_result::status` is `partial_success`
-- each `parse_tree<T>` exposes its own `partial` flag
+- each `parse_tree<T>` exposes its own `is_partial()` flag
 - every ambiguity path still maps to one tree
 - syntax damage is kept inside that tree instead of being split into prefix/suffix trees
 - `error` contains the underlying recovery diagnostic instead of being left disengaged
 
 When `build_ast = true`, `forest` stores lazy `cpf::parse_tree<T>` handles rather than eagerly materialized AST roots.
-Each handle keeps opaque parse-tree state plus lightweight metadata such as `definition` and `range`. The actual AST
+Each handle keeps opaque parse-tree state plus lightweight metadata such as `production_index()` and `range()`. The actual AST
 node is built on first access through `operator*`, `operator->`, or `get()`. Dereferencing a const handle still
 materializes lazily, but it now returns `const T&` / `const T*` access instead of mutable node access.
 
@@ -192,16 +192,16 @@ Important AST semantics:
 Each generated node also exposes:
 
 - a stable `RuleId`
-- `ReductionCount`
+- `ProductionCount`
 - a mutable `Complexity` array
-- `complexity_inputs(rule_id)`
-- `recompute_complexity(rule_id)`
+- `complexity_inputs(production_index)`
+- `recompute_complexity(production_index)`
 
-Here `rule_id` is the zero-based production `definition` stored on parsed nodes, so merged generated node classes can
+Here `production_index` is the zero-based production index stored on parsed nodes, so merged generated node classes can
 keep separate complexity estimates per reduction rule.
 
-`Complexity[rule_id]` is intentionally populated lazily. CPF always generates the deterministic sample inputs up front,
-but it only fits and stores the corresponding `cpf::complexity` object when `recompute_complexity(rule_id)` is called.
+`Complexity[production_index]` is intentionally populated lazily. CPF always generates the deterministic sample inputs up front,
+but it only fits and stores the corresponding `cpf::complexity` object when `recompute_complexity(production_index)` is called.
 
 ## End-to-end example
 
@@ -245,7 +245,7 @@ if (!result.success || result.forest.empty()) {
 }
 
 auto& tree = result.forest.front();
-if (tree.partial) {
+if (tree.is_partial()) {
     if (auto repaired = tree.repaired_input("(hi"); repaired.has_value()) {
         std::cout << *repaired << '\n';
     }

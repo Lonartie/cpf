@@ -1140,7 +1140,7 @@ namespace cpf {
             line(header, 1, "using parse_result = cpf::parse_result<" + info.name + ">;");
             line(header, 1,
                  "static constexpr std::size_t RuleId = " + std::to_string(rule_indices.at(info.name)) + ";");
-            line(header, 1, "static constexpr std::size_t ReductionCount = " + std::to_string(definition_count) + ";");
+            line(header, 1, "static constexpr std::size_t ProductionCount = " + std::to_string(definition_count) + ";");
             for (const auto& field: info.fields) {
                line(header, 1, render_field_declaration(field));
             }
@@ -1152,8 +1152,8 @@ namespace cpf {
             line(header, 1,
                  "static parse_result parse(std::string_view input, const cpf::parse_options& options = {});");
             line(header, 1, "static cpf::recognize_result recognize(std::string_view input);");
-            line(header, 1, "static auto complexity_inputs(std::size_t rule_id) -> std::span<const std::string_view>;");
-            line(header, 1, "static auto recompute_complexity(std::size_t rule_id) -> const cpf::complexity&;");
+            line(header, 1, "static auto complexity_inputs(std::size_t production_index) -> std::span<const std::string_view>;");
+            line(header, 1, "static auto recompute_complexity(std::size_t production_index) -> const cpf::complexity&;");
             line(header, 1, "std::size_t rule_id() const override;");
             line(header, 1, "const std::type_info& type() const override;");
             line(header, 1, "std::unique_ptr<" + info.name + "> clone() const;");
@@ -1828,7 +1828,7 @@ namespace cpf {
 
                line(source, 3, "case " + child + "::RuleId: {");
                line(source, 4, "const auto& value = static_cast<const " + child + "&>(node);");
-               line(source, 4, "switch (value.definition) {");
+               line(source, 4, "switch (value.production_index) {");
                for (const auto* infix_definition: child_definitions) {
                   line(source, 5, "case " + std::to_string(infix_definition->definition) + ":");
                   line(source, 6, "return " + std::to_string(infix_definition->precedence) + ";");
@@ -1960,7 +1960,7 @@ namespace cpf {
             }
 
             if (!infix_definitions.empty()) {
-               line(source, 4, "switch (value.definition) {");
+               line(source, 4, "switch (value.production_index) {");
                for (const auto* infix_definition: infix_definitions) {
                   const auto precedence = std::to_string(infix_definition->precedence);
                   const auto left_associative = infix_definition->associativity == "left" ? "true" : "false";
@@ -2064,7 +2064,7 @@ namespace cpf {
                line(source, 4, "return build_node(node_child_at(tree, 0));");
             } else {
                line(source, 4, "auto node = std::make_unique<" + info.name + ">();");
-               line(source, 4, "node->definition = " + std::to_string(production.definition) + ";");
+               line(source, 4, "node->production_index = " + std::to_string(production.definition) + ";");
                line(source, 4, "node->range = tree->range;");
                line(source, 4, "for (const auto& damage : tree->damage) {");
                line(source, 5, "node->add_damage(damage);");
@@ -2253,12 +2253,12 @@ namespace cpf {
                   line(source, 6,
                        "auto opaque = std::static_pointer_cast<const cpf::detail::parse_node>(cpf::detail::opaque_tree_of(tree));");
                   line(source, 6,
-                       "result.forest.emplace_back(opaque, tree.definition, tree.range, [opaque]() {");
+                       "result.forest.emplace_back(opaque, tree.production_index(), tree.range(), [opaque]() {");
                   line(source, 7, "auto built = build_node(opaque);");
                   line(source, 7,
                        "return release_built_node_as<" + info.name + ">(std::move(built));");
                   line(source, 6,
-                       "}, tree.root_damage(), tree.partial, [](const " + info.name + "& root, std::vector<const cpf::node*>& damaged_nodes) {");
+                       "}, tree.root_damage(), tree.is_partial(), [](const " + info.name + "& root, std::vector<const cpf::node*>& damaged_nodes) {");
                   line(source, 7, "visit_recursive(root, [&](auto& current) {");
                   line(source, 8, "if (current.is_damaged()) {");
                   line(source, 9, "damaged_nodes.push_back(&current);");
@@ -2280,12 +2280,12 @@ namespace cpf {
                   line(source, 6,
                        "auto opaque = std::static_pointer_cast<const cpf::detail::parse_node>(cpf::detail::opaque_tree_of(tree));");
                   line(source, 6,
-                       "result.forest.emplace_back(opaque, tree.definition, tree.range, [opaque]() {");
+                       "result.forest.emplace_back(opaque, tree.production_index(), tree.range(), [opaque]() {");
                   line(source, 7, "auto built = build_node(opaque);");
                   line(source, 7,
                        "return release_built_node_as<" + info.name + ">(std::move(built));");
                   line(source, 6,
-                       "}, tree.root_damage(), tree.partial, [](const " + info.name + "& root, std::vector<const cpf::node*>& damaged_nodes) {");
+                       "}, tree.root_damage(), tree.is_partial(), [](const " + info.name + "& root, std::vector<const cpf::node*>& damaged_nodes) {");
                   line(source, 7, "visit_recursive(root, [&](auto& current) {");
                   line(source, 8, "if (current.is_damaged()) {");
                   line(source, 9, "damaged_nodes.push_back(&current);");
@@ -2361,8 +2361,8 @@ namespace cpf {
             line(source, 0);
             line(source, 0,
                  "auto " + info.name +
-                       "::complexity_inputs(std::size_t rule_id) -> std::span<const std::string_view> {");
-            line(source, 1, "switch (rule_id) {");
+                       "::complexity_inputs(std::size_t production_index) -> std::span<const std::string_view> {");
+            line(source, 1, "switch (production_index) {");
             for (std::size_t definition = 0; definition < definition_count; ++definition) {
                line(source, 2, "case " + std::to_string(definition) + ":");
                line(source, 3,
@@ -2372,14 +2372,14 @@ namespace cpf {
             }
             line(source, 2, "default:");
             line(source, 3,
-                 "throw std::out_of_range{\"Unknown complexity rule id \" + std::to_string(rule_id) + \" for rule '" +
+                 "throw std::out_of_range{\"Unknown production index \" + std::to_string(production_index) + \" for rule '" +
                        info.name + "'\"};");
             line(source, 1, "}");
             line(source, 0, "}");
             line(source, 0);
             line(source, 0,
-                 "auto " + info.name + "::recompute_complexity(std::size_t rule_id) -> const cpf::complexity& {");
-            line(source, 1, "switch (rule_id) {");
+                 "auto " + info.name + "::recompute_complexity(std::size_t production_index) -> const cpf::complexity& {");
+            line(source, 1, "switch (production_index) {");
             for (std::size_t definition = 0; definition < definition_count; ++definition) {
                line(source, 2, "case " + std::to_string(definition) + ":");
                line(source, 3,
@@ -2391,7 +2391,7 @@ namespace cpf {
             }
             line(source, 2, "default:");
             line(source, 3,
-                 "throw std::out_of_range{\"Unknown complexity rule id \" + std::to_string(rule_id) + \" for rule '" +
+                 "throw std::out_of_range{\"Unknown production index \" + std::to_string(production_index) + \" for rule '" +
                        info.name + "'\"};");
             line(source, 1, "}");
             line(source, 0, "}");
@@ -2418,7 +2418,7 @@ namespace cpf {
             if (!info.base_rule) {
                line(source, 0, "std::unique_ptr<cpf::node> " + info.name + "::clone_node() const {");
                line(source, 1, "auto copy = std::make_unique<" + info.name + ">();");
-               line(source, 1, "copy->definition = definition;");
+               line(source, 1, "copy->production_index = production_index;");
                line(source, 1, "copy->range = range;");
                line(source, 1, "copy_damage_to(*copy);");
                for (const auto& field: info.fields) {

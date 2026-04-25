@@ -25,7 +25,7 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(generated.header.find("struct expression : cpf::node") != std::string::npos);
          CHECK(generated.header.find("struct number : expression") != std::string::npos);
          CHECK(generated.header.find("static constexpr std::size_t RuleId = ") != std::string::npos);
-         CHECK(generated.header.find("static constexpr std::size_t ReductionCount = 5;") != std::string::npos);
+         CHECK(generated.header.find("static constexpr std::size_t ProductionCount = 5;") != std::string::npos);
          CHECK(generated.header.find("static std::array<cpf::complexity, 5> Complexity;") != std::string::npos);
          CHECK(generated.header.find(
                      "static parse_result parse(std::string_view input, const cpf::parse_options& options = {});") !=
@@ -33,10 +33,10 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(generated.header.find("static cpf::recognize_result recognize(std::string_view input);") !=
                std::string::npos);
          CHECK(generated.header.find(
-                     "static auto complexity_inputs(std::size_t rule_id) -> std::span<const std::string_view>;") !=
+                     "static auto complexity_inputs(std::size_t production_index) -> std::span<const std::string_view>;") !=
                std::string::npos);
          CHECK(generated.header.find(
-                     "static auto recompute_complexity(std::size_t rule_id) -> const cpf::complexity&;") !=
+                     "static auto recompute_complexity(std::size_t production_index) -> const cpf::complexity&;") !=
                std::string::npos);
          CHECK(generated.header.find("std::unique_ptr<expression> clone() const;") != std::string::npos);
          CHECK(generated.header.find("cpf::matched_string value;") != std::string::npos);
@@ -72,10 +72,10 @@ TEST_SUITE("cpflib.code_generator") {
           CHECK(generated.source.find("for (const auto& damage : tree->damage)") != std::string::npos);
           CHECK(generated.source.find("node->add_damage(damage);") != std::string::npos);
          CHECK(generated.source.find(
-                     "auto expression::complexity_inputs(std::size_t rule_id) -> std::span<const std::string_view>") !=
+                     "auto expression::complexity_inputs(std::size_t production_index) -> std::span<const std::string_view>") !=
                std::string::npos);
          CHECK(generated.source.find(
-                     "auto expression::recompute_complexity(std::size_t rule_id) -> const cpf::complexity&") !=
+                     "auto expression::recompute_complexity(std::size_t production_index) -> const cpf::complexity&") !=
                std::string::npos);
           CHECK(generated.source.find("cpf::detail::earley_parse(input, grammar_spec, root_rule, options.allow_partial)") !=
                 std::string::npos);
@@ -172,12 +172,12 @@ TEST_SUITE("cpflib.code_generator") {
       }
 
       SUBCASE("generated source stamps and preserves matched definitions") {
-         CHECK(generated.header.find("static constexpr std::size_t ReductionCount = 2;") != std::string::npos);
+         CHECK(generated.header.find("static constexpr std::size_t ProductionCount = 2;") != std::string::npos);
          CHECK(generated.header.find("static std::array<cpf::complexity, 2> Complexity;") != std::string::npos);
-         CHECK(generated.source.find("node->definition = 0;") != std::string::npos);
-         CHECK(generated.source.find("node->definition = 1;") != std::string::npos);
-         CHECK(generated.source.find("copy->definition = definition;") != std::string::npos);
-         CHECK(generated.source.find("switch (value.definition)") != std::string::npos);
+         CHECK(generated.source.find("node->production_index = 0;") != std::string::npos);
+         CHECK(generated.source.find("node->production_index = 1;") != std::string::npos);
+         CHECK(generated.source.find("copy->production_index = production_index;") != std::string::npos);
+         CHECK(generated.source.find("switch (value.production_index)") != std::string::npos);
          CHECK(generated.source.find(
                      "release_built_node_as<merged_message>(std::move(child_0))") !=
                std::string::npos);

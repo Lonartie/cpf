@@ -101,7 +101,7 @@ namespace cpf {
    /// @brief Base class for all generated model nodes.
    struct node {
       /// @brief Zero-based production index within the rule that created this node.
-      std::size_t definition = 0;
+      std::size_t production_index = 0;
       /// @brief Source range that produced this node.
       source_range range;
 
@@ -150,19 +150,19 @@ namespace cpf {
       parse_tree() = default;
 
       parse_tree(std::unique_ptr<T> eager_tree) :
-          definition{eager_tree != nullptr ? eager_tree->definition : 0},
-          range{eager_tree != nullptr ? eager_tree->range : source_range{}} {
+          m_production_index{eager_tree != nullptr ? eager_tree->production_index : 0},
+          m_range{eager_tree != nullptr ? eager_tree->range : source_range{}} {
          if (eager_tree != nullptr) {
             m_materialized = std::shared_ptr<T>{eager_tree.release()};
          }
       }
 
-      parse_tree(std::shared_ptr<const void> opaque_tree, std::size_t tree_definition, source_range tree_range,
+      parse_tree(std::shared_ptr<const void> opaque_tree, std::size_t tree_production_index, source_range tree_range,
                  std::function<std::unique_ptr<T>()> materializer, std::vector<node_damage> pending_damage = {},
                  bool tree_partial = false,
                  std::function<void(const T&, std::vector<const node*>&)> damage_indexer = {},
                  std::function<std::optional<std::string>(std::string_view)> repaired_input = {}) :
-          definition{tree_definition}, range{std::move(tree_range)}, partial{tree_partial},
+          m_production_index{tree_production_index}, m_range{std::move(tree_range)}, m_partial{tree_partial},
           m_opaque_tree{std::move(opaque_tree)}, m_materialize{std::move(materializer)},
           m_pending_damage{std::move(pending_damage)}, m_damage_indexer{std::move(damage_indexer)},
           m_repair_input{std::move(repaired_input)} {}
@@ -193,18 +193,20 @@ namespace cpf {
          return m_damaged_nodes;
       }
 
+      [[nodiscard]] auto production_index() const -> std::size_t { return m_production_index; }
+
+      [[nodiscard]] auto range() const -> const source_range& { return m_range; }
+
+      [[nodiscard]] auto is_partial() const -> bool { return m_partial; }
+
       [[nodiscard]] auto repaired_input(std::string_view input) const -> std::optional<std::string> {
-         if (!partial || !m_repair_input) {
+         if (!m_partial || !m_repair_input) {
             return std::string{input};
          }
          return m_repair_input(input);
       }
 
       [[nodiscard]] auto root_damage() const -> const std::vector<node_damage>& { return m_pending_damage; }
-
-      std::size_t definition = 0;
-      source_range range;
-      bool partial = false;
 
    private:
       template<typename U>
@@ -235,6 +237,9 @@ namespace cpf {
          m_damage_indexed = true;
       }
 
+      std::size_t m_production_index = 0;
+      source_range m_range;
+      bool m_partial = false;
       std::shared_ptr<const void> m_opaque_tree;
       std::function<std::unique_ptr<T>()> m_materialize;
       std::vector<node_damage> m_pending_damage;
