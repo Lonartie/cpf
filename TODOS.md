@@ -1,8 +1,9 @@
 # TODO's
 
-* Optimizing the generated parser and visit-functions for better performance
+* Optimizing the generated parser (still keep earley) and visit-functions for better performance
     * The earley parser must be optimized to be as fast as possible
     * The visit functions need to have constant lookup time for dispatch
+    * Use the benchmarks to verify the performance improvements
 * In `cpflib` implement a method to calculate asymptotic time complexity (like GoogleBenchmark does)
     * Signature shall be something like `std::string complexity_of(auto&& func, std::vector<std::tuple<...>>&& args, std::vector<double>&& arg_sizes)`
     * `arg_sizes` is used to determine the size of the input for each argument, and thus determine the time complexity
