@@ -11,6 +11,7 @@ target_include_directories(cpflibtests PRIVATE
 
 target_link_libraries(cpflibtests PRIVATE
         cpflib
+        cpfgenlib
         cpf_project_options
         cpf_project_warnings
 )

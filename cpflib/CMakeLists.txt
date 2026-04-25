@@ -1,20 +1,12 @@
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/cpf.cmake)
 
-add_library(cpflib STATIC
-        codegen/code_generator.cpp
-        parser/grammar_loader.cpp
-        parser/grammar_parser.cpp
-        model/grammar.cpp
-)
+add_library(cpflib INTERFACE)
 
-target_include_directories(cpflib PUBLIC
+target_include_directories(cpflib INTERFACE
         ${CMAKE_CURRENT_LIST_DIR}
 )
 
-target_link_libraries(cpflib PUBLIC
+target_link_libraries(cpflib INTERFACE
         cpf_project_options
 )
 
-target_link_libraries(cpflib PRIVATE
-        cpf_project_warnings
-)

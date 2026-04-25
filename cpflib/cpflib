@@ -1,9 +1,5 @@
 #pragma once
 
-/// Public umbrella header for the CPF runtime and grammar/code-generation APIs.
+/// Public umbrella header for the CPF runtime APIs.
 #include "runtime/runtime.h"
 #include "utils/traits.h"
-#include "model/grammar.h"
-#include "parser/grammar_loader.h"
-#include "parser/grammar_parser.h"
-#include "codegen/code_generator.h"

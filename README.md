@@ -4,6 +4,8 @@ CPF is a parser generation framework that reads a `.cpf` grammar and emits a mat
 It is intended to be a parser generator for quick iteration and prototyping. Even though efforts were made to 
 keep the generated parser efficient, performance is not the primary goal.
 
+`cpflib` is the runtime library consumed by generated parsers. `cpfgenlib` contains the grammar model, grammar parser/loader, and code generator used by `cpfgen`.
+
 > Disclaimer: This project makes heavy use of AI as almost all of the code is AI-generated.
 
 Generated code includes:
@@ -122,6 +124,8 @@ Imports are resolved relative to the importing file, expanded transitively, and 
 The public loading API is:
 
 ```c++
+#include <cpfgenlib>
+
 auto loaded = cpf::load_grammar_file("/path/to/root.cpf");
 auto generated = cpf::generate_code(loaded.parsed_grammar, "root");
 ```
@@ -183,6 +187,8 @@ Generated code can stay in the global namespace, or it can be wrapped in a user-
 ### Library API
 
 ```c++
+#include <cpfgenlib>
+
 auto generated = cpf::generate_code(grammar, "calculator", "demo::generated");
 ```
 

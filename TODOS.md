@@ -1,6 +1,5 @@
 # TODO's
 
-* Move everything not needed at runtime from `cpflib` to `cpfgen`.
 * Optimizing the generated parser and visit-functions for better performance
     * The earley parser must be optimized to be as fast as possible
     * The visit functions need to have constant lookup time for dispatch

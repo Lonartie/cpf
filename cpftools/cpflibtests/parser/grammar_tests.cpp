@@ -1,4 +1,4 @@
-#include <cpflib>
+#include <cpfgenlib>
 
 #include "support/doctest.h"
 
