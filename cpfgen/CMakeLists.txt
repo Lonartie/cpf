@@ -1,10 +1,6 @@
 add_library(cpfgenlib STATIC
-        analysis/grammar_analysis.cpp
         analysis/rule_complexity.cpp
         codegen/code_generator.cpp
-        parser/grammar_loader.cpp
-        parser/grammar_parser.cpp
-        model/grammar.cpp
 )
 
 target_include_directories(cpfgenlib PUBLIC

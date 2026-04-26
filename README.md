@@ -1,15 +1,17 @@
 # CPF
 
-CPF is a parser generation framework that reads a `.cpf` grammar and emits a matching C++20 header/source pair.
-It is intended for fast parser iteration and prototyping. The generated parser uses the earley algorithm and 
-produces a lazy parse forest that can be traversed and queried for syntax nodes, errors, and ambiguities.
+CPF is a parser generation framework that reads a `.cpf` grammar and either emits a matching C++20 header/source
+pair or compiles the grammar directly into an in-memory runtime parser.
+It is intended for fast parser iteration and prototyping. Generated and runtime-compiled parsers both use the Earley
+algorithm and produce lazy parse forests that can be traversed and queried for syntax nodes, errors, ambiguities,
+dynamic ASTs, and CSTs.
 
 > Disclaimer: This project makes heavy use of AI as almost all of the code is AI-generated.
 
 ## Repository overview
 
-- `cpflib`: runtime library consumed by generated parsers
-- `cpfgenlib`: grammar model, parser/loader, and code generator
+- `cpflib`: shared grammar frontend, runtime library, and dynamic in-memory parser compiler
+- `cpfgenlib`: code generator built on top of `cpflib`
 - `cpfgen`: command-line front end for code generation
 - `cpftools`: tests, support utilities, and benchmarks
 
@@ -33,6 +35,21 @@ Generate parser code from a grammar:
 
 ```zsh
 ./build/cpfgen/cpfgen /path/to/grammar.cpf /path/to/output --namespace demo::generated
+```
+
+Compile and use a parser entirely at runtime:
+
+```c++
+#include <cpflib>
+
+auto parser = cpf::compile_grammar(R"(
+   expression -> addition | number;
+   addition -> expression:left '+':op expression:right;
+   number -> r'[0-9]+':value;
+)");
+
+auto result = parser.parse("1 + 2 + 3");
+auto cst = parser.parse_cst("1 + 2 + 3");
 ```
 
 `cpfgen` prints any grammar diagnostics it finds to standard output during generation. Non-blocking warnings, including

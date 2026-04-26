@@ -153,6 +153,18 @@ namespace {
       "imported_bundle_message"
    }};
 
+
+   constexpr std::array<cpf::detail::production_model_metadata, 7> production_model_metadata{{
+      { true, false, 0, "imported_bundle_word", 0, 0, false, nullptr, 0 },
+      { true, false, 0, "imported_bundle_word", 1, 0, false, nullptr, 0 },
+      { true, false, 1, "imported_bundle_suffix", 0, 0, false, nullptr, 0 },
+      { true, false, 2, "imported_bundle_greeting", 0, 0, false, nullptr, 0 },
+      { true, false, 3, "imported_bundle_parting", 0, 0, false, nullptr, 0 },
+      { true, false, 4, "imported_bundle_message", 0, 0, true, nullptr, 0 },
+      { true, false, 4, "imported_bundle_message", 1, 0, true, nullptr, 0 }
+   }};
+   constexpr cpf::detail::model_spec grammar_model{grammar_spec, production_model_metadata.data(), production_model_metadata.size(), grammar_rule_names.data()};
+
    template<typename Rule, std::size_t SampleCount>
    cpf::complexity compute_generated_rule_complexity(const std::array<std::string_view, SampleCount>& inputs, std::string_view rule_name, std::size_t rule_id, std::size_t root_rule) {
       std::vector<std::tuple<std::string_view>> args;
@@ -175,8 +187,6 @@ namespace {
          std::move(arg_sizes));
    }
    std::unique_ptr<cpf::node> build_node(const parse_node_ptr& tree);
-   std::unique_ptr<cpf::cst_node> build_cst_node(const parse_node_ptr& tree);
-   void append_cst_children(const parse_node_ptr& tree, std::vector<cpf::cst_child>& children);
 
    template<typename T>
    std::unique_ptr<T> release_built_node_as(std::unique_ptr<cpf::node> built) {
@@ -191,151 +201,6 @@ namespace {
       return std::unique_ptr<T>{raw};
    }
 
-   parse_node_ptr node_child_at(const parse_node_ptr& tree, std::size_t index) {
-      if (index >= tree->children.size()) {
-         throw std::runtime_error{"Generated parse tree missing node child"};
-      }
-      const auto* child = std::get_if<parse_node_ptr>(&tree->children[index]);
-      if (child == nullptr || *child == nullptr) {
-         throw std::runtime_error{"Generated parse tree child is not a node"};
-      }
-      return *child;
-   }
-
-   cpf::matched_string matched_child_at(const parse_node_ptr& tree, std::size_t index) {
-      if (index >= tree->children.size()) {
-         throw std::runtime_error{"Generated parse tree missing terminal child"};
-      }
-      const auto* child = std::get_if<cpf::matched_string>(&tree->children[index]);
-      if (child == nullptr) {
-         throw std::runtime_error{"Generated parse tree child is not a terminal"};
-      }
-      return *child;
-   }
-
-   [[maybe_unused]] void append_matched_tree_text(const parse_node_ptr& tree, std::string& text) {
-      for (const auto& child : tree->children) {
-         if (const auto* matched = std::get_if<cpf::matched_string>(&child); matched != nullptr) {
-            text += matched->text;
-            continue;
-         }
-         const auto* node = std::get_if<parse_node_ptr>(&child);
-         if (node == nullptr || *node == nullptr) {
-            throw std::runtime_error{"Generated parse tree child is not materializable as token text"};
-         }
-         append_matched_tree_text(*node, text);
-      }
-   }
-
-   [[maybe_unused]] cpf::matched_string matched_tree_at(const parse_node_ptr& tree) {
-      cpf::matched_string matched;
-      matched.range = tree->range;
-      append_matched_tree_text(tree, matched.text);
-      return matched;
-   }
-
-   bool generated_tree_is_synthetic(const parse_node_ptr& tree) {
-      switch (tree->production) {
-         case 0:
-            return false;
-         case 1:
-            return false;
-         case 2:
-            return false;
-         case 3:
-            return false;
-         case 4:
-            return false;
-         case 5:
-            return false;
-         case 6:
-            return false;
-         default:
-            return false;
-      }
-   }
-
-   std::size_t generated_tree_rule_id(const parse_node_ptr& tree) {
-      switch (tree->production) {
-         case 0:
-            return imported_bundle_word::RuleId;
-         case 1:
-            return imported_bundle_word::RuleId;
-         case 2:
-            return imported_bundle_suffix::RuleId;
-         case 3:
-            return imported_bundle_greeting::RuleId;
-         case 4:
-            return imported_bundle_parting::RuleId;
-         case 5:
-            return imported_bundle_message::RuleId;
-         case 6:
-            return imported_bundle_message::RuleId;
-         default:
-            throw std::runtime_error{"Unknown parse production"};
-      }
-   }
-
-   std::string_view generated_tree_rule_name(const parse_node_ptr& tree) {
-      switch (tree->production) {
-         case 0:
-            return "imported_bundle_word";
-         case 1:
-            return "imported_bundle_word";
-         case 2:
-            return "imported_bundle_suffix";
-         case 3:
-            return "imported_bundle_greeting";
-         case 4:
-            return "imported_bundle_parting";
-         case 5:
-            return "imported_bundle_message";
-         case 6:
-            return "imported_bundle_message";
-         default:
-            throw std::runtime_error{"Unknown parse production"};
-      }
-   }
-
-   void append_cst_children(const parse_node_ptr& tree, std::vector<cpf::cst_child>& children) {
-      for (const auto& child : tree->children) {
-         if (const auto* matched = std::get_if<cpf::matched_string>(&child); matched != nullptr) {
-            children.emplace_back(*matched);
-            continue;
-         }
-         const auto* node = std::get_if<parse_node_ptr>(&child);
-         if (node == nullptr || *node == nullptr) {
-            throw std::runtime_error{"Generated parse tree child is not a node"};
-         }
-         if (generated_tree_is_synthetic(*node)) {
-            append_cst_children(*node, children);
-            continue;
-         }
-         children.emplace_back(build_cst_node(*node));
-      }
-   }
-
-
-   std::size_t definition_of_generated_tree(const parse_node_ptr& tree) {
-      switch (tree->production) {
-         case 0:
-            return 0;
-         case 1:
-            return 1;
-         case 2:
-            return 0;
-         case 3:
-            return 0;
-         case 4:
-            return 0;
-         case 5:
-            return 0;
-         case 6:
-            return 1;
-         default:
-            return 0;
-      }
-   }
 
    [[maybe_unused]] bool validate_generated_node(const cpf::node& node) {
       switch (node.rule_id()) {
@@ -363,39 +228,6 @@ namespace {
       }
    }
 
-   bool validate_generated_tree(const parse_node_ptr& tree) {
-      for (const auto& child : tree->children) {
-         if (std::holds_alternative<parse_node_ptr>(child) && !validate_generated_tree(std::get<parse_node_ptr>(child))) {
-            return false;
-         }
-      }
-      switch (tree->production) {
-         case 0: {
-            return true;
-         }
-         case 1: {
-            return true;
-         }
-         case 2: {
-            return true;
-         }
-         case 3: {
-            return true;
-         }
-         case 4: {
-            return true;
-         }
-         case 5: {
-            return true;
-         }
-         case 6: {
-            return true;
-         }
-         default:
-            return true;
-      }
-   }
-
    std::unique_ptr<cpf::node> build_node(const parse_node_ptr& tree) {
       switch (tree->production) {
          case 0: {
@@ -405,7 +237,7 @@ namespace {
             for (const auto& damage : tree->damage) {
                cpf::detail::add_damage(*node, damage);
             }
-            node->value = matched_child_at(tree, 0);
+            node->value = cpf::detail::matched_child_at(tree, 0);
             return node;
          }
          case 1: {
@@ -415,7 +247,7 @@ namespace {
             for (const auto& damage : tree->damage) {
                cpf::detail::add_damage(*node, damage);
             }
-            node->value = matched_child_at(tree, 0);
+            node->value = cpf::detail::matched_child_at(tree, 0);
             return node;
          }
          case 2: {
@@ -425,7 +257,7 @@ namespace {
             for (const auto& damage : tree->damage) {
                cpf::detail::add_damage(*node, damage);
             }
-            node->value = matched_child_at(tree, 0);
+            node->value = cpf::detail::matched_child_at(tree, 0);
             return node;
          }
          case 3: {
@@ -435,9 +267,9 @@ namespace {
             for (const auto& damage : tree->damage) {
                cpf::detail::add_damage(*node, damage);
             }
-            auto child_0 = build_node(node_child_at(tree, 0));
+            auto child_0 = build_node(cpf::detail::node_child_at(tree, 0));
             node->text = release_built_node_as<imported_bundle_word>(std::move(child_0));
-            auto child_1 = build_node(node_child_at(tree, 1));
+            auto child_1 = build_node(cpf::detail::node_child_at(tree, 1));
             node->suffix = release_built_node_as<imported_bundle_suffix>(std::move(child_1));
             return node;
          }
@@ -448,31 +280,18 @@ namespace {
             for (const auto& damage : tree->damage) {
                cpf::detail::add_damage(*node, damage);
             }
-            node->text = matched_child_at(tree, 0);
+            node->text = cpf::detail::matched_child_at(tree, 0);
             return node;
          }
          case 5: {
-            return build_node(node_child_at(tree, 0));
+            return build_node(cpf::detail::node_child_at(tree, 0));
          }
          case 6: {
-            return build_node(node_child_at(tree, 0));
+            return build_node(cpf::detail::node_child_at(tree, 0));
          }
          default:
             throw std::runtime_error{"Unknown parse production"};
       }
-   }
-
-   std::unique_ptr<cpf::cst_node> build_cst_node(const parse_node_ptr& tree) {
-      auto node = std::make_unique<cpf::cst_node>();
-      node->production_index = definition_of_generated_tree(tree);
-      node->range = tree->range;
-      node->rule = generated_tree_rule_id(tree);
-      node->rule_name = std::string{generated_tree_rule_name(tree)};
-      for (const auto& damage : tree->damage) {
-         cpf::detail::add_damage(*node, damage);
-      }
-      append_cst_children(tree, node->children);
-      return node;
    }
 
    template<typename T>
@@ -494,55 +313,25 @@ namespace {
 
    template<typename T>
    cpf::parse_result<T> parse_generated(const cpf::token_sequence& tokens, std::size_t root_rule, const cpf::parse_options& options) {
-      cpf::parse_result<T> result;
-      auto forest = cpf::detail::earley_parse(tokens, grammar_spec, root_rule, options.allow_partial);
-      if (!forest.success) {
-         result.error = std::move(forest.error);
-         return result;
-      }
-      result.partial = forest.partial;
-      if (result.partial) {
-         result.error = forest.error;
-      }
-      auto valid_tree_count = std::size_t{0};
-      for (std::size_t tree_index = 0; tree_index < forest.forest.size(); ++tree_index) {
-         const auto& tree = forest.forest[tree_index];
-         if (!validate_generated_tree(tree)) {
-            continue;
-         }
-         ++valid_tree_count;
-         if (options.error_on_ambiguity && valid_tree_count > 1) {
-            result.status = cpf::parse_status::failure;
-            result.success = false;
-            result.forest.clear();
-            result.error = cpf::detail::make_ambiguity_error(grammar_rule_names[root_rule]);
-            return result;
-         }
-         result.status = result.partial ? cpf::parse_status::partial_success : cpf::parse_status::success;
-         result.success = true;
-         if (options.build_ast) {
-            result.forest.emplace_back(tree, definition_of_generated_tree(tree), tree->range, [tree]() {
-               auto built = build_node(tree);
-               return release_built_node_as<T>(std::move(built));
-            }, forest.tree_damage[tree_index], forest.tree_partial[tree_index], [](const T& root, std::vector<const cpf::node*>& damaged_nodes) {
-               visit_recursive(root, [&](auto& current) {
-                  if (current.is_damaged()) {
-                     damaged_nodes.push_back(&current);
-                  }
-               });
-            }, [tree](std::string_view repaired_input) { return cpf::detail::repaired_input_of(tree, repaired_input, grammar_spec); });
-         }
-      }
-      if (result.success) {
-         return result;
-      }
-      auto filtered_error = cpf::parse_error{};
-      filtered_error.expected.push_back("valid parse tree");
-      filtered_error.found.kind = cpf::parse_error_found_kind::filtered_parse;
-      filtered_error.notes.push_back(std::string{R"(completed Earley parses for rule ')"} + std::string{grammar_rule_names[root_rule]} + R"(' were rejected by precedence/associativity constraints)");
-      cpf::detail::error_tracker::finalize(filtered_error);
-      result.error = std::move(filtered_error);
-      return result;
+      return cpf::detail::parse_shared_forest<T>(
+         [&](cpf::detail::forest_span_order order) {
+            return cpf::detail::earley_parse(tokens, grammar_spec, root_rule, options.allow_partial, order);
+         },
+         grammar_model,
+         root_rule,
+         options,
+         [](const parse_node_ptr& tree) { return cpf::detail::validate_parse_tree(tree, grammar_model); },
+         [](const parse_node_ptr& tree) {
+            auto built = build_node(tree);
+            return release_built_node_as<T>(std::move(built));
+         },
+         [](const T& root, std::vector<const cpf::node*>& damaged_nodes) {
+            visit_recursive(root, [&](auto& current) {
+               if (current.is_damaged()) {
+                  damaged_nodes.push_back(&current);
+               }
+            });
+         });
    }
 
    template<typename T>
@@ -552,52 +341,22 @@ namespace {
    }
 
    cpf::parse_result<cpf::cst_node> parse_generated_cst(const cpf::token_sequence& tokens, std::size_t root_rule, const cpf::parse_options& options) {
-      cpf::parse_result<cpf::cst_node> result;
-      auto forest = cpf::detail::earley_parse(tokens, grammar_spec, root_rule, options.allow_partial);
-      if (!forest.success) {
-         result.error = std::move(forest.error);
-         return result;
-      }
-      result.partial = forest.partial;
-      if (result.partial) {
-         result.error = forest.error;
-      }
-      auto valid_tree_count = std::size_t{0};
-      for (std::size_t tree_index = 0; tree_index < forest.forest.size(); ++tree_index) {
-         const auto& tree = forest.forest[tree_index];
-         if (!validate_generated_tree(tree)) {
-            continue;
-         }
-         ++valid_tree_count;
-         if (options.error_on_ambiguity && valid_tree_count > 1) {
-            result.status = cpf::parse_status::failure;
-            result.success = false;
-            result.forest.clear();
-            result.error = cpf::detail::make_ambiguity_error(grammar_rule_names[root_rule]);
-            return result;
-         }
-         result.status = result.partial ? cpf::parse_status::partial_success : cpf::parse_status::success;
-         result.success = true;
-         if (options.build_ast) {
-            result.forest.emplace_back(tree, definition_of_generated_tree(tree), tree->range, [tree]() { return build_cst_node(tree); }, forest.tree_damage[tree_index], forest.tree_partial[tree_index], [](const cpf::cst_node& root, std::vector<const cpf::node*>& damaged_nodes) {
-               cpf::visit_cst_recursive(root, [&](const cpf::cst_node& current) {
-                  if (current.is_damaged()) {
-                     damaged_nodes.push_back(&current);
-                  }
-               });
-            }, [tree](std::string_view repaired_input) { return cpf::detail::repaired_input_of(tree, repaired_input, grammar_spec); });
-         }
-      }
-      if (result.success) {
-         return result;
-      }
-      auto filtered_error = cpf::parse_error{};
-      filtered_error.expected.push_back("valid parse tree");
-      filtered_error.found.kind = cpf::parse_error_found_kind::filtered_parse;
-      filtered_error.notes.push_back(std::string{R"(completed Earley parses for rule ')"} + std::string{grammar_rule_names[root_rule]} + R"(' were rejected by precedence/associativity constraints)");
-      cpf::detail::error_tracker::finalize(filtered_error);
-      result.error = std::move(filtered_error);
-      return result;
+      return cpf::detail::parse_shared_forest<cpf::cst_node>(
+         [&](cpf::detail::forest_span_order order) {
+            return cpf::detail::earley_parse(tokens, grammar_spec, root_rule, options.allow_partial, order);
+         },
+         grammar_model,
+         root_rule,
+         options,
+         [](const parse_node_ptr& tree) { return cpf::detail::validate_parse_tree(tree, grammar_model); },
+         [](const parse_node_ptr& tree) { return cpf::detail::build_cst_node(tree, grammar_model); },
+         [](const cpf::cst_node& root, std::vector<const cpf::node*>& damaged_nodes) {
+            cpf::visit_cst_recursive(root, [&](const cpf::cst_node& current) {
+               if (current.is_damaged()) {
+                  damaged_nodes.push_back(&current);
+               }
+            });
+         });
    }
 
    [[maybe_unused]] cpf::parse_result<cpf::cst_node> parse_generated_cst(std::string_view input, std::size_t root_rule, const cpf::parse_options& options) {
@@ -864,156 +623,7 @@ auto detail::parse_imported_bundle_message_cst(std::string_view input, const cpf
 }
 
 auto detail::parse_imported_bundle_message_default(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<imported_bundle_message> {
-   auto result = cpf::parse_result<imported_bundle_message>{ };
-   cpf::parse_error best_error;
-   auto have_error = false;
-   auto successful_children = std::size_t{0};
-   auto have_partial_success = false;
-   {
-      auto child_result = detail::parse_imported_bundle_greeting_default(tokens, options);
-      if (child_result.success) {
-         if (!child_result.partial) {
-            if (have_partial_success) {
-               have_partial_success = false;
-               successful_children = 0;
-               result.status = cpf::parse_status::failure;
-               result.partial = false;
-               result.forest.clear();
-            }
-            result.status = cpf::parse_status::success;
-            result.success = true;
-            result.error.reset();
-            successful_children += child_result.forest.size();
-            if (options.error_on_ambiguity && successful_children > 1) {
-               result.status = cpf::parse_status::failure;
-               result.success = false;
-               result.partial = false;
-               result.forest.clear();
-               result.error = cpf::detail::make_ambiguity_error("imported_bundle_message");
-               return result;
-            }
-            if (options.build_ast) {
-               for (const auto& tree : child_result.forest) {
-                  auto opaque = std::static_pointer_cast<const cpf::detail::parse_node>(cpf::detail::opaque_tree_of(tree));
-                  result.forest.emplace_back(opaque, tree.production_index(), tree.range(), [opaque]() {
-                     auto built = build_node(opaque);
-                     return release_built_node_as<imported_bundle_message>(std::move(built));
-                  }, cpf::detail::pending_damage_of(tree), tree.is_partial(), [](const imported_bundle_message& root, std::vector<const cpf::node*>& damaged_nodes) {
-                     visit_recursive(root, [&](auto& current) {
-                        if (current.is_damaged()) {
-                           damaged_nodes.push_back(&current);
-                        }
-                     });
-                  }, [opaque](std::string_view repaired_input) { return cpf::detail::repaired_input_of(opaque, repaired_input, grammar_spec); });
-               }
-            }
-         } else if (!result.success && !have_partial_success) {
-            result.status = cpf::parse_status::partial_success;
-            result.success = true;
-            result.partial = true;
-            result.error = child_result.error;
-            have_partial_success = true;
-            successful_children = child_result.forest.size();
-            if (options.build_ast) {
-               for (const auto& tree : child_result.forest) {
-                  auto opaque = std::static_pointer_cast<const cpf::detail::parse_node>(cpf::detail::opaque_tree_of(tree));
-                  result.forest.emplace_back(opaque, tree.production_index(), tree.range(), [opaque]() {
-                     auto built = build_node(opaque);
-                     return release_built_node_as<imported_bundle_message>(std::move(built));
-                  }, cpf::detail::pending_damage_of(tree), tree.is_partial(), [](const imported_bundle_message& root, std::vector<const cpf::node*>& damaged_nodes) {
-                     visit_recursive(root, [&](auto& current) {
-                        if (current.is_damaged()) {
-                           damaged_nodes.push_back(&current);
-                        }
-                     });
-                  }, [opaque](std::string_view repaired_input) { return cpf::detail::repaired_input_of(opaque, repaired_input, grammar_spec); });
-               }
-            }
-         }
-      } else if (!have_error) {
-         best_error = *child_result.error;
-         have_error = true;
-      } else {
-         cpf::detail::merge_parse_error(best_error, *child_result.error);
-      }
-   }
-   {
-      auto child_result = detail::parse_imported_bundle_parting_default(tokens, options);
-      if (child_result.success) {
-         if (!child_result.partial) {
-            if (have_partial_success) {
-               have_partial_success = false;
-               successful_children = 0;
-               result.status = cpf::parse_status::failure;
-               result.partial = false;
-               result.forest.clear();
-            }
-            result.status = cpf::parse_status::success;
-            result.success = true;
-            result.error.reset();
-            successful_children += child_result.forest.size();
-            if (options.error_on_ambiguity && successful_children > 1) {
-               result.status = cpf::parse_status::failure;
-               result.success = false;
-               result.partial = false;
-               result.forest.clear();
-               result.error = cpf::detail::make_ambiguity_error("imported_bundle_message");
-               return result;
-            }
-            if (options.build_ast) {
-               for (const auto& tree : child_result.forest) {
-                  auto opaque = std::static_pointer_cast<const cpf::detail::parse_node>(cpf::detail::opaque_tree_of(tree));
-                  result.forest.emplace_back(opaque, tree.production_index(), tree.range(), [opaque]() {
-                     auto built = build_node(opaque);
-                     return release_built_node_as<imported_bundle_message>(std::move(built));
-                  }, cpf::detail::pending_damage_of(tree), tree.is_partial(), [](const imported_bundle_message& root, std::vector<const cpf::node*>& damaged_nodes) {
-                     visit_recursive(root, [&](auto& current) {
-                        if (current.is_damaged()) {
-                           damaged_nodes.push_back(&current);
-                        }
-                     });
-                  }, [opaque](std::string_view repaired_input) { return cpf::detail::repaired_input_of(opaque, repaired_input, grammar_spec); });
-               }
-            }
-         } else if (!result.success && !have_partial_success) {
-            result.status = cpf::parse_status::partial_success;
-            result.success = true;
-            result.partial = true;
-            result.error = child_result.error;
-            have_partial_success = true;
-            successful_children = child_result.forest.size();
-            if (options.build_ast) {
-               for (const auto& tree : child_result.forest) {
-                  auto opaque = std::static_pointer_cast<const cpf::detail::parse_node>(cpf::detail::opaque_tree_of(tree));
-                  result.forest.emplace_back(opaque, tree.production_index(), tree.range(), [opaque]() {
-                     auto built = build_node(opaque);
-                     return release_built_node_as<imported_bundle_message>(std::move(built));
-                  }, cpf::detail::pending_damage_of(tree), tree.is_partial(), [](const imported_bundle_message& root, std::vector<const cpf::node*>& damaged_nodes) {
-                     visit_recursive(root, [&](auto& current) {
-                        if (current.is_damaged()) {
-                           damaged_nodes.push_back(&current);
-                        }
-                     });
-                  }, [opaque](std::string_view repaired_input) { return cpf::detail::repaired_input_of(opaque, repaired_input, grammar_spec); });
-               }
-            }
-         }
-      } else if (!have_error) {
-         best_error = *child_result.error;
-         have_error = true;
-      } else {
-         cpf::detail::merge_parse_error(best_error, *child_result.error);
-      }
-   }
-   if (result.success) {
-      return result;
-   }
-   if (have_error) {
-      cpf::detail::append_unique(best_error.notes, "while matching base rule 'imported_bundle_message'");
-      cpf::detail::error_tracker::finalize(best_error);
-      result.error = best_error;
-   }
-   return result;
+   return parse_generated<imported_bundle_message>(tokens, 4, options);
 }
 
 auto detail::parse_imported_bundle_message_cst(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<cpf::cst_node> {
@@ -1026,47 +636,7 @@ auto detail::recognize_imported_bundle_message_default(std::string_view input) -
 }
 
 auto detail::recognize_imported_bundle_message_default(const cpf::token_sequence& tokens) -> cpf::recognize_result {
-   cpf::recognize_result result;
-   cpf::parse_error best_error;
-   auto have_error = false;
-   {
-      auto child_result = detail::recognize_imported_bundle_greeting_default(tokens);
-      if (child_result.success) {
-         result.success = true;
-         result.error.reset();
-         return result;
-      }
-      if (child_result.error.has_value()) {
-         if (!have_error) {
-            best_error = *child_result.error;
-            have_error = true;
-         } else {
-            cpf::detail::merge_parse_error(best_error, *child_result.error);
-         }
-      }
-   }
-   {
-      auto child_result = detail::recognize_imported_bundle_parting_default(tokens);
-      if (child_result.success) {
-         result.success = true;
-         result.error.reset();
-         return result;
-      }
-      if (child_result.error.has_value()) {
-         if (!have_error) {
-            best_error = *child_result.error;
-            have_error = true;
-         } else {
-            cpf::detail::merge_parse_error(best_error, *child_result.error);
-         }
-      }
-   }
-   if (have_error) {
-      cpf::detail::append_unique(best_error.notes, "while matching base rule 'imported_bundle_message'");
-      cpf::detail::error_tracker::finalize(best_error);
-      result.error = best_error;
-   }
-   return result;
+   return recognize_generated<imported_bundle_message>(tokens, 4);
 }
 
 namespace {

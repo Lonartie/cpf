@@ -2,4 +2,9 @@
 
 /// Public umbrella header for the CPF runtime APIs.
 #include "analysis/complexity.h"
+#include "model/grammar.h"
+#include "analysis/grammar_analysis.h"
+#include "parser/grammar_loader.h"
+#include "parser/grammar_parser.h"
 #include "runtime/api.h"
+#include "runtime/dynamic.h"

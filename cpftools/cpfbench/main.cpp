@@ -194,33 +194,48 @@ namespace {
       std::array<benchmark::ComplexityN, 3> sizes;
    };
 
-   inline constexpr auto family_plans = std::array<family_plan, 5>{
-         family_plan{"calculator/parse_to_forest", {9, 25, 33}},
-         family_plan{"calculator/materialize_ast", {9, 25, 33}},
-         family_plan{"calculator/parse_and_evaluate", {9, 25, 33}},
-         family_plan{"simple_c/parse_to_forest", {302, 395, 488}},
-         family_plan{"simple_c/materialize_ast", {302, 395, 488}},
+   inline constexpr auto family_plans = std::array<family_plan, 8>{
+         family_plan{"calculator/compiletime_lex_input", {9, 25, 33}},
+         family_plan{"calculator/runtime_lex_input", {9, 25, 33}},
+         family_plan{"calculator/compiletime_parse_tokens", {9, 25, 33}},
+         family_plan{"calculator/runtime_parse_tokens", {9, 25, 33}},
+         family_plan{"calculator/compiletime_materialize_ast", {9, 25, 33}},
+         family_plan{"calculator/runtime_materialize_ast", {9, 25, 33}},
+         family_plan{"calculator/compiletime_interpret_result", {9, 25, 33}},
+         family_plan{"calculator/runtime_interpret_result", {9, 25, 33}},
    };
 
    [[nodiscard]] auto display_name_for(std::string_view family_name) -> std::string {
-      if (family_name == "calculator/parse_to_forest") {
-         return "calculator parse -> forest";
+      if (family_name == "calculator/compiletime_lex_input") {
+         return "calculator lex comptime";
       }
 
-      if (family_name == "calculator/materialize_ast") {
-         return "calculator materialize ast";
+      if (family_name == "calculator/runtime_lex_input") {
+         return "calculator lex runtime";
       }
 
-      if (family_name == "calculator/parse_and_evaluate") {
-         return "calculator parse + eval";
+      if (family_name == "calculator/compiletime_parse_tokens") {
+         return "calculator parse tokens comptime";
       }
 
-      if (family_name == "simple_c/parse_to_forest") {
-         return "simple_c parse -> forest";
+      if (family_name == "calculator/runtime_parse_tokens") {
+         return "calculator parse tokens runtime";
       }
 
-      if (family_name == "simple_c/materialize_ast") {
-         return "simple_c materialize ast";
+      if (family_name == "calculator/compiletime_materialize_ast") {
+         return "calculator ast comptime";
+      }
+
+      if (family_name == "calculator/runtime_materialize_ast") {
+         return "calculator ast runtime";
+      }
+
+      if (family_name == "calculator/compiletime_interpret_result") {
+         return "calculator eval comptime";
+      }
+
+      if (family_name == "calculator/runtime_interpret_result") {
+         return "calculator eval runtime";
       }
 
       return std::string{family_name};
@@ -474,9 +489,15 @@ namespace {
       }
 
       void Finalize() override {
-         static constexpr auto family_order = std::array<std::string_view, 5>{
-               "calculator/parse_to_forest", "calculator/materialize_ast", "calculator/parse_and_evaluate",
-               "simple_c/parse_to_forest",   "simple_c/materialize_ast",
+         static constexpr auto family_order = std::array<std::string_view, 8>{
+               "calculator/compiletime_lex_input",
+               "calculator/runtime_lex_input",
+               "calculator/compiletime_parse_tokens",
+               "calculator/runtime_parse_tokens",
+               "calculator/compiletime_materialize_ast",
+               "calculator/runtime_materialize_ast",
+               "calculator/compiletime_interpret_result",
+               "calculator/runtime_interpret_result",
          };
 
          static constexpr auto benchmark_width = 28;

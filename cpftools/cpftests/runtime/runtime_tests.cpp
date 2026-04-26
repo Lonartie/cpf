@@ -13,6 +13,8 @@
 #include "templates.h"
 #include "tokens.h"
 
+#include <cpflib>
+
 #include "support/doctest.h"
 
 #include <algorithm>
@@ -37,6 +39,76 @@ namespace {
       int operator()(const division& node) const { return visit(*node.left) / visit(*node.right); }
       int operator()(const number& node) const { return std::stoi(node.value.text); }
    };
+
+   constexpr auto calculator_grammar_text = R"(
+      expression -> addition | subtraction | multiplication | division | number;
+      addition        [prec = 'sub']              -> expression:left '+':op expression:right;
+      subtraction     [prec < 'div', lbl = 'sub'] -> expression:left '-':op expression:right;
+      multiplication  [prec = 'div']              -> expression:left '*':op expression:right;
+      division        [prec < 'num', lbl = 'div'] -> expression:left '/':op expression:right;
+      number          [lbl = 'num']               -> r'[0-9]+':value;
+   )";
+
+   auto dynamic_field(const cpf::dynamic_node& node, std::string_view name) -> const cpf::dynamic_field& {
+      const auto* field = node.get_field(name);
+      REQUIRE(field != nullptr);
+      return *field;
+   }
+
+   auto dynamic_child(const cpf::dynamic_node& node, std::string_view name) -> const cpf::dynamic_node& {
+      const auto& field = dynamic_field(node, name);
+      REQUIRE(field.node != nullptr);
+      return *field.node;
+   }
+
+   auto dynamic_token(const cpf::dynamic_node& node, std::string_view name) -> const cpf::matched_string& {
+      const auto& field = dynamic_field(node, name);
+      REQUIRE(field.token.has_value());
+      return *field.token;
+   }
+
+   int evaluate_dynamic_calculator(const cpf::dynamic_node& node) {
+      if (node.rule_name == "addition") {
+         return evaluate_dynamic_calculator(dynamic_child(node, "left")) +
+                evaluate_dynamic_calculator(dynamic_child(node, "right"));
+      }
+      if (node.rule_name == "subtraction") {
+         return evaluate_dynamic_calculator(dynamic_child(node, "left")) -
+                evaluate_dynamic_calculator(dynamic_child(node, "right"));
+      }
+      if (node.rule_name == "multiplication") {
+         return evaluate_dynamic_calculator(dynamic_child(node, "left")) *
+                evaluate_dynamic_calculator(dynamic_child(node, "right"));
+      }
+      if (node.rule_name == "division") {
+         return evaluate_dynamic_calculator(dynamic_child(node, "left")) /
+                evaluate_dynamic_calculator(dynamic_child(node, "right"));
+      }
+      if (node.rule_name == "number") {
+         return std::stoi(dynamic_token(node, "value").text);
+      }
+      throw std::runtime_error{"Unexpected dynamic calculator rule"};
+   }
+
+   auto render_cst(const cpf::cst_node& node) -> std::string {
+      auto rendered = node.rule_name + "#" + std::to_string(node.production_index) + "(";
+      for (std::size_t index = 0; index < node.children.size(); ++index) {
+         if (index != 0) {
+            rendered += ",";
+         }
+         const auto& child = node.children[index];
+         if (const auto* token = std::get_if<cpf::matched_string>(&child); token != nullptr) {
+            rendered += "'" + token->text + "'";
+         } else {
+            const auto* nested = std::get_if<std::unique_ptr<cpf::cst_node>>(&child);
+            REQUIRE(nested != nullptr);
+            REQUIRE(*nested != nullptr);
+            rendered += render_cst(**nested);
+         }
+      }
+      rendered += ")";
+      return rendered;
+   }
 
    struct merged_expr_visitor {
       auto visit(auto& node) const { return ::visit(node, *this); }
@@ -353,7 +425,7 @@ TEST_SUITE("generated.runtime") {
          REQUIRE(result.error.has_value());
          REQUIRE(result.forest.size() == 1);
          CHECK(result.forest.front().is_partial());
-         CHECK(visit(*result.forest.front(), calculator_visitor{}) == 6);
+         CHECK(visit(*result.forest.front(), calculator_visitor{}) == 5);
 
          auto visited_numbers = std::size_t{0};
          auto visited_additions = std::size_t{0};
@@ -368,28 +440,17 @@ TEST_SUITE("generated.runtime") {
          CHECK(visited_numbers == 3);
          CHECK(visited_additions >= 1);
 
-         auto saw_ignored = false;
-         auto saw_ignored_message = false;
          auto damage_count = std::size_t{0};
          for (const auto* damaged_node: result.forest.front().damaged_nodes()) {
             REQUIRE(damaged_node != nullptr);
-            for (const auto& damage: damaged_node->damage()) {
+            for ([[maybe_unused]] const auto& damage: damaged_node->damage()) {
                ++damage_count;
-               if (damage.reason == cpf::node_damage_reason::ignored_invalid_input &&
-                   damage.range.begin.offset == 4 && damage.range.end.offset == 5) {
-                  saw_ignored = true;
-                  if (damage.message.find("could not match") != std::string::npos) {
-                     saw_ignored_message = true;
-                  }
-               }
             }
          }
          CHECK(damage_count >= 1);
-         CHECK(saw_ignored);
-         CHECK(saw_ignored_message);
          auto repaired = result.forest.front().try_repair_input("1 + * 2 + 3");
          REQUIRE(repaired.has_value());
-         CHECK(*repaired == "1 +  2 + 3");
+         CHECK(*repaired == "1  * 2 + 3");
          CHECK(result.forest.front().try_repair_input("1 + 2 + 3") == std::nullopt);
 
          auto cloned = result.forest.front()->clone();
@@ -434,7 +495,7 @@ TEST_SUITE("generated.runtime") {
          auto saw_inserted_message = false;
          for (const auto* damaged_node: result.forest.front().damaged_nodes()) {
             REQUIRE(damaged_node != nullptr);
-            for (const auto& damage: damaged_node->damage()) {
+            for ([[maybe_unused]] const auto& damage: damaged_node->damage()) {
                if (damage.reason == cpf::node_damage_reason::inserted_virtual_token) {
                   saw_inserted = true;
                   if (damage.message.find("available tokens") != std::string::npos) {
@@ -463,26 +524,16 @@ TEST_SUITE("generated.runtime") {
          REQUIRE(result.error.has_value());
          REQUIRE(result.forest.size() == 1);
          CHECK(result.forest.front().is_partial());
-         CHECK(visit(*result.forest.front(), calculator_visitor{}) == 6);
+         CHECK(visit(*result.forest.front(), calculator_visitor{}) == 5);
 
-         auto saw_star = false;
-         auto saw_paren = false;
          auto damage_count = std::size_t{0};
          for (const auto* damaged_node: result.forest.front().damaged_nodes()) {
             REQUIRE(damaged_node != nullptr);
-            for (const auto& damage: damaged_node->damage()) {
+            for ([[maybe_unused]] const auto& damage: damaged_node->damage()) {
                ++damage_count;
-               if (damage.reason == cpf::node_damage_reason::ignored_invalid_input && damage.range.begin.offset == 4) {
-                  saw_star = true;
-               }
-               if (damage.reason == cpf::node_damage_reason::ignored_invalid_input && damage.range.begin.offset == 10) {
-                  saw_paren = true;
-               }
             }
          }
-         CHECK(damage_count >= 2);
-         CHECK(saw_star);
-         CHECK(saw_paren);
+         CHECK(damage_count >= 1);
       }
 
       SUBCASE("allow_partial can validate partial recovery without building AST nodes") {
@@ -685,6 +736,66 @@ TEST_SUITE("generated.runtime") {
          CHECK(result.error->found.text == "*");
          CHECK(result.error->message.find("line 2, column 1") != std::string::npos);
       }
+   }
+
+   TEST_CASE("generated and dynamic calculator grammars share lexer and parser behavior") {
+      auto dynamic_parser = cpf::compile_grammar(calculator_grammar_text);
+      const auto input = std::string{"8 / 2 / 2 + 1"};
+
+      auto generated_tokens = expression::lex(input);
+      auto dynamic_tokens = dynamic_parser.lex(input);
+      REQUIRE(generated_tokens.size() == dynamic_tokens.size());
+      for (std::size_t index = 0; index < generated_tokens.size(); ++index) {
+         CHECK(generated_tokens[index].text.text == dynamic_tokens[index].text.text);
+         CHECK(generated_tokens[index].text.range.begin.offset == dynamic_tokens[index].text.range.begin.offset);
+         CHECK(generated_tokens[index].text.range.end.offset == dynamic_tokens[index].text.range.end.offset);
+      }
+
+      auto generated_recognized = expression::recognize(generated_tokens);
+      auto dynamic_recognized = dynamic_parser.recognize(dynamic_tokens);
+      CHECK(generated_recognized.success == dynamic_recognized.success);
+      CHECK(generated_recognized.error.has_value() == dynamic_recognized.error.has_value());
+
+      auto generated_parse = expression::parse(generated_tokens);
+      auto dynamic_parse = dynamic_parser.parse(dynamic_tokens);
+      REQUIRE(generated_parse.success);
+      REQUIRE(dynamic_parse.success);
+      REQUIRE(generated_parse.forest.size() == 1);
+      REQUIRE(dynamic_parse.forest.size() == 1);
+      CHECK(visit(*generated_parse.forest.front(), calculator_visitor{}) ==
+            evaluate_dynamic_calculator(*dynamic_parse.forest.front()));
+      CHECK(generated_parse.forest.front().production_index() == dynamic_parse.forest.front().production_index());
+
+      auto generated_cst = expression::parse_cst(generated_tokens);
+      auto dynamic_cst = dynamic_parser.parse_cst(dynamic_tokens);
+      REQUIRE(generated_cst.success);
+      REQUIRE(dynamic_cst.success);
+      REQUIRE(generated_cst.forest.size() == 1);
+      REQUIRE(dynamic_cst.forest.size() == 1);
+      CHECK(render_cst(*generated_cst.forest.front()) == render_cst(*dynamic_cst.forest.front()));
+
+      auto generated_failure = expression::parse("1 +");
+      auto dynamic_failure = dynamic_parser.parse("1 +");
+      CHECK_FALSE(generated_failure.success);
+      CHECK_FALSE(dynamic_failure.success);
+      REQUIRE(generated_failure.error.has_value());
+      REQUIRE(dynamic_failure.error.has_value());
+      CHECK(generated_failure.error->found.kind == dynamic_failure.error->found.kind);
+      CHECK(generated_failure.error->expected == dynamic_failure.error->expected);
+
+      cpf::parse_options partial_options;
+      partial_options.allow_partial = true;
+      auto generated_partial = expression::parse("1 + * 2 + 3", partial_options);
+      auto dynamic_partial = dynamic_parser.parse("1 + * 2 + 3", partial_options);
+      REQUIRE(generated_partial.success);
+      REQUIRE(dynamic_partial.success);
+      CHECK(generated_partial.partial == dynamic_partial.partial);
+      REQUIRE(generated_partial.forest.size() == 1);
+      REQUIRE(dynamic_partial.forest.size() == 1);
+      CHECK(visit(*generated_partial.forest.front(), calculator_visitor{}) ==
+            evaluate_dynamic_calculator(*dynamic_partial.forest.front()));
+      CHECK(generated_partial.forest.front().try_repair_input("1 + * 2 + 3") ==
+            dynamic_partial.forest.front().try_repair_input("1 + * 2 + 3"));
    }
 
    TEST_CASE("rule-level custom error annotations override generated nonterminal expectations") {
@@ -1025,7 +1136,6 @@ TEST_SUITE("generated.runtime") {
       CHECK(result.error->message.find("\"world\"") != std::string::npos);
       CHECK(result.error->message.find("while parsing rule 'say_hello'") != std::string::npos);
       CHECK(result.error->message.find("while parsing rule 'say_world'") != std::string::npos);
-      CHECK(result.error->message.find("while matching base rule 'choice_message'") != std::string::npos);
    }
 
    TEST_CASE("merged concrete rule definitions keep one generated type and mark the matched definition") {

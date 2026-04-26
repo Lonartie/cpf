@@ -30,7 +30,10 @@ endif ()
 add_executable(cpfbench
         main.cpp
         calculator_benchmarks.cpp
-        simple_c_benchmarks.cpp
+)
+
+target_compile_definitions(cpfbench PRIVATE
+        CPF_BENCH_CALCULATOR_GRAMMAR_PATH="${CMAKE_CURRENT_LIST_DIR}/fixtures/grammars/calculator.cpf"
 )
 
 cpf_link_grammars(cpfbench
@@ -38,10 +41,6 @@ cpf_link_grammars(cpfbench
         ${CMAKE_CURRENT_LIST_DIR}/fixtures/grammars/calculator.cpf
 )
 
-cpf_link_grammars(cpfbench
-        NAMESPACE cpfbench::simple_c
-        ${CMAKE_CURRENT_LIST_DIR}/fixtures/grammars/simple_c.cpf
-)
 
 target_include_directories(cpfbench PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}

@@ -2,7 +2,12 @@ include(${CMAKE_CURRENT_LIST_DIR}/cmake/cpf.cmake)
 
 add_library(cpflib STATIC
         analysis/complexity.cpp
+        analysis/grammar_analysis.cpp
+        model/grammar.cpp
+        parser/grammar_loader.cpp
+        parser/grammar_parser.cpp
         runtime/api.cpp
+        runtime/dynamic.cpp
         runtime/runtime.cpp
 )
 

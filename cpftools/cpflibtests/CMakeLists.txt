@@ -4,6 +4,7 @@ add_executable(cpflibtests
         parser/grammar_tests.cpp
         main.cpp
         runtime/complexity_tests.cpp
+        runtime/dynamic_runtime_tests.cpp
         runtime/runtime_tests.cpp
 )
 

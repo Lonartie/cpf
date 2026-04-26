@@ -750,7 +750,8 @@ namespace cpf {
          auto collect_root_ends(std::string_view input, const prepared_parse& prepared, const grammar_spec& grammar,
                                 std::size_t root_rule, bool require_full_input) -> std::vector<std::size_t>;
          auto build_root_forest(std::string_view input, const grammar_spec& grammar, std::size_t root_rule,
-                                const prepared_parse& prepared, const std::vector<std::size_t>& root_ends)
+                                const prepared_parse& prepared, const std::vector<std::size_t>& root_ends,
+                                forest_span_order span_order)
                -> std::vector<parse_node_ptr>;
          auto recover_full_input(std::string_view input, const grammar_spec& grammar, std::size_t root_rule,
                                  const prepared_parse& prepared) -> parse_forest;
@@ -940,7 +941,8 @@ namespace cpf {
          }
 
          auto finish_earley_parse(std::string_view input, const grammar_spec& grammar, std::size_t root_rule,
-                                  prepared_parse prepared, bool allow_partial) -> parse_forest {
+                                  prepared_parse prepared, bool allow_partial, forest_span_order span_order)
+               -> parse_forest {
             if (!prepared.has_root_production) {
                parse_forest result;
                result.error = prepared.error;
@@ -951,7 +953,7 @@ namespace cpf {
             if (!full_ends.empty()) {
                parse_forest result;
                result.success = true;
-               result.forest = build_root_forest(input, grammar, root_rule, prepared, full_ends);
+               result.forest = build_root_forest(input, grammar, root_rule, prepared, full_ends, span_order);
                result.tree_partial.assign(result.forest.size(), false);
                result.tree_damage.resize(result.forest.size());
                return result;
@@ -1005,7 +1007,8 @@ namespace cpf {
          }
 
          auto build_root_forest(std::string_view input, const grammar_spec& grammar, std::size_t root_rule,
-                                const prepared_parse& prepared, const std::vector<std::size_t>& root_ends)
+                                const prepared_parse& prepared, const std::vector<std::size_t>& root_ends,
+                                forest_span_order span_order)
                -> std::vector<parse_node_ptr> {
             using node_list = std::vector<parse_node_ptr>;
 
@@ -1087,15 +1090,27 @@ namespace cpf {
                         return;
                      }
 
-                     for (auto child_end: end_it->second) {
+                     const auto append_children = [&](std::size_t child_end) {
                         if (child_end > end) {
-                           break;
+                           return;
                         }
                         const auto& child_nodes = build_rule(symbol.value, position, child_end);
                         for (const auto& child: child_nodes) {
                            children.emplace_back(child);
                            enumerate(symbol_index + 1, child_end);
                            children.pop_back();
+                        }
+                     };
+                     if (span_order == forest_span_order::ascending) {
+                        for (const auto child_end: end_it->second) {
+                           if (child_end > end) {
+                              break;
+                           }
+                           append_children(child_end);
+                        }
+                     } else {
+                        for (auto child_it = end_it->second.rbegin(); child_it != end_it->second.rend(); ++child_it) {
+                           append_children(*child_it);
                         }
                      }
                      return;
@@ -1498,6 +1513,183 @@ namespace cpf {
          return error;
       }
 
+      auto node_child_at(const parse_node_ptr& tree, std::size_t index) -> parse_node_ptr {
+         if (index >= tree->children.size()) {
+            throw std::runtime_error{"Parse tree missing node child"};
+         }
+         const auto* child = std::get_if<parse_node_ptr>(&tree->children[index]);
+         if (child == nullptr || *child == nullptr) {
+            throw std::runtime_error{"Parse tree child is not a node"};
+         }
+         return *child;
+      }
+
+      auto matched_child_at(const parse_node_ptr& tree, std::size_t index) -> matched_string {
+         if (index >= tree->children.size()) {
+            throw std::runtime_error{"Parse tree missing terminal child"};
+         }
+         const auto* child = std::get_if<matched_string>(&tree->children[index]);
+         if (child == nullptr) {
+            throw std::runtime_error{"Parse tree child is not a terminal"};
+         }
+         return *child;
+      }
+
+      void append_matched_tree_text(const parse_node_ptr& tree, std::string& text) {
+         for (const auto& child: tree->children) {
+            if (const auto* matched = std::get_if<matched_string>(&child); matched != nullptr) {
+               text += matched->text;
+               continue;
+            }
+            const auto* node = std::get_if<parse_node_ptr>(&child);
+            if (node == nullptr || *node == nullptr) {
+               throw std::runtime_error{"Parse tree child is not materializable as token text"};
+            }
+            append_matched_tree_text(*node, text);
+         }
+      }
+
+      auto matched_tree_at(const parse_node_ptr& tree) -> matched_string {
+         matched_string matched;
+         matched.range = tree->range;
+         append_matched_tree_text(tree, matched.text);
+         return matched;
+      }
+
+      auto production_metadata_of(const parse_node_ptr& tree, const model_spec& model) -> const production_model_metadata* {
+         if (tree->production >= model.production_metadata_count || model.production_metadata == nullptr) {
+            return nullptr;
+         }
+         return &model.production_metadata[tree->production];
+      }
+
+      auto production_definition_of(const parse_node_ptr& tree, const model_spec& model) -> std::size_t {
+         if (const auto* metadata = production_metadata_of(tree, model); metadata != nullptr) {
+            return metadata->definition;
+         }
+         return 0;
+      }
+
+      auto parse_tree_is_synthetic(const parse_node_ptr& tree, const model_spec& model) -> bool {
+         if (const auto* metadata = production_metadata_of(tree, model); metadata != nullptr) {
+            return metadata->synthetic;
+         }
+         return false;
+      }
+
+      auto parse_tree_rule_id(const parse_node_ptr& tree, const model_spec& model) -> std::size_t {
+         const auto* metadata = production_metadata_of(tree, model);
+         if (metadata == nullptr || !metadata->has_source_rule) {
+            throw std::runtime_error{"Unknown parse production rule id"};
+         }
+         return metadata->rule_id;
+      }
+
+      auto parse_tree_rule_name(const parse_node_ptr& tree, const model_spec& model) -> std::string_view {
+         const auto* metadata = production_metadata_of(tree, model);
+         if (metadata == nullptr || !metadata->has_source_rule) {
+            throw std::runtime_error{"Unknown parse production rule name"};
+         }
+         return metadata->rule_name;
+      }
+
+      auto precedence_of_tree(const parse_node_ptr& tree, const model_spec& model) -> int {
+         const auto* metadata = production_metadata_of(tree, model);
+         if (metadata == nullptr) {
+            return 0;
+         }
+         if (metadata->precedence_passthrough) {
+            if (tree->children.empty()) {
+               return 0;
+            }
+            return precedence_of_tree(node_child_at(tree, 0), model);
+         }
+         return metadata->precedence;
+      }
+
+      auto validate_child_tree(const parse_node_ptr& child, int precedence, bool left_associative, bool is_left_child,
+                               const model_spec& model) -> bool {
+         const auto child_precedence = precedence_of_tree(child, model);
+         if (child_precedence == 0) {
+            return true;
+         }
+         if (child_precedence < precedence) {
+            return false;
+         }
+         if (child_precedence > precedence) {
+            return true;
+         }
+         return is_left_child ? left_associative : !left_associative;
+      }
+
+      auto validate_parse_tree(const parse_node_ptr& tree, const model_spec& model) -> bool {
+         for (const auto& child: tree->children) {
+            if (const auto* node = std::get_if<parse_node_ptr>(&child); node != nullptr && *node != nullptr &&
+                !validate_parse_tree(*node, model)) {
+               return false;
+            }
+         }
+
+         const auto* metadata = production_metadata_of(tree, model);
+         if (metadata == nullptr || metadata->validation_constraints == nullptr ||
+             metadata->validation_constraint_count == 0) {
+            return true;
+         }
+         for (std::size_t index = 0; index < metadata->validation_constraint_count; ++index) {
+            const auto& constraint = metadata->validation_constraints[index];
+            if (!validate_child_tree(node_child_at(tree, constraint.left_child_index), constraint.precedence,
+                                     constraint.left_associative, true, model)) {
+               return false;
+            }
+            if (!validate_child_tree(node_child_at(tree, constraint.right_child_index), constraint.precedence,
+                                     constraint.left_associative, false, model)) {
+               return false;
+            }
+         }
+         return true;
+      }
+
+      void append_cst_children(const parse_node_ptr& tree, const model_spec& model, std::vector<cst_child>& children) {
+         for (const auto& child: tree->children) {
+            if (const auto* matched = std::get_if<matched_string>(&child); matched != nullptr) {
+               children.emplace_back(*matched);
+               continue;
+            }
+            const auto* node = std::get_if<parse_node_ptr>(&child);
+            if (node == nullptr || *node == nullptr) {
+               throw std::runtime_error{"Parse tree child is not a node"};
+            }
+            if (parse_tree_is_synthetic(*node, model)) {
+               append_cst_children(*node, model, children);
+               continue;
+            }
+            children.emplace_back(build_cst_node(*node, model));
+         }
+      }
+
+      auto build_cst_node(const parse_node_ptr& tree, const model_spec& model) -> std::unique_ptr<cst_node> {
+         auto node = std::make_unique<cst_node>();
+         node->production_index = production_definition_of(tree, model);
+         node->range = tree->range;
+         node->rule = parse_tree_rule_id(tree, model);
+         node->rule_name = std::string{parse_tree_rule_name(tree, model)};
+         for (const auto& damage: tree->damage) {
+            add_damage(*node, damage);
+         }
+         append_cst_children(tree, model, node->children);
+         return node;
+      }
+
+      auto filtered_parse_error(std::string_view rule_name) -> parse_error {
+         auto error = parse_error{};
+         error.expected.push_back("valid parse tree");
+         error.found.kind = parse_error_found_kind::filtered_parse;
+         error.notes.push_back(std::string{R"(completed Earley parses for rule ')"} + std::string{rule_name} +
+                               R"(' were rejected by precedence/associativity constraints)");
+         error_tracker::finalize(error);
+         return error;
+      }
+
       auto repaired_input_of(const parse_node_ptr& tree, std::string_view input, const grammar_spec& grammar)
             -> std::optional<std::string> {
          auto plan = repaired_input_plan{};
@@ -1514,19 +1706,19 @@ namespace cpf {
          return tokenize_input(input, grammar);
       }
 
-      auto earley_parse(std::string_view input, const grammar_spec& grammar, std::size_t root_rule,
-                        bool allow_partial) -> parse_forest {
-         return finish_earley_parse(input, grammar, root_rule, prepare_earley_parse(input, grammar, root_rule),
-                                    allow_partial);
+       auto earley_parse(std::string_view input, const grammar_spec& grammar, std::size_t root_rule,
+                         bool allow_partial, forest_span_order span_order) -> parse_forest {
+          return finish_earley_parse(input, grammar, root_rule, prepare_earley_parse(input, grammar, root_rule),
+                                     allow_partial, span_order);
       }
 
-      auto earley_parse(const token_sequence& tokens, const grammar_spec& grammar, std::size_t root_rule,
-                        bool allow_partial) -> parse_forest {
+       auto earley_parse(const token_sequence& tokens, const grammar_spec& grammar, std::size_t root_rule,
+                         bool allow_partial, forest_span_order span_order) -> parse_forest {
          auto predicate_matches_cache = predicate_context{};
          return finish_earley_parse(tokens.input, grammar, root_rule,
                                     prepare_earley_parse(tokens.input, tokens.tokens, grammar, root_rule, 0,
                                                          predicate_matches_cache),
-                                    allow_partial);
+                                     allow_partial, span_order);
       }
 
       auto earley_recognize(std::string_view input, const grammar_spec& grammar, std::size_t root_rule)
@@ -1570,7 +1762,7 @@ namespace cpf {
 
          std::unordered_map<span_key, std::size_t, span_key_hash> rule_count_cache;
          std::unordered_map<span_key, std::size_t, span_key_hash> production_count_cache;
-         std::unordered_set<span_key, span_key_hash> rule_in_progress;
+          std::unordered_set<span_key, span_key_hash> rule_in_progress;
          std::unordered_set<span_key, span_key_hash> production_in_progress;
 
          std::function<std::size_t(std::size_t, std::size_t, std::size_t)> count_rule;
@@ -1578,14 +1770,14 @@ namespace cpf {
 
          count_rule = [&](std::size_t rule, std::size_t start, std::size_t end) -> std::size_t {
             auto key = span_key{rule, start, end};
-            if (rule_in_progress.contains(key)) {
-               return 0;
-            }
+             if (rule_in_progress.contains(key)) {
+                return 0;
+             }
             if (auto cache = rule_count_cache.find(key); cache != rule_count_cache.end()) {
                return cache->second;
             }
 
-            rule_in_progress.insert(key);
+             rule_in_progress.insert(key);
             auto total = std::size_t{0};
             if (auto completed = prepared.completed_rules.find(key); completed != prepared.completed_rules.end()) {
                for (const auto production_index: completed->second) {
@@ -1595,7 +1787,7 @@ namespace cpf {
                   }
                }
             }
-            rule_in_progress.erase(key);
+             rule_in_progress.erase(key);
             rule_count_cache.emplace(key, total);
             return total;
          };

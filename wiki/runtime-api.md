@@ -2,6 +2,68 @@
 
 This page describes the generated parser API exposed by CPF and the runtime facilities provided by `cpflib`.
 
+## Runtime-compiled parser API
+
+`cpflib` can now parse `.cpf` grammars directly at runtime and compile them into an in-memory parser without writing
+generated C++ files.
+
+```c++
+#include <cpflib>
+
+auto parser = cpf::compile_grammar(R"(
+    expression -> addition | number;
+    addition -> expression:left '+':op expression:right;
+    number -> r'[0-9]+':value;
+)");
+
+auto tokens = parser.lex("1 + 2");
+auto ast = parser.parse(tokens);
+auto cst = parser.parse_cst("1 + 2");
+```
+
+The runtime compiler shares the same grammar frontend as `cpfgen`:
+
+- `cpf::parse_grammar(...)`
+- `cpf::load_grammar_file(...)`
+- `cpf::analyze_grammar(...)`
+- `cpf::compile_grammar(...)`
+- `cpf::compile_grammar_file(...)`
+
+`cpf::compiled_grammar` exposes:
+
+- `lex(...)`
+- `recognize(...)`
+- `parse(...)`
+- `parse_cst(...)`
+- named-root overloads for `recognize(...)`, `parse(...)`, and `parse_cst(...)`
+
+The default overloads target `analysis().summary.primary_entry_rule`.
+
+### Dynamic AST shape
+
+Runtime compilation materializes `cpf::dynamic_node` instead of generated C++ node classes.
+
+```c++
+struct dynamic_node : cpf::node {
+    std::size_t rule = 0;
+    std::string rule_name;
+    std::map<std::string, cpf::dynamic_field> fields;
+};
+```
+
+Callers can look fields up by name through `dynamic_node::get_field(...)`.
+
+Each `cpf::dynamic_field` stores:
+
+- its grammar label (`name`)
+- the declared storage shape (`shape`)
+- the actual runtime value kind (`value_kind`)
+- declared and actual type names (`declared_type_name`, `value_type_name`)
+- one of: scalar token, scalar node, token list, or node list
+
+This preserves the same parsing features as generated parsers while exposing a grammar-agnostic API suitable for REPLs,
+editor tooling, dynamic DSLs, and runtime grammar loading.
+
 ## Generated API shape
 
 For a grammar root such as `expression`, CPF generates node types like:

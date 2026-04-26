@@ -5,13 +5,21 @@ targets.
 
 ## Library entry points
 
-CPF exposes the grammar loader and code generator through `cpfgenlib`.
+CPF exposes the shared grammar frontend and runtime compiler through `cpflib`, while `cpfgenlib` adds C++ code
+generation on top.
+
+```c++
+#include <cpflib>
+
+auto loaded = cpf::load_grammar_file("/path/to/root.cpf");
+auto analysis = cpf::analyze_grammar(loaded.parsed_grammar);
+auto runtime_parser = cpf::compile_grammar(loaded);
+```
 
 ```c++
 #include <cpfgenlib>
 
 auto loaded = cpf::load_grammar_file("/path/to/root.cpf");
-auto analysis = cpf::analyze_grammar(loaded.parsed_grammar);
 auto generated = cpf::generate_code(loaded.parsed_grammar, "root");
 ```
 
@@ -27,6 +35,19 @@ auto generated = cpf::generate_code(loaded.parsed_grammar, "root");
 - `source_origins`: loader metadata that anchors leaf mapper ids back to concrete grammar files and source positions
 
 If you only need the parsed grammar, `cpf::parse_grammar_file(...)` returns the `cpf::grammar` directly.
+
+### Runtime compilation
+
+`cpf::compile_grammar(...)` and `cpf::compile_grammar_file(...)` return `cpf::compiled_grammar`, which supports:
+
+- `lex(...)`
+- `recognize(...)`
+- `parse(...)` into `cpf::dynamic_node`
+- `parse_cst(...)` into `cpf::cst_node`
+- explicit named-root overloads for grammars with multiple public entry points
+
+This path uses the same `.cpf` grammar format as code generation, but runs entirely in-memory without writing source
+files or relying on a downstream C++ build step.
 
 ### Generating code
 

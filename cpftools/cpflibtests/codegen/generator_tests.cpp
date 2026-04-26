@@ -182,19 +182,15 @@ TEST_SUITE("cpflib.code_generator") {
           CHECK(generated.source.find(
                       "cpf::parse_result<T> parse_generated(const cpf::token_sequence& tokens, std::size_t root_rule, const cpf::parse_options& options)") !=
                 std::string::npos);
+          CHECK(generated.source.find("production_model_metadata{{") != std::string::npos);
+          CHECK(generated.source.find(
+                      "grammar_model{grammar_spec, production_model_metadata.data(), production_model_metadata.size(), grammar_rule_names.data()}") !=
+                std::string::npos);
           CHECK(generated.source.find("options.allow_partial") != std::string::npos);
-         CHECK(generated.source.find("auto valid_tree_count = std::size_t{0};") != std::string::npos);
-         CHECK(generated.source.find("if (!validate_generated_tree(tree))") != std::string::npos);
-         CHECK(generated.source.find(
-                     "result.error = cpf::detail::make_ambiguity_error(grammar_rule_names[root_rule]);") !=
-               std::string::npos);
-         CHECK(generated.source.find(
-                     "result.status = result.partial ? cpf::parse_status::partial_success : cpf::parse_status::success;") !=
-               std::string::npos);
-         CHECK(generated.source.find("result.error.reset();") != std::string::npos);
-         CHECK(generated.source.find(
-                     "result.forest.emplace_back(tree, definition_of_generated_tree(tree), tree->range") !=
-               std::string::npos);
+          CHECK(generated.source.find("cpf::detail::parse_shared_forest<T>(") != std::string::npos);
+          CHECK(generated.source.find("cpf::detail::parse_shared_forest<cpf::cst_node>(") != std::string::npos);
+          CHECK(generated.source.find("cpf::detail::validate_parse_tree(tree, grammar_model)") != std::string::npos);
+          CHECK(generated.source.find("cpf::detail::build_cst_node(tree, grammar_model)") != std::string::npos);
           CHECK(generated.source.find("for (const auto& damage : tree->damage)") != std::string::npos);
           CHECK(generated.source.find("cpf::detail::add_damage(*node, damage);") != std::string::npos);
          CHECK(generated.source.find(
@@ -205,7 +201,7 @@ TEST_SUITE("cpflib.code_generator") {
                std::string::npos);
           CHECK(generated.source.find("auto tokens = cpf::detail::lex_input(input, grammar_spec);") !=
                 std::string::npos);
-           CHECK(generated.source.find("cpf::detail::earley_parse(tokens, grammar_spec, root_rule, options.allow_partial)") !=
+           CHECK(generated.source.find("cpf::detail::earley_parse(tokens, grammar_spec, root_rule, options.allow_partial, order)") !=
                 std::string::npos);
            CHECK(generated.source.find("cpf::detail::earley_recognize(tokens, grammar_spec, root_rule)") !=
                 std::string::npos);
@@ -218,22 +214,19 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(generated.source.find("std::unique_ptr<T> release_built_node_as(std::unique_ptr<cpf::node> built)") !=
                std::string::npos);
          CHECK(generated.source.find("bool validate_generated_node(const cpf::node& node)") != std::string::npos);
-         CHECK(generated.source.find("bool validate_generated_tree(const parse_node_ptr& tree)") != std::string::npos);
-          CHECK(generated.source.find("std::unique_ptr<cpf::cst_node> build_cst_node(const parse_node_ptr& tree)") !=
+          CHECK(generated.source.find("bool validate_generated_tree(const parse_node_ptr& tree)") == std::string::npos);
+          CHECK(generated.source.find("std::unique_ptr<cpf::cst_node> build_cst_node(const parse_node_ptr& tree)") ==
                 std::string::npos);
-          CHECK(generated.source.find("void append_cst_children(const parse_node_ptr& tree, std::vector<cpf::cst_child>& children)") !=
-                std::string::npos);
-          CHECK(generated.source.find("node->rule_name = std::string{generated_tree_rule_name(tree)};") !=
+          CHECK(generated.source.find("void append_cst_children(const parse_node_ptr& tree, std::vector<cpf::cst_child>& children)") ==
                 std::string::npos);
           CHECK(generated.source.find("cpf::visit_cst_recursive(root, [&](const cpf::cst_node& current)") !=
                 std::string::npos);
-         CHECK(generated.source.find("rejected by precedence/associativity constraints") != std::string::npos);
-         CHECK(generated.source.find("definition_of_generated_tree(const parse_node_ptr& tree)") != std::string::npos);
+          CHECK(generated.source.find("cpf::detail::node_child_at(tree, 0)") != std::string::npos);
          CHECK(generated.source.find("auto detail::recognize_expression_default(std::string_view input) -> cpf::recognize_result") !=
                std::string::npos);
          CHECK(generated.header.find("for (const auto& damage : node.damage()) {") != std::string::npos);
-          CHECK(generated.source.find("successful_children += child_result.forest.size();") != std::string::npos);
-          CHECK(generated.source.find("auto filtered_error = cpf::parse_error{};") != std::string::npos);
+          CHECK(generated.source.find("successful_children += child_result.forest.size();") == std::string::npos);
+          CHECK(generated.source.find("auto filtered_error = cpf::parse_error{};") == std::string::npos);
           CHECK(generated.source.find("partial_candidates") == std::string::npos);
       }
    }
@@ -381,9 +374,9 @@ TEST_SUITE("cpflib.code_generator") {
                std::string::npos);
          CHECK(generated.source.find("std::array<cpf::complexity, 2> merged_binary_complexity_cache{};") !=
                std::string::npos);
-         CHECK(generated.source.find("auto child_result = detail::parse_merged_greeting_default(tokens, options);") !=
+         CHECK(generated.source.find("auto child_result = detail::parse_merged_greeting_default(tokens, options);") ==
                std::string::npos);
-         CHECK(generated.source.find("auto opaque = std::static_pointer_cast<const cpf::detail::parse_node>(cpf::detail::opaque_tree_of(tree));") != std::string::npos);
+         CHECK(generated.source.find("cpf::detail::parse_shared_forest<T>(") != std::string::npos);
       }
    }
 
@@ -463,14 +456,14 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(generated.source.find("extract_helper_") != std::string::npos);
          CHECK(generated.source.find("Unknown quantified helper production") != std::string::npos);
          CHECK(generated.source.find("release_built_node_as<T>(std::move(built))") != std::string::npos);
-         CHECK(generated.source.find("parse_node_ptr node_child_at(const parse_node_ptr& tree, std::size_t index)") !=
+         CHECK(generated.source.find("parse_node_ptr node_child_at(const parse_node_ptr& tree, std::size_t index)") ==
                std::string::npos);
-         CHECK(generated.source.find("cpf::matched_string matched_child_at(const parse_node_ptr& tree, std::size_t index)") !=
+         CHECK(generated.source.find("cpf::matched_string matched_child_at(const parse_node_ptr& tree, std::size_t index)") ==
                std::string::npos);
-         CHECK(generated.source.find("Generated parse tree missing node child") != std::string::npos);
-         CHECK(generated.source.find("Generated parse tree child is not a terminal") != std::string::npos);
-         CHECK(generated.source.find("build_node(node_child_at(tree, 0))") != std::string::npos);
-         CHECK(generated.source.find("matched_child_at(tree, 0)") != std::string::npos);
+         CHECK(generated.source.find("Generated parse tree missing node child") == std::string::npos);
+         CHECK(generated.source.find("Generated parse tree child is not a terminal") == std::string::npos);
+         CHECK(generated.source.find("build_node(cpf::detail::node_child_at(tree, 0))") != std::string::npos);
+         CHECK(generated.source.find("cpf::detail::matched_child_at(tree, 0)") != std::string::npos);
          CHECK(generated.source.find("tree->children.front()") == std::string::npos);
          CHECK(generated.source.find("node->value = extract_helper_") != std::string::npos);
          CHECK(generated.source.find("node->values = extract_helper_") != std::string::npos);
@@ -680,11 +673,11 @@ TEST_SUITE("cpflib.code_generator") {
       }
 
       SUBCASE("source output collapses lexical helper subtrees into token text") {
-         CHECK(generated.source.find("cpf::matched_string matched_tree_at(const parse_node_ptr& tree)") != std::string::npos);
-         CHECK(generated.source.find("append_matched_tree_text") != std::string::npos);
-         CHECK(generated.source.find("node->name = matched_tree_at(") != std::string::npos);
-         CHECK(generated.source.find("node->type = matched_tree_at(") != std::string::npos);
-         CHECK(generated.source.find("node->value = matched_tree_at(") != std::string::npos);
+         CHECK(generated.source.find("cpf::matched_string matched_tree_at(const parse_node_ptr& tree)") == std::string::npos);
+         CHECK(generated.source.find("append_matched_tree_text") == std::string::npos);
+         CHECK(generated.source.find("node->name = cpf::detail::matched_tree_at(") != std::string::npos);
+         CHECK(generated.source.find("node->type = cpf::detail::matched_tree_at(") != std::string::npos);
+         CHECK(generated.source.find("node->value = cpf::detail::matched_tree_at(") != std::string::npos);
       }
    }
 
