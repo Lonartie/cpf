@@ -18,6 +18,7 @@ CPF currently supports:
 - lookahead predicates: `!symbol` and `&symbol`
 - commit/cut markers: `!>`
 - parameterized grammar templates
+- static grammar diagnostics and linting
 - multi-file grammars through `@import`
 - generated-code namespaces
 
@@ -224,6 +225,33 @@ This matches `(`, then `spec`, then `_value`, then `)` and still materializes th
 Template arguments inherit labels and quantifiers from the argument expression itself unless the template placeholder
 adds its own suffix. This makes list-style utilities such as `template_surrounded<'{', item+, '}'>` preserve repeated
 storage automatically in the generated AST.
+
+## Grammar diagnostics and linting
+
+CPF can analyze a parsed grammar before or during code generation:
+
+```c++
+auto grammar = cpf::parse_grammar(source_text);
+auto analysis = cpf::analyze_grammar(grammar);
+
+if (analysis.has_errors()) {
+   std::cerr << analysis.render_summary() << '\n';
+}
+```
+
+Current diagnostics include:
+
+- unused rules and token rules that are never referenced by any other rule
+- rules that are not reachable from the grammar's primary entry rule
+- nullable cycles that can recurse without consuming input
+- suspicious self-recursive productions whose surrounding symbols are all nullable
+
+The analysis summary treats the **first non-token rule** in the grammar as the primary entry rule. Reachability lints are
+reported relative to that rule so disconnected helper subgraphs are easy to spot while still leaving additional public
+entry points available in the generated API.
+
+`cpf::generate_code(...)` also returns the same analysis result alongside the generated header and source text so
+generator clients can surface warnings in their own tooling without re-running analysis separately.
 
 ## Multi-file grammars
 

@@ -11,6 +11,7 @@ CPF exposes the grammar loader and code generator through `cpfgenlib`.
 #include <cpfgenlib>
 
 auto loaded = cpf::load_grammar_file("/path/to/root.cpf");
+auto analysis = cpf::analyze_grammar(loaded.parsed_grammar);
 auto generated = cpf::generate_code(loaded.parsed_grammar, "root");
 ```
 
@@ -29,8 +30,16 @@ If you only need the parsed grammar, `cpf::parse_grammar_file(...)` returns the 
 
 - `header`: generated C++ header text
 - `source`: generated C++ source text
+- `analysis`: structured grammar diagnostics produced during generation
 
 The `base_name` argument controls the generated file naming and internal include wiring.
+
+The `analysis` field mirrors `cpf::analyze_grammar(...)` and includes:
+
+- a summary with the primary entry rule, reachable-rule counts, nullable-rule counts, and warning/error totals
+- structured diagnostics for unused rules, unreachable rules, nullable cycles, and suspicious zero-progress recursion
+
+This lets generators, build tools, or IDE integrations surface grammar warnings without needing to scrape stderr text.
 
 Generated headers now expose both parser and lexer entry points. A generated root type such as `expression` provides:
 

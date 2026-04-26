@@ -2,6 +2,7 @@
 
 #include "support/doctest.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 
@@ -529,6 +530,36 @@ TEST_SUITE("cpflib.code_generator") {
       CHECK(generated.source.find(
                   "{cpf::detail::lexer_symbol_kind::regex, \"[A-Za-z_][A-Za-z0-9_]*\", &regex_0, 3}") !=
             std::string::npos);
+   }
+
+   TEST_CASE("code generation surfaces grammar analysis alongside emitted source") {
+      auto grammar = cpf::parse_grammar(R"(
+         entry -> used;
+         used -> 'x':value;
+         detached -> helper;
+         helper -> 'y':value;
+      )");
+
+      auto generated = cpf::generate_code(grammar, "diagnostics_codegen");
+
+      CHECK(generated.analysis.summary.primary_entry_rule == "entry");
+      CHECK(generated.analysis.summary.unused_rule_count == 1);
+      CHECK(generated.analysis.summary.unreachable_rule_count == 1);
+      CHECK(generated.analysis.has_warnings());
+      CHECK_FALSE(generated.analysis.has_errors());
+      CHECK(generated.analysis.render_summary().find("warnings=2") != std::string::npos);
+
+      const auto has_unused = std::ranges::any_of(generated.analysis.diagnostics, [](const auto& diagnostic) {
+         return diagnostic.code == cpf::grammar_diagnostic_code::unused_rule && diagnostic.rule == "detached";
+      });
+      const auto has_unreachable = std::ranges::any_of(generated.analysis.diagnostics, [](const auto& diagnostic) {
+         return diagnostic.code == cpf::grammar_diagnostic_code::unreachable_rule && diagnostic.rule == "helper";
+      });
+
+      CHECK(has_unused);
+      CHECK(has_unreachable);
+      CHECK(generated.header.find("#pragma once") != std::string::npos);
+      CHECK(generated.source.find("diagnostics_codegen.h") != std::string::npos);
    }
 
    TEST_CASE("generated code can be wrapped in an explicit C++ namespace") {

@@ -789,6 +789,8 @@ namespace cpf {
                                         std::string_view code_namespace) {
          validate_cpp_namespace(code_namespace);
 
+         auto analysis = analyze_grammar(grammar);
+
          std::unordered_map<std::string, const rule*> rules_by_name;
          std::unordered_map<std::string, std::vector<std::string>> children;
          std::unordered_map<std::string, std::string> bases;
@@ -3503,7 +3505,7 @@ namespace cpf {
             line(source, 0);
          }
 
-         return generated_code{header.str(), source.str()};
+         return generated_code{header.str(), source.str(), std::move(analysis)};
       }
    } // namespace
 

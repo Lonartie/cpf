@@ -2,21 +2,7 @@
 
 This file is an ordered roadmap rather than a flat checklist. Items at the top are the most practical near-term investments.
 
-## 1. Grammar diagnostics and linting
-
-**Idea** Add static analysis for grammars before or during generation.
-
-**Considerations**
-
-* Detect unreachable and unused rules
-* Report nullable cycles and suspicious recursive patterns
-* Add grammar analysis summaries during generation
-
-**Impact** High impact, medium implementation effort.
-
-**Value** This makes grammar authoring much easier and helps users fix structural issues before runtime.
-
-## 2. Ambiguity diagnostics and inspection tools
+## 1. Ambiguity diagnostics and inspection tools
 
 **Idea** Go beyond ambiguity failure and provide useful diagnostics for ambiguous parses.
 
@@ -30,7 +16,7 @@ This file is an ordered roadmap rather than a flat checklist. Items at the top a
 
 **Value** This would be one of the most useful differentiators of CPF because ambiguous grammars are otherwise very hard to debug.
 
-## 3. Golden tests for generated code
+## 2. Golden tests for generated code
 
 **Idea** Add snapshot-style tests for representative generated outputs.
 
@@ -44,7 +30,7 @@ This file is an ordered roadmap rather than a flat checklist. Items at the top a
 
 **Value** This gives strong regression protection for a code generator, where small changes can have wide effects.
 
-## 4. Generated CST mode in addition to AST mode
+## 3. Generated CST mode in addition to AST mode
 
 **Idea** Support concrete syntax tree generation alongside the existing AST-oriented mode.
 
@@ -57,7 +43,7 @@ This file is an ordered roadmap rather than a flat checklist. Items at the top a
 
 **Value** This opens the door to formatters, refactoring tools, and editor workflows that need lossless syntax preservation.
 
-## 5. Provide extensive tracking/debugging/logging/tracing APIs
+## 4. Provide extensive tracking/debugging/logging/tracing APIs
 
 **Idea** Expose rich APIs for tracking and debugging the parsing process for both grammar-code-gen and generated parsers.
 
@@ -76,7 +62,7 @@ This file is an ordered roadmap rather than a flat checklist. Items at the top a
 
 **Value** This would make it much easier to understand, debug, and optimize parsing behavior, especially for complex grammars.
 
-## 6. Provide an API for generating parsers dynamically at runtime without generating code and relying the build pipeline
+## 5. Provide an API for generating parsers dynamically at runtime without generating code and relying the build pipeline
 
 **Idea** Support dynamic parser generation in-memory without writing code to disk or relying on a build step.
 

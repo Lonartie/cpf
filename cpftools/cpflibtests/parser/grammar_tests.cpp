@@ -2,6 +2,7 @@
 
 #include "support/doctest.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 
@@ -830,6 +831,71 @@ TEST_SUITE("cpflib.grammar_parser") {
          CHECK(grammar.find_skip_rule("ws") != nullptr);
          CHECK(grammar.find_rule("expr") != nullptr);
       }
+   }
+
+   TEST_CASE("grammar analysis reports unreachable and unused rules relative to the primary entry rule") {
+      auto grammar = cpf::parse_grammar(R"(
+         entry -> expr;
+         expr -> identifier;
+         token identifier -> r'[A-Za-z_]+';
+         detached -> helper;
+         helper -> 'x';
+         token spare -> 'y';
+      )");
+
+      const auto analysis = cpf::analyze_grammar(grammar);
+
+      CHECK(analysis.summary.primary_entry_rule == "entry");
+      CHECK(analysis.summary.parser_rule_count == 4);
+      CHECK(analysis.summary.token_rule_count == 2);
+      CHECK(analysis.summary.reachable_rule_count == 3);
+      CHECK(analysis.summary.unreachable_rule_count == 1);
+      CHECK(analysis.summary.unused_rule_count == 2);
+      CHECK(analysis.has_warnings());
+      CHECK_FALSE(analysis.has_errors());
+      CHECK(analysis.render_summary().find("primary entry='entry'") != std::string::npos);
+
+      const auto has_diagnostic = [&](cpf::grammar_diagnostic_code code, std::string_view rule_name) {
+         return std::ranges::any_of(analysis.diagnostics, [&](const auto& diagnostic) {
+            return diagnostic.code == code && diagnostic.rule == rule_name;
+         });
+      };
+
+      CHECK(has_diagnostic(cpf::grammar_diagnostic_code::unused_rule, "detached"));
+      CHECK(has_diagnostic(cpf::grammar_diagnostic_code::unused_rule, "spare"));
+      CHECK(has_diagnostic(cpf::grammar_diagnostic_code::unreachable_rule, "helper"));
+   }
+
+   TEST_CASE("grammar analysis reports nullable cycles and zero-progress self recursion") {
+      auto grammar = cpf::parse_grammar(R"(
+         entry -> loop;
+         loop -> loop | '';
+      )");
+
+      const auto analysis = cpf::analyze_grammar(grammar);
+
+      CHECK(analysis.summary.nullable_rule_count == 2);
+      CHECK(analysis.summary.nullable_cycle_count == 1);
+      CHECK(analysis.summary.suspicious_recursive_pattern_count == 1);
+      CHECK(analysis.has_warnings());
+      CHECK(analysis.has_errors());
+
+      const auto nullable_cycle = std::ranges::find_if(analysis.diagnostics, [](const auto& diagnostic) {
+         return diagnostic.code == cpf::grammar_diagnostic_code::nullable_cycle;
+      });
+      REQUIRE(nullable_cycle != analysis.diagnostics.end());
+      CHECK(nullable_cycle->severity == cpf::grammar_diagnostic_severity::error);
+      CHECK(nullable_cycle->rule == "loop");
+      CHECK(nullable_cycle->message.find("Nullable cycle") != std::string::npos);
+      CHECK(nullable_cycle->related_rules == std::vector<std::string>{"loop"});
+
+      const auto suspicious = std::ranges::find_if(analysis.diagnostics, [](const auto& diagnostic) {
+         return diagnostic.code == cpf::grammar_diagnostic_code::suspicious_recursive_pattern;
+      });
+      REQUIRE(suspicious != analysis.diagnostics.end());
+      CHECK(suspicious->severity == cpf::grammar_diagnostic_severity::warning);
+      CHECK(suspicious->rule == "loop");
+      CHECK(suspicious->message.find("self-recursive production") != std::string::npos);
    }
 
    TEST_CASE("grammar parser reports precise and expressive source errors") {

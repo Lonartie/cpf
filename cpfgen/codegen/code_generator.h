@@ -1,5 +1,6 @@
 #pragma once
 
+#include "analysis/grammar_analysis.h"
 #include "model/grammar.h"
 
 #include <string>
@@ -10,6 +11,7 @@ namespace cpf {
    struct generated_code {
       std::string header;
       std::string source;
+      grammar_analysis analysis;
    };
 
 
