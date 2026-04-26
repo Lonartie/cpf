@@ -105,9 +105,11 @@ Lexing behavior:
 
 - explicit `token` declarations become physical lexer token definitions
 - inline parser terminals such as `'let'` and `r'[0-9]+'` also participate in lexer tokenization
+- inline terminals lowered through grouped, quantified, or templated helper rules keep the lexer precedence of their originating rule declarations
 - the lexer emits a pure token stream; the parser no longer mixes token matching with raw character matching
 - longest match wins first
-- equal-length conflicts are resolved by the generated lexer priority order derived from the grammar
+- when two equal-length matches compete, literal tokens win over regex tokens
+- equal-length conflicts between two literals or between two regexes are resolved by the generated lexer priority order derived from the grammar
 
 ## Quantifiers and groups
 

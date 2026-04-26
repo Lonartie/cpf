@@ -513,6 +513,24 @@ TEST_SUITE("cpflib.code_generator") {
       CHECK(generated.source.find("cpf_template_prepend_") != std::string::npos);
    }
 
+   TEST_CASE("lifted template literals inherit lexer precedence from their declaring rules") {
+      auto grammar = cpf::parse_grammar(
+            "template specialized<InnerTempl> -> InnerTempl<'spec'>:value;\n"
+            "template prepend<Prep> -> Prep:prep '::value':suffix;\n"
+            "token identifier -> r'[A-Za-z_][A-Za-z0-9_]*';\n"
+            "specialized_identifier -> specialized<prepend>:body;\n");
+
+      auto generated = cpf::generate_code(grammar, "template_precedence_codegen");
+
+      CHECK(generated.source.find("{cpf::detail::lexer_symbol_kind::literal, \"spec\", nullptr, 2}") !=
+            std::string::npos);
+      CHECK(generated.source.find("{cpf::detail::lexer_symbol_kind::literal, \"::value\", nullptr, 2}") !=
+            std::string::npos);
+      CHECK(generated.source.find(
+                  "{cpf::detail::lexer_symbol_kind::regex, \"[A-Za-z_][A-Za-z0-9_]*\", &regex_0, 3}") !=
+            std::string::npos);
+   }
+
    TEST_CASE("generated code can be wrapped in an explicit C++ namespace") {
       auto grammar = cpf::parse_grammar(R"(
          @whitespace ws;

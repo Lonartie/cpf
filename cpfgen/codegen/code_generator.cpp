@@ -78,6 +78,7 @@ namespace cpf {
          symbol base_symbol;
          std::string owner_rule_name;
          std::size_t owner_definition = 0;
+         std::size_t lexer_precedence = 0;
          helper_kind kind = helper_kind::optional;
          std::size_t exact_count = 0;
          std::vector<std::size_t> production_indices;
@@ -99,6 +100,7 @@ namespace cpf {
          std::size_t lhs = 0;
          std::string lhs_name;
          std::string debug_text;
+         std::size_t lexer_precedence = 0;
          std::vector<emitted_symbol> symbols;
          const rule* source_rule = nullptr;
          const production* source_production = nullptr;
@@ -2064,7 +2066,7 @@ namespace cpf {
          };
 
          auto create_helper = [&](const symbol& source_symbol, std::string_view owner_rule_name,
-                                  std::size_t owner_definition) {
+                                  std::size_t owner_definition, std::size_t lexer_precedence) {
             helper_info helper;
             helper.id = helpers.size();
             helper.rule_index = emitted_rule_names.size();
@@ -2072,6 +2074,7 @@ namespace cpf {
             helper.base_symbol = source_symbol;
             helper.owner_rule_name = std::string{owner_rule_name};
             helper.owner_definition = owner_definition;
+            helper.lexer_precedence = lexer_precedence;
             helper.exact_count = source_symbol.exact_repetition;
             switch (source_symbol.quantifier) {
                case symbol_quantifier::optional:
@@ -2101,6 +2104,7 @@ namespace cpf {
                emitted_production.lhs = rule_indices.at(rule.identifier);
                emitted_production.lhs_name = rule.identifier;
                emitted_production.debug_text = render_production_debug(rule.identifier, production);
+               emitted_production.lexer_precedence = production.line;
                if (!rule.synthetic || classes.contains(rule.identifier)) {
                   emitted_production.source_rule = &rule;
                   emitted_production.source_production = &production;
@@ -2109,7 +2113,8 @@ namespace cpf {
                   lowered_symbol lowered;
                   lowered.source = &source_symbol;
                   if (uses_helper_rule(source_symbol)) {
-                     auto helper_id = create_helper(source_symbol, rule.identifier, production.definition);
+                     auto helper_id =
+                           create_helper(source_symbol, rule.identifier, production.definition, production.line);
                      lowered.helper_id = helper_id;
                      emitted_production.symbols.push_back(emitted_symbol{
                            symbol_kind::reference,
@@ -2137,6 +2142,7 @@ namespace cpf {
                emitted_production.lhs = helper.rule_index;
                emitted_production.lhs_name = helper.owner_rule_name;
                emitted_production.debug_text = std::move(text);
+               emitted_production.lexer_precedence = helper.lexer_precedence;
                emitted_production.symbols = std::move(symbols);
                emitted_productions.push_back(std::move(emitted_production));
             };
@@ -2199,13 +2205,14 @@ namespace cpf {
          std::unordered_map<std::string, std::size_t> grammar_token_symbol_indices;
          std::vector<emitted_lexer_symbol_info> grammar_skip_symbols;
          std::unordered_map<std::string, std::size_t> grammar_skip_symbol_indices;
-         auto lexer_precedence = std::size_t{0};
 
          const auto register_lexer_symbol = [&](std::vector<emitted_lexer_symbol_info>& symbols,
                                                 std::unordered_map<std::string, std::size_t>& indices,
-                                                symbol_kind kind, std::string_view text) -> std::size_t {
+                                                symbol_kind kind, std::string_view text,
+                                                std::size_t precedence) -> std::size_t {
             auto key = lexer_symbol_key(kind, text);
             if (auto existing = indices.find(key); existing != indices.end()) {
+               symbols[existing->second].precedence = std::min(symbols[existing->second].precedence, precedence);
                return existing->second;
             }
             if (kind == symbol_kind::regex) {
@@ -2213,7 +2220,7 @@ namespace cpf {
             }
             auto index = symbols.size();
             indices.emplace(std::move(key), index);
-            symbols.push_back(emitted_lexer_symbol_info{kind, std::string{text}, lexer_precedence++});
+            symbols.push_back(emitted_lexer_symbol_info{kind, std::string{text}, precedence});
             return index;
          };
 
@@ -2223,12 +2230,12 @@ namespace cpf {
                   continue;
                }
                (void) register_lexer_symbol(grammar_token_symbols, grammar_token_symbol_indices, symbol.kind,
-                                            symbol.text);
+                                            symbol.text, production.lexer_precedence);
             }
          }
          for (const auto& skip_rule: grammar.skip_rules) {
             (void) register_lexer_symbol(grammar_skip_symbols, grammar_skip_symbol_indices, skip_rule.kind,
-                                         skip_rule.value);
+                                         skip_rule.value, skip_rule.line);
          }
 
          std::vector<std::vector<std::size_t>> productions_by_rule(emitted_rule_names.size());

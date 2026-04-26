@@ -23,7 +23,7 @@ namespace cpf {
       };
 
       struct grouped_sequence_item {
-         std::optional<parsed_symbol> parsed_symbol;
+         std::optional<parsed_symbol> symbol;
          std::unique_ptr<grouped_expression> group;
          lookahead_kind lookahead = lookahead_kind::none;
          bool cut = false;
@@ -64,8 +64,8 @@ namespace cpf {
          grouped_sequence_item clone;
          clone.lookahead = item.lookahead;
          clone.cut = item.cut;
-         if (item.parsed_symbol.has_value()) {
-            clone.parsed_symbol = *item.parsed_symbol;
+         if (item.symbol.has_value()) {
+            clone.symbol = *item.symbol;
          }
          if (item.group != nullptr) {
             clone.group = std::make_unique<grouped_expression>(clone_expression(*item.group));
@@ -93,8 +93,8 @@ namespace cpf {
       void strip_labels_from_expression(grouped_expression& expression);
 
       void strip_labels_from_item(grouped_sequence_item& item) {
-         if (item.parsed_symbol.has_value()) {
-            item.parsed_symbol->label.clear();
+         if (item.symbol.has_value()) {
+            item.symbol->label.clear();
          }
          if (item.group != nullptr) {
             strip_labels_from_expression(*item.group);
@@ -199,8 +199,8 @@ namespace cpf {
             }
          };
 
-         if (item.parsed_symbol.has_value()) {
-            auto& symbol = *item.parsed_symbol;
+         if (item.symbol.has_value()) {
+            auto& symbol = *item.symbol;
             if (!placeholder.label.empty()) {
                if (!symbol.label.empty()) {
                   throw std::runtime_error{"Grammar parse error: Template placeholder label conflicts with an argument label"};
@@ -621,8 +621,8 @@ namespace cpf {
                   throw error("Lookahead predicates cannot expose labeled captures");
                }
             } else {
-               item.parsed_symbol = parse_symbol();
-               if (item.lookahead != lookahead_kind::none && parsed_symbol_has_label(*item.parsed_symbol)) {
+               item.symbol = parse_symbol();
+               if (item.lookahead != lookahead_kind::none && parsed_symbol_has_label(*item.symbol)) {
                   throw error("Lookahead predicates cannot expose labeled captures");
                }
             }
@@ -653,8 +653,8 @@ namespace cpf {
          [[nodiscard]] bool group_contains_nested_labeled_capture(const grouped_expression& group) const {
             for (const auto& alternative: group.alternatives) {
                for (const auto& item: alternative) {
-                  if (item.parsed_symbol.has_value()) {
-                     if (parsed_symbol_has_label(*item.parsed_symbol)) {
+                  if (item.symbol.has_value()) {
+                     if (parsed_symbol_has_label(*item.symbol)) {
                         return true;
                      }
                      continue;
@@ -704,11 +704,11 @@ namespace cpf {
             if (item.cut) {
                throw error("Template parameters cannot expand to cut markers");
             }
-            if (item.lookahead != lookahead_kind::none || item.group != nullptr || !item.parsed_symbol.has_value()) {
+            if (item.lookahead != lookahead_kind::none || item.group != nullptr || !item.symbol.has_value()) {
                throw error("Template parameter '" + template_name + "' must bind to a template identifier");
             }
 
-            const auto& symbol = *item.parsed_symbol;
+            const auto& symbol = *item.symbol;
             if (symbol.kind != parsed_symbol_kind::reference || parsed_symbol_has_label(symbol) ||
                 !parsed_symbol_is_single(symbol)) {
                throw error("Template parameter '" + template_name + "' must bind to a template identifier");
@@ -724,10 +724,9 @@ namespace cpf {
                throw error("Cut markers must be lowered before symbol emission");
             }
 
-            if (item.parsed_symbol.has_value() && bindings != nullptr &&
-                item.parsed_symbol->kind == parsed_symbol_kind::reference &&
-                item.parsed_symbol->template_arguments.empty()) {
-               if (auto binding = bindings->find(item.parsed_symbol->value); binding != bindings->end()) {
+            if (item.symbol.has_value() && bindings != nullptr &&
+                item.symbol->kind == parsed_symbol_kind::reference && item.symbol->template_arguments.empty()) {
+               if (auto binding = bindings->find(item.symbol->value); binding != bindings->end()) {
                   auto substituted = clone_item(*binding->second);
                   if (substituted.cut) {
                      throw error("Template parameters cannot expand to cut markers");
@@ -738,13 +737,13 @@ namespace cpf {
                      }
                      substituted.lookahead = item.lookahead;
                   }
-                  merge_placeholder_suffix(substituted, *item.parsed_symbol);
+                  merge_placeholder_suffix(substituted, *item.symbol);
                   return lower_item(substituted, line, capture_allowed, synthetic_rules, nullptr);
                }
             }
 
-            if (item.parsed_symbol.has_value()) {
-               symbol lowered_symbol = materialize_symbol(*item.parsed_symbol, line, synthetic_rules, bindings);
+            if (item.symbol.has_value()) {
+               symbol lowered_symbol = materialize_symbol(*item.symbol, synthetic_rules, bindings);
                if (item.lookahead != lookahead_kind::none) {
                   lowered_symbol.label.clear();
                   lowered_symbol.lookahead = item.lookahead;
@@ -829,8 +828,8 @@ namespace cpf {
             return lowered_sequences;
          }
 
-         symbol materialize_symbol(const parsed_symbol& parsed_symbol, std::size_t line,
-                                   std::vector<rule>& synthetic_rules, const parameter_bindings* bindings) {
+         symbol materialize_symbol(const parsed_symbol& parsed_symbol, std::vector<rule>& synthetic_rules,
+                                   const parameter_bindings* bindings) {
             symbol lowered_symbol;
             lowered_symbol.label = parsed_symbol.label;
             lowered_symbol.quantifier = parsed_symbol.quantifier;
@@ -851,14 +850,14 @@ namespace cpf {
                   return lowered_symbol;
                case parsed_symbol_kind::template_invocation:
                   lowered_symbol.kind = symbol_kind::reference;
-                  lowered_symbol.value = instantiate_template(parsed_symbol, line, synthetic_rules, bindings);
+                  lowered_symbol.value = instantiate_template(parsed_symbol, synthetic_rules, bindings);
                   return lowered_symbol;
             }
             return lowered_symbol;
          }
 
-         std::string instantiate_template(const parsed_symbol& invocation, std::size_t line,
-                                          std::vector<rule>& synthetic_rules, const parameter_bindings* bindings) {
+         std::string instantiate_template(const parsed_symbol& invocation, std::vector<rule>& synthetic_rules,
+                                          const parameter_bindings* bindings) {
             const auto template_name = resolve_template_name(invocation.value, bindings);
             auto template_it = templates_.find(template_name);
             if (template_it == templates_.end()) {
@@ -895,13 +894,13 @@ namespace cpf {
             synthetic_rule.identifier = make_template_rule_name(template_name);
             synthetic_rule.synthetic = true;
 
-            const auto lowered_alternatives =
-                  lower_alternatives(declaration.alternatives, line, true, synthetic_rules, &template_bindings);
+            const auto lowered_alternatives = lower_alternatives(declaration.alternatives, declaration.line, true,
+                                                                synthetic_rules, &template_bindings);
             synthetic_rule.productions.reserve(lowered_alternatives.size());
             for (const auto& lowered_production: lowered_alternatives) {
                production parsed_production;
                parsed_production.symbols = lowered_production;
-               parsed_production.line = line;
+               parsed_production.line = declaration.line;
                parsed_production.definition = synthetic_rule.productions.size();
                synthetic_rule.productions.push_back(std::move(parsed_production));
             }

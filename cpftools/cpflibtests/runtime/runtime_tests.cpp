@@ -76,16 +76,16 @@ namespace {
          true};
 
    constexpr std::array<cpf::detail::lexer_symbol_spec, 4> precedence_token_symbols{{
-         {cpf::detail::lexer_symbol_kind::literal, "if", nullptr, 0},
-         {cpf::detail::lexer_symbol_kind::regex, "[A-Za-z_]+", &precedence_word_regex, 1},
+         {cpf::detail::lexer_symbol_kind::regex, "[A-Za-z_]+", &precedence_word_regex, 0},
+         {cpf::detail::lexer_symbol_kind::literal, "if", nullptr, 1},
          {cpf::detail::lexer_symbol_kind::literal, "==", nullptr, 2},
          {cpf::detail::lexer_symbol_kind::literal, "=", nullptr, 3}
    }};
    constexpr std::array<cpf::detail::parser_symbol, 1> precedence_keyword_symbols{{
-         {cpf::detail::parser_symbol_kind::terminal, 0, "if"}
+         {cpf::detail::parser_symbol_kind::terminal, 1, "if"}
    }};
    constexpr std::array<cpf::detail::parser_symbol, 1> precedence_word_symbols{{
-         {cpf::detail::parser_symbol_kind::terminal, 1, "[A-Za-z_]+"}
+         {cpf::detail::parser_symbol_kind::terminal, 0, "[A-Za-z_]+"}
    }};
    constexpr std::array<cpf::detail::parser_symbol, 1> precedence_equals_equals_symbols{{
          {cpf::detail::parser_symbol_kind::terminal, 2, "=="}
@@ -392,7 +392,7 @@ TEST_SUITE("cpflib.runtime") {
       CHECK(inserted.range.end.offset == 1);
    }
 
-   TEST_CASE("earley_parse tokenizes with precedence for equal lengths and longest match for shared prefixes") {
+   TEST_CASE("earley_parse lets equal-length literals outrank regexes and still prefers longest shared-prefix tokens") {
       auto keyword = cpf::detail::earley_parse("if", precedence_grammar_spec, 0);
       REQUIRE(keyword.success);
       REQUIRE(keyword.forest.size() == 1);
@@ -421,7 +421,7 @@ TEST_SUITE("cpflib.runtime") {
 
       REQUIRE(tokens.size() == 1);
       CHECK_FALSE(tokens.front().invalid);
-      CHECK(tokens.front().symbol == 0);
+      CHECK(tokens.front().symbol == 1);
       CHECK(tokens.front().text.text == "if");
       CHECK(tokens.front().text.range.begin.offset == 0);
       CHECK(tokens.front().text.range.end.offset == 2);

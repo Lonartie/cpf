@@ -1,5 +1,5 @@
-token kw_if -> 'if';
 token bare_word -> r'[A-Za-z_]+';
+token kw_if -> 'if';
 
 chosen_word -> kw_if:text;
 chosen_word -> bare_word:text;

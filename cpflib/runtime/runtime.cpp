@@ -163,6 +163,7 @@ namespace cpf {
             std::size_t symbol = 0;
             std::size_t end = 0;
             std::size_t precedence = 0;
+            lexer_symbol_kind kind = lexer_symbol_kind::literal;
             std::string text;
             bool skip = false;
          };
@@ -177,6 +178,11 @@ namespace cpf {
             if (candidate_length != current_length) {
                return candidate_length > current_length;
             }
+
+            if (candidate.kind != current->kind) {
+               return candidate.kind == lexer_symbol_kind::literal;
+            }
+
             return candidate.precedence < current->precedence;
          }
 
@@ -190,6 +196,7 @@ namespace cpf {
                   continue;
                }
                auto candidate = raw_lexer_match{index, next, grammar.skip_symbols[index].precedence,
+                                                grammar.skip_symbols[index].kind,
                                                 std::move(capture), true};
                if (better_raw_lexer_match(candidate, best, position)) {
                   best = std::move(candidate);
@@ -383,7 +390,7 @@ namespace cpf {
                if (!try_lexer_symbol_at(input, next, symbol, &capture) || next == position) {
                   return;
                }
-               auto candidate = raw_lexer_match{index, next, symbol.precedence, std::move(capture), skip};
+                auto candidate = raw_lexer_match{index, next, symbol.precedence, symbol.kind, std::move(capture), skip};
                if (better_raw_lexer_match(candidate, best, position)) {
                   best = std::move(candidate);
                }

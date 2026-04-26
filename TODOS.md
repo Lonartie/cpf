@@ -2,20 +2,6 @@
 
 This file is an ordered roadmap rather than a flat checklist. Items at the top are the most practical near-term investments.
 
-## 1. Sanitizer and compiler matrix in CI
-
-**Idea** Extend CI with sanitizer jobs and a broader compiler matrix.
-
-**Considerations**
-
-* Add ASan and UBSan jobs
-* Build with Clang, GCC, and MSVC where possible
-* Treat sanitizer findings as release blockers
-
-**Impact** High impact, medium implementation effort.
-
-**Value** This reduces the risk of undefined behavior, memory bugs, and platform-specific regressions in parser and runtime code.
-
 ## 2. Grammar diagnostics and linting
 
 **Idea** Add static analysis for grammars before or during generation.
@@ -57,20 +43,6 @@ This file is an ordered roadmap rather than a flat checklist. Items at the top a
 **Impact** High impact, low-to-medium implementation effort.
 
 **Value** This gives strong regression protection for a code generator, where small changes can have wide effects.
-
-## 8. Benchmark regression tracking
-
-**Idea** Turn benchmarking into an ongoing regression-detection tool instead of a manual inspection step.
-
-**Considerations**
-
-* Save benchmark baselines
-* Compare benchmark output across changes
-* Warn or fail on significant regressions
-
-**Impact** Medium-to-high impact, medium implementation effort.
-
-**Value** This makes the benchmark work already in the repository much more actionable.
 
 ## 13. Generated CST mode in addition to AST mode
 

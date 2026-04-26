@@ -1,6 +1,6 @@
 template template_surrounded<Open, Inner, Close> -> Open:open Inner:value Close:close;
 template template_keyword_value<Keyword, Value> -> Keyword:keyword Value:value;
-template template_specialized_surrounded<Open, InnerTempl, Close> -> Open:open InnerTempl<'@spec'>:value Close:close;
+template template_specialized_surrounded<Open, InnerTempl, Close> -> Open:open InnerTempl<'spec'>:value Close:close;
 template template_prepend<Prep> -> Prep:prep '::value':suffix;
 
 token template_return_kw -> 'return';

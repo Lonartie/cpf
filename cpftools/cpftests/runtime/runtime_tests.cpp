@@ -741,7 +741,7 @@ TEST_SUITE("generated.runtime") {
       CHECK(stream.str().find("value = \"baz\"") != std::string::npos);
    }
 
-   TEST_CASE("generated lexers prefer earlier equal-length tokens and longer shared-prefix tokens") {
+   TEST_CASE("generated lexers prefer literals over equal-length regexes and longer shared-prefix tokens") {
       auto keyword = chosen_word::parse("if");
       REQUIRE(keyword.success);
       REQUIRE(keyword.forest.size() == 1);
@@ -852,14 +852,14 @@ TEST_SUITE("generated.runtime") {
       }
 
       SUBCASE("template parameters may themselves name template families that are specialized in place") {
-         auto result = template_specialized_identifier::parse("(@spec::value)");
+         auto result = template_specialized_identifier::parse("(spec::value)");
          REQUIRE(result.success);
          REQUIRE(result.forest.size() == 1);
          REQUIRE(result.forest.front()->body != nullptr);
          CHECK(result.forest.front()->body->open.text == "(");
          CHECK(result.forest.front()->body->close.text == ")");
          REQUIRE(result.forest.front()->body->value != nullptr);
-         CHECK(result.forest.front()->body->value->prep.text == "@spec");
+         CHECK(result.forest.front()->body->value->prep.text == "spec");
          CHECK(result.forest.front()->body->value->suffix.text == "::value");
       }
    }
