@@ -76,3 +76,20 @@ This file is an ordered roadmap rather than a flat checklist. Items at the top a
 
 **Value** This would make it much easier to understand, debug, and optimize parsing behavior, especially for complex grammars.
 
+## 6. Provide an API for generating parsers dynamically at runtime without generating code and relying the build pipeline
+
+**Idea** Support dynamic parser generation in-memory without writing code to disk or relying on a build step.
+
+**Considerations**
+
+* It should support the same grammar specification as the code generator, but produce an in-memory parser instance instead of source code.
+* Of course this doesn't allow to generate classes and structs so the API should be designed to be as generic as possible.
+* No features shall be sacrificed, only the API patterns may differ. For example a node might have a map of named children instead.
+* Types can be facilitated by a dynamic std::string type field.
+* And so on...
+* For this we should lift necessary logic from `cpfgen` into `cpflib` and make it available for both codegen and dynamic generation.
+
+**Impact** High impact for users needing dynamic parsing capabilities, high implementation effort.
+
+**Value** This would enable use cases like REPLs, dynamic DSLs, and runtime code analysis without needing a separate build step. 
+It would also make CPF more flexible and accessible for a wider range of applications.
