@@ -1550,24 +1550,25 @@ namespace cpf {
                        "::parse(std::string_view input, const cpf::parse_options& options) -> parse_result {");
             line(header, 1, "if constexpr (std::is_void_v<UserData>) {");
             line(header, 2, "return detail::parse_" + info.name + "_default(input, options);");
+             line(header, 1, "} else {");
+             line(header, 2, "auto default_result = detail::parse_" + info.name + "_default(input, options);");
+             line(header, 2, "parse_result converted;");
+             line(header, 2, "converted.status = default_result.status;");
+             line(header, 2, "converted.success = default_result.success;");
+             line(header, 2, "converted.partial = default_result.partial;");
+             line(header, 2, "converted.error = std::move(default_result.error);");
+             line(header, 2, "if (!options.build_ast) {");
+             line(header, 3, "return converted;");
+             line(header, 2, "}");
+             line(header, 2, "converted.forest.reserve(default_result.forest.size());");
+             line(header, 2, "for (const auto& tree : default_result.forest) {");
+             line(header, 3, "auto materialized = tree.get();");
+             line(header, 3,
+                  "converted.forest.emplace_back(materialized != nullptr ? detail::rebind_" + info.name +
+                        "_node<UserData>(*materialized) : nullptr);");
+             line(header, 2, "}");
+             line(header, 2, "return converted;");
             line(header, 1, "}");
-            line(header, 1, "auto default_result = detail::parse_" + info.name + "_default(input, options);");
-            line(header, 1, "parse_result converted;");
-            line(header, 1, "converted.status = default_result.status;");
-            line(header, 1, "converted.success = default_result.success;");
-            line(header, 1, "converted.partial = default_result.partial;");
-            line(header, 1, "converted.error = std::move(default_result.error);");
-            line(header, 1, "if (!options.build_ast) {");
-            line(header, 2, "return converted;");
-            line(header, 1, "}");
-            line(header, 1, "converted.forest.reserve(default_result.forest.size());");
-            line(header, 1, "for (const auto& tree : default_result.forest) {");
-            line(header, 2, "auto materialized = tree.get();");
-            line(header, 2,
-                 "converted.forest.emplace_back(materialized != nullptr ? detail::rebind_" + info.name +
-                       "_node<UserData>(*materialized) : nullptr);");
-            line(header, 1, "}");
-            line(header, 1, "return converted;");
             line(header, 0, "}");
             line(header, 0);
             line(header, 0, "template<typename UserData>");
