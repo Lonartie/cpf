@@ -68,6 +68,27 @@ namespace {
       int operator()(const namespaced::number& node) const { return std::stoi(node.value.text); }
    };
 
+   struct exact_parent_visitor {
+      addition* root = nullptr;
+      multiplication* multiplication_node = nullptr;
+
+      void operator()(multiplication& node, addition* parent) {
+         CHECK(parent == root);
+         multiplication_node = &node;
+      }
+
+      void operator()(number& node, multiplication* parent) {
+         CHECK(parent == multiplication_node);
+         node.value.text = "4";
+      }
+
+      template<typename Node, typename Parent>
+      void operator()(Node&, Parent*) {}
+
+      template<typename Node>
+      void operator()(Node&) {}
+   };
+
    int evaluate(std::string_view input) {
       auto result = expression::parse(input);
       REQUIRE(result.success);
@@ -399,6 +420,41 @@ TEST_SUITE("generated.runtime") {
          CHECK(visited == std::vector<std::string>{"addition", "number", "multiplication", "number", "number"});
       }
 
+      SUBCASE("recursive visiting can expose parent context for scalar children") {
+         auto result = expression::parse("1 + 2 * 3");
+         REQUIRE(result.success);
+         REQUIRE(result.forest.size() == 1);
+
+         std::vector<std::string> visited;
+         visit_recursive(*result.forest.front(), [&](const auto& node, const auto* parent) {
+            auto parent_name = std::string{"<root>"};
+            if (dynamic_cast<const addition*>(parent) != nullptr) {
+               parent_name = "addition";
+            } else if (dynamic_cast<const multiplication*>(parent) != nullptr) {
+               parent_name = "multiplication";
+            } else if (dynamic_cast<const number*>(parent) != nullptr) {
+               parent_name = "number";
+            }
+
+            using node_t = std::decay_t<decltype(node)>;
+            if constexpr (std::is_same_v<node_t, addition>) {
+               visited.emplace_back("addition<-" + parent_name);
+            } else if constexpr (std::is_same_v<node_t, multiplication>) {
+               visited.emplace_back("multiplication<-" + parent_name);
+            } else if constexpr (std::is_same_v<node_t, number>) {
+               visited.emplace_back("number<-" + parent_name);
+            }
+         });
+
+         CHECK(visited == std::vector<std::string>{
+                            "addition<-<root>",
+                            "number<-addition",
+                            "multiplication<-addition",
+                            "number<-multiplication",
+                            "number<-multiplication"
+         });
+      }
+
       SUBCASE("mutable recursive visiting can rewrite the AST in place") {
          auto result = expression::parse("1 + 2 * 3");
          REQUIRE(result.success);
@@ -412,6 +468,21 @@ TEST_SUITE("generated.runtime") {
          });
 
          CHECK(visit(*result.forest.front(), calculator_visitor{}) == 2);
+      }
+
+      SUBCASE("mutable recursive visiting can seed an explicit parent for subtree traversals") {
+         auto result = expression::parse("1 + 2 * 3");
+         REQUIRE(result.success);
+         REQUIRE(result.forest.size() == 1);
+
+         auto* root = dynamic_cast<addition*>(result.forest.front().get());
+         REQUIRE(root != nullptr);
+         REQUIRE(root->right != nullptr);
+
+         auto visitor = exact_parent_visitor{.root = root};
+         visit_recursive(*root->right, visitor, root);
+
+         CHECK(visit(*result.forest.front(), calculator_visitor{}) == 17);
       }
 
       SUBCASE("mutable visit dispatch can rewrite the selected concrete node in place") {
@@ -499,9 +570,30 @@ TEST_SUITE("generated.runtime") {
          namespaced::visit_recursive(*result.forest.front(), [&](const auto& node) {
             using node_t = std::decay_t<decltype(node)>;
             if constexpr (std::is_same_v<node_t, namespaced::addition>) {
-               visited.push_back("addition");
+               visited.emplace_back("addition");
             } else if constexpr (std::is_same_v<node_t, namespaced::number>) {
-               visited.push_back("number");
+               visited.emplace_back("number");
+            }
+         });
+
+         CHECK(visited == std::vector<std::string>{"addition", "number", "number"});
+      }
+
+      SUBCASE("recursive visiting can expose parent context inside the generated namespace") {
+         auto result = namespaced::expression::parse("7 + 8");
+
+         REQUIRE(result.success);
+         REQUIRE(result.forest.size() == 1);
+
+         std::vector<std::string> visited;
+         namespaced::visit_recursive(*result.forest.front(), [&](const auto& node, const auto* parent) {
+            using node_t = std::decay_t<decltype(node)>;
+            if constexpr (std::is_same_v<node_t, namespaced::addition>) {
+               CHECK(parent == nullptr);
+               visited.emplace_back("addition");
+            } else if constexpr (std::is_same_v<node_t, namespaced::number>) {
+               CHECK(dynamic_cast<const namespaced::addition*>(parent) != nullptr);
+               visited.emplace_back("number");
             }
          });
 
@@ -769,6 +861,29 @@ TEST_SUITE("generated.runtime") {
          REQUIRE(present_terminal.forest.front()->marker.has_value());
          CHECK(present_terminal.forest.front()->marker->text == "go");
       }
+
+      SUBCASE("recursive visiting passes the parent for repeated child vectors") {
+         auto repeated = star_choice::parse("a7a");
+         REQUIRE(repeated.success);
+         REQUIRE(repeated.forest.size() == 1);
+
+         std::vector<std::string> visited;
+         visit_recursive(*repeated.forest.front(), [&](const auto& node, const auto* parent) {
+            using node_t = std::decay_t<decltype(node)>;
+            if constexpr (std::is_same_v<node_t, star_choice>) {
+               CHECK(parent == nullptr);
+               visited.emplace_back("star_choice");
+            } else if constexpr (std::is_same_v<node_t, quant_alpha>) {
+               CHECK(dynamic_cast<const star_choice*>(parent) != nullptr);
+               visited.emplace_back("quant_alpha");
+            } else if constexpr (std::is_same_v<node_t, quant_digit>) {
+               CHECK(dynamic_cast<const star_choice*>(parent) != nullptr);
+               visited.emplace_back("quant_digit");
+            }
+         });
+
+         CHECK(visited == std::vector<std::string>{"star_choice", "quant_alpha", "quant_digit", "quant_alpha"});
+      }
    }
 
    TEST_CASE("grouped grammar syntax widens the frontend while still using the Earley backend") {
@@ -842,6 +957,29 @@ TEST_SUITE("generated.runtime") {
          const auto& greeting = std::get<std::unique_ptr<grouped_choice_greeting>>(hello.forest.front()->payload);
          REQUIRE(greeting != nullptr);
          CHECK(greeting->text.text == "hola");
+      }
+
+      SUBCASE("recursive visiting passes the parent through grouped variant captures") {
+         auto hello = grouped_choice_payload::parse("hello");
+         REQUIRE(hello.success);
+         REQUIRE(hello.forest.size() == 1);
+
+         std::vector<std::string> visited;
+         visit_recursive(*hello.forest.front(), [&](const auto& node, const auto* parent) {
+            using node_t = std::decay_t<decltype(node)>;
+            if constexpr (std::is_same_v<node_t, grouped_choice_payload>) {
+               CHECK(parent == nullptr);
+               visited.emplace_back("grouped_choice_payload");
+            } else if constexpr (std::is_same_v<node_t, grouped_choice_greeting>) {
+               CHECK(dynamic_cast<const grouped_choice_payload*>(parent) != nullptr);
+               visited.emplace_back("grouped_choice_greeting");
+            } else if constexpr (std::is_same_v<node_t, grouped_choice_farewell>) {
+               CHECK(dynamic_cast<const grouped_choice_payload*>(parent) != nullptr);
+               visited.emplace_back("grouped_choice_farewell");
+            }
+         });
+
+         CHECK(visited == std::vector<std::string>{"grouped_choice_payload", "grouped_choice_greeting"});
       }
 
       SUBCASE("quantifiers apply to groups as parse-shaping constructs") {

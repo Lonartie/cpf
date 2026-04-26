@@ -47,6 +47,15 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(generated.header.find("switch (node.rule_id())") != std::string::npos);
          CHECK(generated.header.find("auto visit(expression_node<UserData>& node, Visitor&& visitor)") != std::string::npos);
          CHECK(generated.header.find("void visit_recursive(expression_node<UserData>& node, Visitor&& visitor)") != std::string::npos);
+         CHECK(generated.header.find("void invoke_calculator_recursive_visitor(Node& node, Parent* parent, Visitor&& visitor)") !=
+               std::string::npos);
+         CHECK(generated.header.find(
+                     "void visit_recursive(expression_node<UserData>& node, Visitor&& visitor, Parent* parent)") !=
+               std::string::npos);
+         CHECK(generated.header.find(
+                     "detail::invoke_calculator_recursive_visitor(node, parent, std::forward<Visitor>(visitor));") !=
+               std::string::npos);
+         CHECK(generated.header.find("visit_recursive(*node.left, visitor, &node);") != std::string::npos);
       }
 
       SUBCASE("source output wires parser, errors, and cloning") {

@@ -208,31 +208,6 @@ This file is an ordered roadmap rather than a flat checklist. Items at the top a
 
 **Value** This helps CPF scale from single-grammar experiments to larger multi-module projects.
 
-## 17. Injectable user data into generated AST model
-
-**Idea** Make it possible (maybe via templates) to inject a member called `user_data` into the model.
-
-**Considerations**
-
-* Templates are easy to use
-
-**Impact** Medium-to-high impact, medium-to-high implementation effort.
-
-**Value** This helps users to re-use the AST model for other purposes like storing interpreter-data or performing analysis between nodes.
-
-## 18. Prevent overfitting in complexity analysis by smoothing samples
-
-**Idea** Apply smoothing techniques to complexity analysis samples to prevent overfitting to noise.
-
-**Considerations**
-
-* Use moving averages or exponential smoothing on complexity samples
-* Balance responsiveness to changes with noise reduction
-
-**Impact** Medium impact, medium implementation effort.
-
-**Value** This would make complexity analysis more stable and actionable, especially for small inputs where noise can dominate.
-
 ## 19. visit_recursive shall optionally pass down the parent node to the visitor
 
 **Idea** Allow `visit_recursive` to pass down the parent node to the visitor for more context-aware traversals.

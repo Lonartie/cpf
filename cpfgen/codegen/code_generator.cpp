@@ -1149,6 +1149,7 @@ namespace cpf {
          }
 
          auto complexity_samples = generate_rule_complexity_samples(grammar);
+         const auto recursive_visitor_helper_name = "invoke_" + base_name + "_recursive_visitor";
 
          std::ostringstream header;
          emit_file_complexity_comment(header, base_name, ordered_public_rule_names.size(),
@@ -1184,6 +1185,19 @@ namespace cpf {
             line(header, 0, "template<typename UserData = void> struct " + rule.identifier + "_node;");
             line(header, 0, "using " + rule.identifier + " = " + rule.identifier + "_node<>;");
          }
+         line(header, 0);
+         line(header, 0, "namespace detail {");
+         line(header, 0);
+         line(header, 0, "template<typename Node, typename Parent, typename Visitor>");
+         line(header, 0, "void " + recursive_visitor_helper_name + "(Node& node, Parent* parent, Visitor&& visitor) {");
+         line(header, 1, "if constexpr (std::is_invocable_v<Visitor&&, Node&, Parent*>) {");
+         line(header, 2, "std::forward<Visitor>(visitor)(node, parent);");
+         line(header, 1, "} else {");
+         line(header, 2, "std::forward<Visitor>(visitor)(node);");
+         line(header, 1, "}");
+         line(header, 0, "}");
+         line(header, 0);
+         line(header, 0, "} // namespace detail");
          line(header, 0);
 
          for (const auto& rule_name: ordered_public_rule_names) {
@@ -1318,11 +1332,18 @@ namespace cpf {
                line(header, 0, "template<typename UserData, typename Visitor>");
                line(header, 0,
                     "void visit_recursive(const " + templated_rule_type(info.name) + "& node, Visitor&& visitor) {");
+               line(header, 1,
+                    "visit_recursive(node, std::forward<Visitor>(visitor), static_cast<const cpf::node*>(nullptr));");
+               line(header, 0, "}");
+               line(header, 0);
+               line(header, 0, "template<typename UserData, typename Visitor, typename Parent>");
+               line(header, 0,
+                    "void visit_recursive(const " + templated_rule_type(info.name) + "& node, Visitor&& visitor, const Parent* parent) {");
                line(header, 1, "switch (node.rule_id()) {");
                for (const auto& descendant: concrete_descendants) {
                   line(header, 2, "case " + descendant + "_node<UserData>::RuleId:");
                   line(header, 3,
-                       "visit_recursive(static_cast<const " + templated_rule_type(descendant) + "&>(node), visitor);");
+                       "visit_recursive(static_cast<const " + templated_rule_type(descendant) + "&>(node), visitor, parent);");
                   line(header, 3, "return;");
                }
                line(header, 2, "default:");
@@ -1333,11 +1354,17 @@ namespace cpf {
                line(header, 0, "template<typename UserData, typename Visitor>");
                line(header, 0,
                     "void visit_recursive(" + templated_rule_type(info.name) + "& node, Visitor&& visitor) {");
+               line(header, 1, "visit_recursive(node, std::forward<Visitor>(visitor), static_cast<cpf::node*>(nullptr));");
+               line(header, 0, "}");
+               line(header, 0);
+               line(header, 0, "template<typename UserData, typename Visitor, typename Parent>");
+               line(header, 0,
+                    "void visit_recursive(" + templated_rule_type(info.name) + "& node, Visitor&& visitor, Parent* parent) {");
                line(header, 1, "switch (node.rule_id()) {");
                for (const auto& descendant: concrete_descendants) {
                   line(header, 2, "case " + descendant + "_node<UserData>::RuleId:");
                   line(header, 3,
-                       "visit_recursive(static_cast<" + templated_rule_type(descendant) + "&>(node), visitor);");
+                       "visit_recursive(static_cast<" + templated_rule_type(descendant) + "&>(node), visitor, parent);");
                   line(header, 3, "return;");
                }
                line(header, 2, "default:");
@@ -1361,16 +1388,23 @@ namespace cpf {
             line(header, 0, "template<typename UserData, typename Visitor>");
             line(header, 0,
                  "void visit_recursive(const " + templated_rule_type(info.name) + "& node, Visitor&& visitor) {");
-            line(header, 1, "std::forward<Visitor>(visitor)(node);");
+            line(header, 1,
+                 "visit_recursive(node, std::forward<Visitor>(visitor), static_cast<const cpf::node*>(nullptr));");
+            line(header, 0, "}");
+            line(header, 0);
+            line(header, 0, "template<typename UserData, typename Visitor, typename Parent>");
+            line(header, 0,
+                 "void visit_recursive(const " + templated_rule_type(info.name) + "& node, Visitor&& visitor, const Parent* parent) {");
+            line(header, 1, "detail::" + recursive_visitor_helper_name + "(node, parent, std::forward<Visitor>(visitor));");
             for (const auto& field: info.fields) {
                if (field.shape == field_shape::node_scalar) {
                   line(header, 1, "if (node." + field.name + ") {");
-                  line(header, 2, "visit_recursive(*node." + field.name + ", visitor);");
+                  line(header, 2, "visit_recursive(*node." + field.name + ", visitor, &node);");
                   line(header, 1, "}");
                } else if (field.shape == field_shape::node_vector) {
                   line(header, 1, "for (const auto& child : node." + field.name + ") {");
                   line(header, 2, "if (child) {");
-                  line(header, 3, "visit_recursive(*child, visitor);");
+                  line(header, 3, "visit_recursive(*child, visitor, &node);");
                   line(header, 2, "}");
                   line(header, 1, "}");
                } else if (field.shape == field_shape::capture_variant) {
@@ -1382,7 +1416,7 @@ namespace cpf {
                      }
                      line(header, 2, "if constexpr (std::is_same_v<value_t, " + render_variant_alternative_cpp_type(alternative) + ">) {");
                      line(header, 3, "if (value) {");
-                     line(header, 4, "visit_recursive(*value, visitor);");
+                     line(header, 4, "visit_recursive(*value, visitor, &node);");
                      line(header, 3, "}");
                      line(header, 2, "}");
                   }
@@ -1394,16 +1428,22 @@ namespace cpf {
             line(header, 0, "template<typename UserData, typename Visitor>");
             line(header, 0,
                  "void visit_recursive(" + templated_rule_type(info.name) + "& node, Visitor&& visitor) {");
-            line(header, 1, "std::forward<Visitor>(visitor)(node);");
+            line(header, 1, "visit_recursive(node, std::forward<Visitor>(visitor), static_cast<cpf::node*>(nullptr));");
+            line(header, 0, "}");
+            line(header, 0);
+            line(header, 0, "template<typename UserData, typename Visitor, typename Parent>");
+            line(header, 0,
+                 "void visit_recursive(" + templated_rule_type(info.name) + "& node, Visitor&& visitor, Parent* parent) {");
+            line(header, 1, "detail::" + recursive_visitor_helper_name + "(node, parent, std::forward<Visitor>(visitor));");
             for (const auto& field: info.fields) {
                if (field.shape == field_shape::node_scalar) {
                   line(header, 1, "if (node." + field.name + ") {");
-                  line(header, 2, "visit_recursive(*node." + field.name + ", visitor);");
+                  line(header, 2, "visit_recursive(*node." + field.name + ", visitor, &node);");
                   line(header, 1, "}");
                } else if (field.shape == field_shape::node_vector) {
                   line(header, 1, "for (auto& child : node." + field.name + ") {");
                   line(header, 2, "if (child) {");
-                  line(header, 3, "visit_recursive(*child, visitor);");
+                  line(header, 3, "visit_recursive(*child, visitor, &node);");
                   line(header, 2, "}");
                   line(header, 1, "}");
                } else if (field.shape == field_shape::capture_variant) {
@@ -1415,7 +1455,7 @@ namespace cpf {
                      }
                      line(header, 2, "if constexpr (std::is_same_v<value_t, " + render_variant_alternative_cpp_type(alternative) + ">) {");
                      line(header, 3, "if (value) {");
-                     line(header, 4, "visit_recursive(*value, visitor);");
+                     line(header, 4, "visit_recursive(*value, visitor, &node);");
                      line(header, 3, "}");
                      line(header, 2, "}");
                   }
