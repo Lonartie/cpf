@@ -1,0 +1,1202 @@
+/// @file
+/// @brief Generated parser API for grammar 'default_attrs'.
+/// @details
+/// @li Public rules: 5.
+/// @li Synthetic helper rules introduced during lowering: 0.
+/// @li Recursive public rules detected from the grammar graph: default_expr, default_add, default_subtract, default_multiply.
+/// @li Rules with repeated-member storage: none.
+/// @li Every generated parse entry point uses the shared Earley runtime with worst-case O(n^3) time and O(n^2) chart space for input length n.
+/// @li Highly ambiguous grammars can grow the returned parse forest beyond the core Earley chart.
+#pragma once
+
+#include <array>
+#include <cpflib>
+#include <iomanip>
+#include <iosfwd>
+#include <memory>
+#include <optional>
+#include <sstream>
+#include <span>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <typeinfo>
+#include <type_traits>
+#include <utility>
+#include <variant>
+#include <vector>
+
+template<typename UserData = void> struct default_expr_node;
+using default_expr = default_expr_node<>;
+template<typename UserData = void> struct default_add_node;
+using default_add = default_add_node<>;
+template<typename UserData = void> struct default_subtract_node;
+using default_subtract = default_subtract_node<>;
+template<typename UserData = void> struct default_multiply_node;
+using default_multiply = default_multiply_node<>;
+template<typename UserData = void> struct default_number_node;
+using default_number = default_number_node<>;
+
+namespace detail {
+
+template<typename Node, typename Parent, typename Visitor>
+void invoke_default_attrs_recursive_visitor(Node& node, Parent* parent, Visitor&& visitor) {
+   if constexpr (std::is_invocable_v<Visitor&&, Node&, Parent*>) {
+      std::forward<Visitor>(visitor)(node, parent);
+   } else {
+      std::forward<Visitor>(visitor)(node);
+   }
+}
+
+inline void write_default_attrs_debug_indent(std::ostream& os, std::size_t indent) {
+   for (std::size_t i = 0; i < indent; ++i) {
+      os << "  ";
+   }
+}
+
+inline void write_default_attrs_debug_block(std::ostream& os, std::string_view block, std::size_t indent) {
+   auto position = std::size_t{0};
+   while (position <= block.size()) {
+      auto line_end = block.find('\n', position);
+      if (line_end == std::string_view::npos) {
+         line_end = block.size();
+      }
+      write_default_attrs_debug_indent(os, indent);
+      os << block.substr(position, line_end - position);
+      if (line_end == block.size()) {
+         break;
+      }
+      os << '\n';
+      position = line_end + 1;
+   }
+}
+
+} // namespace detail
+
+/// @brief Generated AST node for grammar rule 'default_expr'.
+/// @details
+/// @li `parse(...)` uses the shared Earley runtime with worst-case O(n^3) time and O(n^2) chart space for input length n.
+/// @li `clone()`, `operator<<`, and `visit_recursive(...)` are O(s) in the size of the reachable subtree.
+/// @li Exclusive node storage is O(1).
+/// @li Captured members: 0 total (terminal scalar=0, terminal optional=0, terminal repeated=0, node scalar=0, node repeated=0, variants=0).
+/// @li Grammar analysis: this rule participates in a recursive rule cycle.
+template<typename UserData>
+struct default_expr_node : cpf::node_with_user_data<UserData> {
+   static constexpr std::size_t RuleId = 0;
+   static constexpr std::size_t ProductionCount = 4;
+   using parse_result = cpf::parse_result<default_expr_node<UserData>>;
+   default_expr_node() = default;
+   default_expr_node(default_expr_node&&) = default;
+   auto operator=(default_expr_node&&) -> default_expr_node& = default;
+   default_expr_node(const default_expr_node&) = delete;
+   auto operator=(const default_expr_node&) -> default_expr_node& = delete;
+   ~default_expr_node() override = default;
+   static auto lex(std::string_view input) -> cpf::token_sequence;
+   static parse_result parse(std::string_view input, const cpf::parse_options& options = {});
+   static parse_result parse(const cpf::token_sequence& tokens, const cpf::parse_options& options = {});
+   static cpf::recognize_result recognize(std::string_view input);
+   static cpf::recognize_result recognize(const cpf::token_sequence& tokens);
+   static auto complexity(std::size_t production_index) -> const cpf::complexity&;
+   static auto complexity_inputs(std::size_t production_index) -> std::span<const std::string_view>;
+   static auto recompute_complexity(std::size_t production_index) -> const cpf::complexity&;
+   std::size_t rule_id() const override { return RuleId; }
+   std::unique_ptr<default_expr_node<UserData>> clone() const;
+
+   protected:
+      std::unique_ptr<cpf::node> clone_node() const override;
+};
+template<typename UserData>
+std::ostream& operator<<(std::ostream& os, const default_expr_node<UserData>& node);
+
+/// @brief Generated AST node for grammar rule 'default_add'.
+/// @details
+/// @li `parse(...)` uses the shared Earley runtime with worst-case O(n^3) time and O(n^2) chart space for input length n.
+/// @li `clone()`, `operator<<`, and `visit_recursive(...)` are O(s) in the size of the reachable subtree.
+/// @li Exclusive node storage is O(1).
+/// @li Captured members: 3 total (terminal scalar=1, terminal optional=0, terminal repeated=0, node scalar=2, node repeated=0, variants=0).
+/// @li Grammar analysis: this rule participates in a recursive rule cycle.
+template<typename UserData>
+struct default_add_node : default_expr_node<UserData> {
+   static constexpr std::size_t RuleId = 1;
+   static constexpr std::size_t ProductionCount = 1;
+   using parse_result = cpf::parse_result<default_add_node<UserData>>;
+   std::unique_ptr<default_expr_node<UserData>> left;
+   cpf::matched_string op;
+   std::unique_ptr<default_expr_node<UserData>> right;
+
+   default_add_node() = default;
+   default_add_node(default_add_node&&) = default;
+   auto operator=(default_add_node&&) -> default_add_node& = default;
+   default_add_node(const default_add_node&) = delete;
+   auto operator=(const default_add_node&) -> default_add_node& = delete;
+   ~default_add_node() override = default;
+   static auto lex(std::string_view input) -> cpf::token_sequence;
+   static parse_result parse(std::string_view input, const cpf::parse_options& options = {});
+   static parse_result parse(const cpf::token_sequence& tokens, const cpf::parse_options& options = {});
+   static cpf::recognize_result recognize(std::string_view input);
+   static cpf::recognize_result recognize(const cpf::token_sequence& tokens);
+   static auto complexity(std::size_t production_index) -> const cpf::complexity&;
+   static auto complexity_inputs(std::size_t production_index) -> std::span<const std::string_view>;
+   static auto recompute_complexity(std::size_t production_index) -> const cpf::complexity&;
+   std::size_t rule_id() const override { return RuleId; }
+   std::unique_ptr<default_add_node<UserData>> clone() const;
+
+   protected:
+      std::unique_ptr<cpf::node> clone_node() const override;
+};
+template<typename UserData>
+std::ostream& operator<<(std::ostream& os, const default_add_node<UserData>& node);
+
+/// @brief Generated AST node for grammar rule 'default_subtract'.
+/// @details
+/// @li `parse(...)` uses the shared Earley runtime with worst-case O(n^3) time and O(n^2) chart space for input length n.
+/// @li `clone()`, `operator<<`, and `visit_recursive(...)` are O(s) in the size of the reachable subtree.
+/// @li Exclusive node storage is O(1).
+/// @li Captured members: 3 total (terminal scalar=1, terminal optional=0, terminal repeated=0, node scalar=2, node repeated=0, variants=0).
+/// @li Grammar analysis: this rule participates in a recursive rule cycle.
+template<typename UserData>
+struct default_subtract_node : default_expr_node<UserData> {
+   static constexpr std::size_t RuleId = 2;
+   static constexpr std::size_t ProductionCount = 1;
+   using parse_result = cpf::parse_result<default_subtract_node<UserData>>;
+   std::unique_ptr<default_expr_node<UserData>> left;
+   cpf::matched_string op;
+   std::unique_ptr<default_expr_node<UserData>> right;
+
+   default_subtract_node() = default;
+   default_subtract_node(default_subtract_node&&) = default;
+   auto operator=(default_subtract_node&&) -> default_subtract_node& = default;
+   default_subtract_node(const default_subtract_node&) = delete;
+   auto operator=(const default_subtract_node&) -> default_subtract_node& = delete;
+   ~default_subtract_node() override = default;
+   static auto lex(std::string_view input) -> cpf::token_sequence;
+   static parse_result parse(std::string_view input, const cpf::parse_options& options = {});
+   static parse_result parse(const cpf::token_sequence& tokens, const cpf::parse_options& options = {});
+   static cpf::recognize_result recognize(std::string_view input);
+   static cpf::recognize_result recognize(const cpf::token_sequence& tokens);
+   static auto complexity(std::size_t production_index) -> const cpf::complexity&;
+   static auto complexity_inputs(std::size_t production_index) -> std::span<const std::string_view>;
+   static auto recompute_complexity(std::size_t production_index) -> const cpf::complexity&;
+   std::size_t rule_id() const override { return RuleId; }
+   std::unique_ptr<default_subtract_node<UserData>> clone() const;
+
+   protected:
+      std::unique_ptr<cpf::node> clone_node() const override;
+};
+template<typename UserData>
+std::ostream& operator<<(std::ostream& os, const default_subtract_node<UserData>& node);
+
+/// @brief Generated AST node for grammar rule 'default_multiply'.
+/// @details
+/// @li `parse(...)` uses the shared Earley runtime with worst-case O(n^3) time and O(n^2) chart space for input length n.
+/// @li `clone()`, `operator<<`, and `visit_recursive(...)` are O(s) in the size of the reachable subtree.
+/// @li Exclusive node storage is O(1).
+/// @li Captured members: 3 total (terminal scalar=1, terminal optional=0, terminal repeated=0, node scalar=2, node repeated=0, variants=0).
+/// @li Grammar analysis: this rule participates in a recursive rule cycle.
+template<typename UserData>
+struct default_multiply_node : default_expr_node<UserData> {
+   static constexpr std::size_t RuleId = 3;
+   static constexpr std::size_t ProductionCount = 1;
+   using parse_result = cpf::parse_result<default_multiply_node<UserData>>;
+   std::unique_ptr<default_expr_node<UserData>> left;
+   cpf::matched_string op;
+   std::unique_ptr<default_expr_node<UserData>> right;
+
+   default_multiply_node() = default;
+   default_multiply_node(default_multiply_node&&) = default;
+   auto operator=(default_multiply_node&&) -> default_multiply_node& = default;
+   default_multiply_node(const default_multiply_node&) = delete;
+   auto operator=(const default_multiply_node&) -> default_multiply_node& = delete;
+   ~default_multiply_node() override = default;
+   static auto lex(std::string_view input) -> cpf::token_sequence;
+   static parse_result parse(std::string_view input, const cpf::parse_options& options = {});
+   static parse_result parse(const cpf::token_sequence& tokens, const cpf::parse_options& options = {});
+   static cpf::recognize_result recognize(std::string_view input);
+   static cpf::recognize_result recognize(const cpf::token_sequence& tokens);
+   static auto complexity(std::size_t production_index) -> const cpf::complexity&;
+   static auto complexity_inputs(std::size_t production_index) -> std::span<const std::string_view>;
+   static auto recompute_complexity(std::size_t production_index) -> const cpf::complexity&;
+   std::size_t rule_id() const override { return RuleId; }
+   std::unique_ptr<default_multiply_node<UserData>> clone() const;
+
+   protected:
+      std::unique_ptr<cpf::node> clone_node() const override;
+};
+template<typename UserData>
+std::ostream& operator<<(std::ostream& os, const default_multiply_node<UserData>& node);
+
+/// @brief Generated AST node for grammar rule 'default_number'.
+/// @details
+/// @li `parse(...)` uses the shared Earley runtime with worst-case O(n^3) time and O(n^2) chart space for input length n.
+/// @li `clone()`, `operator<<`, and `visit_recursive(...)` are O(s) in the size of the reachable subtree.
+/// @li Exclusive node storage is O(1).
+/// @li Captured members: 1 total (terminal scalar=1, terminal optional=0, terminal repeated=0, node scalar=0, node repeated=0, variants=0).
+/// @li Grammar analysis: this rule does not participate in a recursive rule cycle.
+template<typename UserData>
+struct default_number_node : default_expr_node<UserData> {
+   static constexpr std::size_t RuleId = 4;
+   static constexpr std::size_t ProductionCount = 1;
+   using parse_result = cpf::parse_result<default_number_node<UserData>>;
+   cpf::matched_string value;
+
+   default_number_node() = default;
+   default_number_node(default_number_node&&) = default;
+   auto operator=(default_number_node&&) -> default_number_node& = default;
+   default_number_node(const default_number_node&) = delete;
+   auto operator=(const default_number_node&) -> default_number_node& = delete;
+   ~default_number_node() override = default;
+   static auto lex(std::string_view input) -> cpf::token_sequence;
+   static parse_result parse(std::string_view input, const cpf::parse_options& options = {});
+   static parse_result parse(const cpf::token_sequence& tokens, const cpf::parse_options& options = {});
+   static cpf::recognize_result recognize(std::string_view input);
+   static cpf::recognize_result recognize(const cpf::token_sequence& tokens);
+   static auto complexity(std::size_t production_index) -> const cpf::complexity&;
+   static auto complexity_inputs(std::size_t production_index) -> std::span<const std::string_view>;
+   static auto recompute_complexity(std::size_t production_index) -> const cpf::complexity&;
+   std::size_t rule_id() const override { return RuleId; }
+   std::unique_ptr<default_number_node<UserData>> clone() const;
+
+   protected:
+      std::unique_ptr<cpf::node> clone_node() const override;
+};
+template<typename UserData>
+std::ostream& operator<<(std::ostream& os, const default_number_node<UserData>& node);
+
+template<typename UserData, typename Visitor>
+auto visit(const default_expr_node<UserData>& node, Visitor&& visitor) {
+   switch (node.rule_id()) {
+      case default_add_node<UserData>::RuleId:
+         return visit(static_cast<const default_add_node<UserData>&>(node), visitor);
+      case default_subtract_node<UserData>::RuleId:
+         return visit(static_cast<const default_subtract_node<UserData>&>(node), visitor);
+      case default_multiply_node<UserData>::RuleId:
+         return visit(static_cast<const default_multiply_node<UserData>&>(node), visitor);
+      case default_number_node<UserData>::RuleId:
+         return visit(static_cast<const default_number_node<UserData>&>(node), visitor);
+      default:
+         throw std::bad_cast{};
+   }
+}
+
+template<typename UserData, typename Visitor>
+auto visit(default_expr_node<UserData>& node, Visitor&& visitor) {
+   switch (node.rule_id()) {
+      case default_add_node<UserData>::RuleId:
+         return visit(static_cast<default_add_node<UserData>&>(node), visitor);
+      case default_subtract_node<UserData>::RuleId:
+         return visit(static_cast<default_subtract_node<UserData>&>(node), visitor);
+      case default_multiply_node<UserData>::RuleId:
+         return visit(static_cast<default_multiply_node<UserData>&>(node), visitor);
+      case default_number_node<UserData>::RuleId:
+         return visit(static_cast<default_number_node<UserData>&>(node), visitor);
+      default:
+         throw std::bad_cast{};
+   }
+}
+
+template<typename UserData, typename Visitor>
+void visit_recursive(const default_expr_node<UserData>& node, Visitor&& visitor) {
+   visit_recursive(node, std::forward<Visitor>(visitor), static_cast<const cpf::node*>(nullptr));
+}
+
+template<typename UserData, typename Visitor, typename Parent>
+void visit_recursive(const default_expr_node<UserData>& node, Visitor&& visitor, const Parent* parent) {
+   switch (node.rule_id()) {
+      case default_add_node<UserData>::RuleId:
+         visit_recursive(static_cast<const default_add_node<UserData>&>(node), visitor, parent);
+         return;
+      case default_subtract_node<UserData>::RuleId:
+         visit_recursive(static_cast<const default_subtract_node<UserData>&>(node), visitor, parent);
+         return;
+      case default_multiply_node<UserData>::RuleId:
+         visit_recursive(static_cast<const default_multiply_node<UserData>&>(node), visitor, parent);
+         return;
+      case default_number_node<UserData>::RuleId:
+         visit_recursive(static_cast<const default_number_node<UserData>&>(node), visitor, parent);
+         return;
+      default:
+         throw std::bad_cast{};
+   }
+}
+
+template<typename UserData, typename Visitor>
+void visit_recursive(default_expr_node<UserData>& node, Visitor&& visitor) {
+   visit_recursive(node, std::forward<Visitor>(visitor), static_cast<cpf::node*>(nullptr));
+}
+
+template<typename UserData, typename Visitor, typename Parent>
+void visit_recursive(default_expr_node<UserData>& node, Visitor&& visitor, Parent* parent) {
+   switch (node.rule_id()) {
+      case default_add_node<UserData>::RuleId:
+         visit_recursive(static_cast<default_add_node<UserData>&>(node), visitor, parent);
+         return;
+      case default_subtract_node<UserData>::RuleId:
+         visit_recursive(static_cast<default_subtract_node<UserData>&>(node), visitor, parent);
+         return;
+      case default_multiply_node<UserData>::RuleId:
+         visit_recursive(static_cast<default_multiply_node<UserData>&>(node), visitor, parent);
+         return;
+      case default_number_node<UserData>::RuleId:
+         visit_recursive(static_cast<default_number_node<UserData>&>(node), visitor, parent);
+         return;
+      default:
+         throw std::bad_cast{};
+   }
+}
+
+template<typename UserData, typename Visitor>
+auto visit(const default_add_node<UserData>& node, Visitor&& visitor) {
+   return std::forward<Visitor>(visitor)(node);
+}
+
+template<typename UserData, typename Visitor>
+auto visit(default_add_node<UserData>& node, Visitor&& visitor) {
+   return std::forward<Visitor>(visitor)(node);
+}
+
+template<typename UserData, typename Visitor>
+void visit_recursive(const default_add_node<UserData>& node, Visitor&& visitor) {
+   visit_recursive(node, std::forward<Visitor>(visitor), static_cast<const cpf::node*>(nullptr));
+}
+
+template<typename UserData, typename Visitor, typename Parent>
+void visit_recursive(const default_add_node<UserData>& node, Visitor&& visitor, const Parent* parent) {
+   detail::invoke_default_attrs_recursive_visitor(node, parent, std::forward<Visitor>(visitor));
+   if (node.left) {
+      visit_recursive(*node.left, visitor, &node);
+   }
+   if (node.right) {
+      visit_recursive(*node.right, visitor, &node);
+   }
+}
+
+template<typename UserData, typename Visitor>
+void visit_recursive(default_add_node<UserData>& node, Visitor&& visitor) {
+   visit_recursive(node, std::forward<Visitor>(visitor), static_cast<cpf::node*>(nullptr));
+}
+
+template<typename UserData, typename Visitor, typename Parent>
+void visit_recursive(default_add_node<UserData>& node, Visitor&& visitor, Parent* parent) {
+   detail::invoke_default_attrs_recursive_visitor(node, parent, std::forward<Visitor>(visitor));
+   if (node.left) {
+      visit_recursive(*node.left, visitor, &node);
+   }
+   if (node.right) {
+      visit_recursive(*node.right, visitor, &node);
+   }
+}
+
+template<typename UserData, typename Visitor>
+auto visit(const default_subtract_node<UserData>& node, Visitor&& visitor) {
+   return std::forward<Visitor>(visitor)(node);
+}
+
+template<typename UserData, typename Visitor>
+auto visit(default_subtract_node<UserData>& node, Visitor&& visitor) {
+   return std::forward<Visitor>(visitor)(node);
+}
+
+template<typename UserData, typename Visitor>
+void visit_recursive(const default_subtract_node<UserData>& node, Visitor&& visitor) {
+   visit_recursive(node, std::forward<Visitor>(visitor), static_cast<const cpf::node*>(nullptr));
+}
+
+template<typename UserData, typename Visitor, typename Parent>
+void visit_recursive(const default_subtract_node<UserData>& node, Visitor&& visitor, const Parent* parent) {
+   detail::invoke_default_attrs_recursive_visitor(node, parent, std::forward<Visitor>(visitor));
+   if (node.left) {
+      visit_recursive(*node.left, visitor, &node);
+   }
+   if (node.right) {
+      visit_recursive(*node.right, visitor, &node);
+   }
+}
+
+template<typename UserData, typename Visitor>
+void visit_recursive(default_subtract_node<UserData>& node, Visitor&& visitor) {
+   visit_recursive(node, std::forward<Visitor>(visitor), static_cast<cpf::node*>(nullptr));
+}
+
+template<typename UserData, typename Visitor, typename Parent>
+void visit_recursive(default_subtract_node<UserData>& node, Visitor&& visitor, Parent* parent) {
+   detail::invoke_default_attrs_recursive_visitor(node, parent, std::forward<Visitor>(visitor));
+   if (node.left) {
+      visit_recursive(*node.left, visitor, &node);
+   }
+   if (node.right) {
+      visit_recursive(*node.right, visitor, &node);
+   }
+}
+
+template<typename UserData, typename Visitor>
+auto visit(const default_multiply_node<UserData>& node, Visitor&& visitor) {
+   return std::forward<Visitor>(visitor)(node);
+}
+
+template<typename UserData, typename Visitor>
+auto visit(default_multiply_node<UserData>& node, Visitor&& visitor) {
+   return std::forward<Visitor>(visitor)(node);
+}
+
+template<typename UserData, typename Visitor>
+void visit_recursive(const default_multiply_node<UserData>& node, Visitor&& visitor) {
+   visit_recursive(node, std::forward<Visitor>(visitor), static_cast<const cpf::node*>(nullptr));
+}
+
+template<typename UserData, typename Visitor, typename Parent>
+void visit_recursive(const default_multiply_node<UserData>& node, Visitor&& visitor, const Parent* parent) {
+   detail::invoke_default_attrs_recursive_visitor(node, parent, std::forward<Visitor>(visitor));
+   if (node.left) {
+      visit_recursive(*node.left, visitor, &node);
+   }
+   if (node.right) {
+      visit_recursive(*node.right, visitor, &node);
+   }
+}
+
+template<typename UserData, typename Visitor>
+void visit_recursive(default_multiply_node<UserData>& node, Visitor&& visitor) {
+   visit_recursive(node, std::forward<Visitor>(visitor), static_cast<cpf::node*>(nullptr));
+}
+
+template<typename UserData, typename Visitor, typename Parent>
+void visit_recursive(default_multiply_node<UserData>& node, Visitor&& visitor, Parent* parent) {
+   detail::invoke_default_attrs_recursive_visitor(node, parent, std::forward<Visitor>(visitor));
+   if (node.left) {
+      visit_recursive(*node.left, visitor, &node);
+   }
+   if (node.right) {
+      visit_recursive(*node.right, visitor, &node);
+   }
+}
+
+template<typename UserData, typename Visitor>
+auto visit(const default_number_node<UserData>& node, Visitor&& visitor) {
+   return std::forward<Visitor>(visitor)(node);
+}
+
+template<typename UserData, typename Visitor>
+auto visit(default_number_node<UserData>& node, Visitor&& visitor) {
+   return std::forward<Visitor>(visitor)(node);
+}
+
+template<typename UserData, typename Visitor>
+void visit_recursive(const default_number_node<UserData>& node, Visitor&& visitor) {
+   visit_recursive(node, std::forward<Visitor>(visitor), static_cast<const cpf::node*>(nullptr));
+}
+
+template<typename UserData, typename Visitor, typename Parent>
+void visit_recursive(const default_number_node<UserData>& node, Visitor&& visitor, const Parent* parent) {
+   detail::invoke_default_attrs_recursive_visitor(node, parent, std::forward<Visitor>(visitor));
+}
+
+template<typename UserData, typename Visitor>
+void visit_recursive(default_number_node<UserData>& node, Visitor&& visitor) {
+   visit_recursive(node, std::forward<Visitor>(visitor), static_cast<cpf::node*>(nullptr));
+}
+
+template<typename UserData, typename Visitor, typename Parent>
+void visit_recursive(default_number_node<UserData>& node, Visitor&& visitor, Parent* parent) {
+   detail::invoke_default_attrs_recursive_visitor(node, parent, std::forward<Visitor>(visitor));
+}
+
+namespace detail {
+
+auto lex_default_attrs_generated(std::string_view input) -> cpf::token_sequence;
+
+auto parse_default_expr_default(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<default_expr>;
+auto parse_default_expr_default(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<default_expr>;
+auto recognize_default_expr_default(std::string_view input) -> cpf::recognize_result;
+auto recognize_default_expr_default(const cpf::token_sequence& tokens) -> cpf::recognize_result;
+auto complexity_inputs_default_expr_default(std::size_t production_index) -> std::span<const std::string_view>;
+auto complexity_default_expr_default(std::size_t production_index) -> const cpf::complexity&;
+auto recompute_complexity_default_expr_default(std::size_t production_index) -> const cpf::complexity&;
+auto parse_default_add_default(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<default_add>;
+auto parse_default_add_default(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<default_add>;
+auto recognize_default_add_default(std::string_view input) -> cpf::recognize_result;
+auto recognize_default_add_default(const cpf::token_sequence& tokens) -> cpf::recognize_result;
+auto complexity_inputs_default_add_default(std::size_t production_index) -> std::span<const std::string_view>;
+auto complexity_default_add_default(std::size_t production_index) -> const cpf::complexity&;
+auto recompute_complexity_default_add_default(std::size_t production_index) -> const cpf::complexity&;
+auto parse_default_subtract_default(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<default_subtract>;
+auto parse_default_subtract_default(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<default_subtract>;
+auto recognize_default_subtract_default(std::string_view input) -> cpf::recognize_result;
+auto recognize_default_subtract_default(const cpf::token_sequence& tokens) -> cpf::recognize_result;
+auto complexity_inputs_default_subtract_default(std::size_t production_index) -> std::span<const std::string_view>;
+auto complexity_default_subtract_default(std::size_t production_index) -> const cpf::complexity&;
+auto recompute_complexity_default_subtract_default(std::size_t production_index) -> const cpf::complexity&;
+auto parse_default_multiply_default(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<default_multiply>;
+auto parse_default_multiply_default(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<default_multiply>;
+auto recognize_default_multiply_default(std::string_view input) -> cpf::recognize_result;
+auto recognize_default_multiply_default(const cpf::token_sequence& tokens) -> cpf::recognize_result;
+auto complexity_inputs_default_multiply_default(std::size_t production_index) -> std::span<const std::string_view>;
+auto complexity_default_multiply_default(std::size_t production_index) -> const cpf::complexity&;
+auto recompute_complexity_default_multiply_default(std::size_t production_index) -> const cpf::complexity&;
+auto parse_default_number_default(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<default_number>;
+auto parse_default_number_default(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<default_number>;
+auto recognize_default_number_default(std::string_view input) -> cpf::recognize_result;
+auto recognize_default_number_default(const cpf::token_sequence& tokens) -> cpf::recognize_result;
+auto complexity_inputs_default_number_default(std::size_t production_index) -> std::span<const std::string_view>;
+auto complexity_default_number_default(std::size_t production_index) -> const cpf::complexity&;
+auto recompute_complexity_default_number_default(std::size_t production_index) -> const cpf::complexity&;
+template<typename TargetUserData, typename SourceUserData>
+auto rebind_default_expr_node(const default_expr_node<SourceUserData>& node) -> std::unique_ptr<default_expr_node<TargetUserData>>;
+
+template<typename TargetUserData, typename SourceUserData>
+auto rebind_default_add_node(const default_add_node<SourceUserData>& node) -> std::unique_ptr<default_add_node<TargetUserData>>;
+
+template<typename TargetUserData, typename SourceUserData>
+auto rebind_default_subtract_node(const default_subtract_node<SourceUserData>& node) -> std::unique_ptr<default_subtract_node<TargetUserData>>;
+
+template<typename TargetUserData, typename SourceUserData>
+auto rebind_default_multiply_node(const default_multiply_node<SourceUserData>& node) -> std::unique_ptr<default_multiply_node<TargetUserData>>;
+
+template<typename TargetUserData, typename SourceUserData>
+auto rebind_default_number_node(const default_number_node<SourceUserData>& node) -> std::unique_ptr<default_number_node<TargetUserData>>;
+
+template<typename TargetUserData, typename SourceUserData>
+auto rebind_default_expr_node(const default_expr_node<SourceUserData>& node) -> std::unique_ptr<default_expr_node<TargetUserData>> {
+   switch (node.rule_id()) {
+      case default_add_node<SourceUserData>::RuleId:
+         return rebind_default_add_node<TargetUserData>(static_cast<const default_add_node<SourceUserData>&>(node));
+      case default_subtract_node<SourceUserData>::RuleId:
+         return rebind_default_subtract_node<TargetUserData>(static_cast<const default_subtract_node<SourceUserData>&>(node));
+      case default_multiply_node<SourceUserData>::RuleId:
+         return rebind_default_multiply_node<TargetUserData>(static_cast<const default_multiply_node<SourceUserData>&>(node));
+      case default_number_node<SourceUserData>::RuleId:
+         return rebind_default_number_node<TargetUserData>(static_cast<const default_number_node<SourceUserData>&>(node));
+      default:
+         throw std::bad_cast{};
+   }
+}
+
+template<typename TargetUserData, typename SourceUserData>
+auto rebind_default_add_node(const default_add_node<SourceUserData>& node) -> std::unique_ptr<default_add_node<TargetUserData>> {
+   auto copy = std::make_unique<default_add_node<TargetUserData>>();
+   copy->production_index = node.production_index;
+   copy->range = node.range;
+   for (const auto& damage : node.damage()) {
+      cpf::detail::add_damage(*copy, damage);
+   }
+   if constexpr (!std::is_void_v<TargetUserData> && !std::is_void_v<SourceUserData>) {
+      copy->user_data = node.user_data;
+   }
+   copy->left = node.left ? detail::rebind_default_expr_node<TargetUserData>(*node.left) : nullptr;
+   copy->op = node.op;
+   copy->right = node.right ? detail::rebind_default_expr_node<TargetUserData>(*node.right) : nullptr;
+   return copy;
+}
+
+template<typename TargetUserData, typename SourceUserData>
+auto rebind_default_subtract_node(const default_subtract_node<SourceUserData>& node) -> std::unique_ptr<default_subtract_node<TargetUserData>> {
+   auto copy = std::make_unique<default_subtract_node<TargetUserData>>();
+   copy->production_index = node.production_index;
+   copy->range = node.range;
+   for (const auto& damage : node.damage()) {
+      cpf::detail::add_damage(*copy, damage);
+   }
+   if constexpr (!std::is_void_v<TargetUserData> && !std::is_void_v<SourceUserData>) {
+      copy->user_data = node.user_data;
+   }
+   copy->left = node.left ? detail::rebind_default_expr_node<TargetUserData>(*node.left) : nullptr;
+   copy->op = node.op;
+   copy->right = node.right ? detail::rebind_default_expr_node<TargetUserData>(*node.right) : nullptr;
+   return copy;
+}
+
+template<typename TargetUserData, typename SourceUserData>
+auto rebind_default_multiply_node(const default_multiply_node<SourceUserData>& node) -> std::unique_ptr<default_multiply_node<TargetUserData>> {
+   auto copy = std::make_unique<default_multiply_node<TargetUserData>>();
+   copy->production_index = node.production_index;
+   copy->range = node.range;
+   for (const auto& damage : node.damage()) {
+      cpf::detail::add_damage(*copy, damage);
+   }
+   if constexpr (!std::is_void_v<TargetUserData> && !std::is_void_v<SourceUserData>) {
+      copy->user_data = node.user_data;
+   }
+   copy->left = node.left ? detail::rebind_default_expr_node<TargetUserData>(*node.left) : nullptr;
+   copy->op = node.op;
+   copy->right = node.right ? detail::rebind_default_expr_node<TargetUserData>(*node.right) : nullptr;
+   return copy;
+}
+
+template<typename TargetUserData, typename SourceUserData>
+auto rebind_default_number_node(const default_number_node<SourceUserData>& node) -> std::unique_ptr<default_number_node<TargetUserData>> {
+   auto copy = std::make_unique<default_number_node<TargetUserData>>();
+   copy->production_index = node.production_index;
+   copy->range = node.range;
+   for (const auto& damage : node.damage()) {
+      cpf::detail::add_damage(*copy, damage);
+   }
+   if constexpr (!std::is_void_v<TargetUserData> && !std::is_void_v<SourceUserData>) {
+      copy->user_data = node.user_data;
+   }
+   copy->value = node.value;
+   return copy;
+}
+
+} // namespace detail
+
+template<typename UserData>
+auto default_expr_node<UserData>::lex(std::string_view input) -> cpf::token_sequence {
+   return detail::lex_default_attrs_generated(input);
+}
+
+template<typename UserData>
+auto default_expr_node<UserData>::parse(std::string_view input, const cpf::parse_options& options) -> parse_result {
+   if constexpr (std::is_void_v<UserData>) {
+      return detail::parse_default_expr_default(input, options);
+   } else {
+      auto default_result = detail::parse_default_expr_default(input, options);
+      parse_result converted;
+      converted.status = default_result.status;
+      converted.success = default_result.success;
+      converted.partial = default_result.partial;
+      converted.error = std::move(default_result.error);
+      if (!options.build_ast) {
+         return converted;
+      }
+      converted.forest.reserve(default_result.forest.size());
+      for (const auto& tree : default_result.forest) {
+         auto materialized = tree.get();
+         converted.forest.emplace_back(materialized != nullptr ? detail::rebind_default_expr_node<UserData>(*materialized) : nullptr);
+      }
+      return converted;
+   }
+}
+
+template<typename UserData>
+auto default_expr_node<UserData>::parse(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> parse_result {
+   if constexpr (std::is_void_v<UserData>) {
+      return detail::parse_default_expr_default(tokens, options);
+   } else {
+      auto default_result = detail::parse_default_expr_default(tokens, options);
+      parse_result converted;
+      converted.status = default_result.status;
+      converted.success = default_result.success;
+      converted.partial = default_result.partial;
+      converted.error = std::move(default_result.error);
+      if (!options.build_ast) {
+         return converted;
+      }
+      converted.forest.reserve(default_result.forest.size());
+      for (const auto& tree : default_result.forest) {
+         auto materialized = tree.get();
+         converted.forest.emplace_back(materialized != nullptr ? detail::rebind_default_expr_node<UserData>(*materialized) : nullptr);
+      }
+      return converted;
+   }
+}
+
+template<typename UserData>
+auto default_expr_node<UserData>::recognize(std::string_view input) -> cpf::recognize_result {
+   return detail::recognize_default_expr_default(input);
+}
+
+template<typename UserData>
+auto default_expr_node<UserData>::recognize(const cpf::token_sequence& tokens) -> cpf::recognize_result {
+   return detail::recognize_default_expr_default(tokens);
+}
+
+template<typename UserData>
+auto default_expr_node<UserData>::complexity(std::size_t production_index) -> const cpf::complexity& {
+   return detail::complexity_default_expr_default(production_index);
+}
+
+template<typename UserData>
+auto default_expr_node<UserData>::complexity_inputs(std::size_t production_index) -> std::span<const std::string_view> {
+   return detail::complexity_inputs_default_expr_default(production_index);
+}
+
+template<typename UserData>
+auto default_expr_node<UserData>::recompute_complexity(std::size_t production_index) -> const cpf::complexity& {
+   return detail::recompute_complexity_default_expr_default(production_index);
+}
+
+template<typename UserData>
+auto default_expr_node<UserData>::clone() const -> std::unique_ptr<default_expr_node<UserData>> {
+   return detail::rebind_default_expr_node<UserData>(*this);
+}
+
+template<typename UserData>
+std::unique_ptr<cpf::node> default_expr_node<UserData>::clone_node() const {
+   return detail::rebind_default_expr_node<UserData>(*this);
+}
+
+template<typename UserData>
+std::ostream& operator<<(std::ostream& os, const default_expr_node<UserData>& node) {
+   switch (node.rule_id()) {
+      case default_add_node<UserData>::RuleId:
+         return os << static_cast<const default_add_node<UserData>&>(node);
+      case default_subtract_node<UserData>::RuleId:
+         return os << static_cast<const default_subtract_node<UserData>&>(node);
+      case default_multiply_node<UserData>::RuleId:
+         return os << static_cast<const default_multiply_node<UserData>&>(node);
+      case default_number_node<UserData>::RuleId:
+         return os << static_cast<const default_number_node<UserData>&>(node);
+      default:
+         return os << "default_expr()";
+   }
+}
+
+template<typename UserData>
+auto default_add_node<UserData>::lex(std::string_view input) -> cpf::token_sequence {
+   return detail::lex_default_attrs_generated(input);
+}
+
+template<typename UserData>
+auto default_add_node<UserData>::parse(std::string_view input, const cpf::parse_options& options) -> parse_result {
+   if constexpr (std::is_void_v<UserData>) {
+      return detail::parse_default_add_default(input, options);
+   } else {
+      auto default_result = detail::parse_default_add_default(input, options);
+      parse_result converted;
+      converted.status = default_result.status;
+      converted.success = default_result.success;
+      converted.partial = default_result.partial;
+      converted.error = std::move(default_result.error);
+      if (!options.build_ast) {
+         return converted;
+      }
+      converted.forest.reserve(default_result.forest.size());
+      for (const auto& tree : default_result.forest) {
+         auto materialized = tree.get();
+         converted.forest.emplace_back(materialized != nullptr ? detail::rebind_default_add_node<UserData>(*materialized) : nullptr);
+      }
+      return converted;
+   }
+}
+
+template<typename UserData>
+auto default_add_node<UserData>::parse(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> parse_result {
+   if constexpr (std::is_void_v<UserData>) {
+      return detail::parse_default_add_default(tokens, options);
+   } else {
+      auto default_result = detail::parse_default_add_default(tokens, options);
+      parse_result converted;
+      converted.status = default_result.status;
+      converted.success = default_result.success;
+      converted.partial = default_result.partial;
+      converted.error = std::move(default_result.error);
+      if (!options.build_ast) {
+         return converted;
+      }
+      converted.forest.reserve(default_result.forest.size());
+      for (const auto& tree : default_result.forest) {
+         auto materialized = tree.get();
+         converted.forest.emplace_back(materialized != nullptr ? detail::rebind_default_add_node<UserData>(*materialized) : nullptr);
+      }
+      return converted;
+   }
+}
+
+template<typename UserData>
+auto default_add_node<UserData>::recognize(std::string_view input) -> cpf::recognize_result {
+   return detail::recognize_default_add_default(input);
+}
+
+template<typename UserData>
+auto default_add_node<UserData>::recognize(const cpf::token_sequence& tokens) -> cpf::recognize_result {
+   return detail::recognize_default_add_default(tokens);
+}
+
+template<typename UserData>
+auto default_add_node<UserData>::complexity(std::size_t production_index) -> const cpf::complexity& {
+   return detail::complexity_default_add_default(production_index);
+}
+
+template<typename UserData>
+auto default_add_node<UserData>::complexity_inputs(std::size_t production_index) -> std::span<const std::string_view> {
+   return detail::complexity_inputs_default_add_default(production_index);
+}
+
+template<typename UserData>
+auto default_add_node<UserData>::recompute_complexity(std::size_t production_index) -> const cpf::complexity& {
+   return detail::recompute_complexity_default_add_default(production_index);
+}
+
+template<typename UserData>
+auto default_add_node<UserData>::clone() const -> std::unique_ptr<default_add_node<UserData>> {
+   return detail::rebind_default_add_node<UserData>(*this);
+}
+
+template<typename UserData>
+std::unique_ptr<cpf::node> default_add_node<UserData>::clone_node() const {
+   return detail::rebind_default_add_node<UserData>(*this);
+}
+
+template<typename UserData>
+std::ostream& operator<<(std::ostream& os, const default_add_node<UserData>& node) {
+   os << "default_add(\n";
+   detail::write_default_attrs_debug_indent(os, 1);
+   os << "left =";
+   if (node.left) {
+      os << '\n';
+      auto nested_stream = std::ostringstream{};
+      nested_stream << *node.left;
+      detail::write_default_attrs_debug_block(os, nested_stream.str(), 2);
+   } else {
+      os << " null";
+   }
+   os << ',';
+   os << '\n';
+   detail::write_default_attrs_debug_indent(os, 1);
+   os << "op =";
+   os << " " << std::quoted(node.op.text);
+   os << ',';
+   os << '\n';
+   detail::write_default_attrs_debug_indent(os, 1);
+   os << "right =";
+   if (node.right) {
+      os << '\n';
+      auto nested_stream = std::ostringstream{};
+      nested_stream << *node.right;
+      detail::write_default_attrs_debug_block(os, nested_stream.str(), 2);
+   } else {
+      os << " null";
+   }
+   os << '\n';
+   os << ')';
+   return os;
+}
+
+template<typename UserData>
+auto default_subtract_node<UserData>::lex(std::string_view input) -> cpf::token_sequence {
+   return detail::lex_default_attrs_generated(input);
+}
+
+template<typename UserData>
+auto default_subtract_node<UserData>::parse(std::string_view input, const cpf::parse_options& options) -> parse_result {
+   if constexpr (std::is_void_v<UserData>) {
+      return detail::parse_default_subtract_default(input, options);
+   } else {
+      auto default_result = detail::parse_default_subtract_default(input, options);
+      parse_result converted;
+      converted.status = default_result.status;
+      converted.success = default_result.success;
+      converted.partial = default_result.partial;
+      converted.error = std::move(default_result.error);
+      if (!options.build_ast) {
+         return converted;
+      }
+      converted.forest.reserve(default_result.forest.size());
+      for (const auto& tree : default_result.forest) {
+         auto materialized = tree.get();
+         converted.forest.emplace_back(materialized != nullptr ? detail::rebind_default_subtract_node<UserData>(*materialized) : nullptr);
+      }
+      return converted;
+   }
+}
+
+template<typename UserData>
+auto default_subtract_node<UserData>::parse(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> parse_result {
+   if constexpr (std::is_void_v<UserData>) {
+      return detail::parse_default_subtract_default(tokens, options);
+   } else {
+      auto default_result = detail::parse_default_subtract_default(tokens, options);
+      parse_result converted;
+      converted.status = default_result.status;
+      converted.success = default_result.success;
+      converted.partial = default_result.partial;
+      converted.error = std::move(default_result.error);
+      if (!options.build_ast) {
+         return converted;
+      }
+      converted.forest.reserve(default_result.forest.size());
+      for (const auto& tree : default_result.forest) {
+         auto materialized = tree.get();
+         converted.forest.emplace_back(materialized != nullptr ? detail::rebind_default_subtract_node<UserData>(*materialized) : nullptr);
+      }
+      return converted;
+   }
+}
+
+template<typename UserData>
+auto default_subtract_node<UserData>::recognize(std::string_view input) -> cpf::recognize_result {
+   return detail::recognize_default_subtract_default(input);
+}
+
+template<typename UserData>
+auto default_subtract_node<UserData>::recognize(const cpf::token_sequence& tokens) -> cpf::recognize_result {
+   return detail::recognize_default_subtract_default(tokens);
+}
+
+template<typename UserData>
+auto default_subtract_node<UserData>::complexity(std::size_t production_index) -> const cpf::complexity& {
+   return detail::complexity_default_subtract_default(production_index);
+}
+
+template<typename UserData>
+auto default_subtract_node<UserData>::complexity_inputs(std::size_t production_index) -> std::span<const std::string_view> {
+   return detail::complexity_inputs_default_subtract_default(production_index);
+}
+
+template<typename UserData>
+auto default_subtract_node<UserData>::recompute_complexity(std::size_t production_index) -> const cpf::complexity& {
+   return detail::recompute_complexity_default_subtract_default(production_index);
+}
+
+template<typename UserData>
+auto default_subtract_node<UserData>::clone() const -> std::unique_ptr<default_subtract_node<UserData>> {
+   return detail::rebind_default_subtract_node<UserData>(*this);
+}
+
+template<typename UserData>
+std::unique_ptr<cpf::node> default_subtract_node<UserData>::clone_node() const {
+   return detail::rebind_default_subtract_node<UserData>(*this);
+}
+
+template<typename UserData>
+std::ostream& operator<<(std::ostream& os, const default_subtract_node<UserData>& node) {
+   os << "default_subtract(\n";
+   detail::write_default_attrs_debug_indent(os, 1);
+   os << "left =";
+   if (node.left) {
+      os << '\n';
+      auto nested_stream = std::ostringstream{};
+      nested_stream << *node.left;
+      detail::write_default_attrs_debug_block(os, nested_stream.str(), 2);
+   } else {
+      os << " null";
+   }
+   os << ',';
+   os << '\n';
+   detail::write_default_attrs_debug_indent(os, 1);
+   os << "op =";
+   os << " " << std::quoted(node.op.text);
+   os << ',';
+   os << '\n';
+   detail::write_default_attrs_debug_indent(os, 1);
+   os << "right =";
+   if (node.right) {
+      os << '\n';
+      auto nested_stream = std::ostringstream{};
+      nested_stream << *node.right;
+      detail::write_default_attrs_debug_block(os, nested_stream.str(), 2);
+   } else {
+      os << " null";
+   }
+   os << '\n';
+   os << ')';
+   return os;
+}
+
+template<typename UserData>
+auto default_multiply_node<UserData>::lex(std::string_view input) -> cpf::token_sequence {
+   return detail::lex_default_attrs_generated(input);
+}
+
+template<typename UserData>
+auto default_multiply_node<UserData>::parse(std::string_view input, const cpf::parse_options& options) -> parse_result {
+   if constexpr (std::is_void_v<UserData>) {
+      return detail::parse_default_multiply_default(input, options);
+   } else {
+      auto default_result = detail::parse_default_multiply_default(input, options);
+      parse_result converted;
+      converted.status = default_result.status;
+      converted.success = default_result.success;
+      converted.partial = default_result.partial;
+      converted.error = std::move(default_result.error);
+      if (!options.build_ast) {
+         return converted;
+      }
+      converted.forest.reserve(default_result.forest.size());
+      for (const auto& tree : default_result.forest) {
+         auto materialized = tree.get();
+         converted.forest.emplace_back(materialized != nullptr ? detail::rebind_default_multiply_node<UserData>(*materialized) : nullptr);
+      }
+      return converted;
+   }
+}
+
+template<typename UserData>
+auto default_multiply_node<UserData>::parse(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> parse_result {
+   if constexpr (std::is_void_v<UserData>) {
+      return detail::parse_default_multiply_default(tokens, options);
+   } else {
+      auto default_result = detail::parse_default_multiply_default(tokens, options);
+      parse_result converted;
+      converted.status = default_result.status;
+      converted.success = default_result.success;
+      converted.partial = default_result.partial;
+      converted.error = std::move(default_result.error);
+      if (!options.build_ast) {
+         return converted;
+      }
+      converted.forest.reserve(default_result.forest.size());
+      for (const auto& tree : default_result.forest) {
+         auto materialized = tree.get();
+         converted.forest.emplace_back(materialized != nullptr ? detail::rebind_default_multiply_node<UserData>(*materialized) : nullptr);
+      }
+      return converted;
+   }
+}
+
+template<typename UserData>
+auto default_multiply_node<UserData>::recognize(std::string_view input) -> cpf::recognize_result {
+   return detail::recognize_default_multiply_default(input);
+}
+
+template<typename UserData>
+auto default_multiply_node<UserData>::recognize(const cpf::token_sequence& tokens) -> cpf::recognize_result {
+   return detail::recognize_default_multiply_default(tokens);
+}
+
+template<typename UserData>
+auto default_multiply_node<UserData>::complexity(std::size_t production_index) -> const cpf::complexity& {
+   return detail::complexity_default_multiply_default(production_index);
+}
+
+template<typename UserData>
+auto default_multiply_node<UserData>::complexity_inputs(std::size_t production_index) -> std::span<const std::string_view> {
+   return detail::complexity_inputs_default_multiply_default(production_index);
+}
+
+template<typename UserData>
+auto default_multiply_node<UserData>::recompute_complexity(std::size_t production_index) -> const cpf::complexity& {
+   return detail::recompute_complexity_default_multiply_default(production_index);
+}
+
+template<typename UserData>
+auto default_multiply_node<UserData>::clone() const -> std::unique_ptr<default_multiply_node<UserData>> {
+   return detail::rebind_default_multiply_node<UserData>(*this);
+}
+
+template<typename UserData>
+std::unique_ptr<cpf::node> default_multiply_node<UserData>::clone_node() const {
+   return detail::rebind_default_multiply_node<UserData>(*this);
+}
+
+template<typename UserData>
+std::ostream& operator<<(std::ostream& os, const default_multiply_node<UserData>& node) {
+   os << "default_multiply(\n";
+   detail::write_default_attrs_debug_indent(os, 1);
+   os << "left =";
+   if (node.left) {
+      os << '\n';
+      auto nested_stream = std::ostringstream{};
+      nested_stream << *node.left;
+      detail::write_default_attrs_debug_block(os, nested_stream.str(), 2);
+   } else {
+      os << " null";
+   }
+   os << ',';
+   os << '\n';
+   detail::write_default_attrs_debug_indent(os, 1);
+   os << "op =";
+   os << " " << std::quoted(node.op.text);
+   os << ',';
+   os << '\n';
+   detail::write_default_attrs_debug_indent(os, 1);
+   os << "right =";
+   if (node.right) {
+      os << '\n';
+      auto nested_stream = std::ostringstream{};
+      nested_stream << *node.right;
+      detail::write_default_attrs_debug_block(os, nested_stream.str(), 2);
+   } else {
+      os << " null";
+   }
+   os << '\n';
+   os << ')';
+   return os;
+}
+
+template<typename UserData>
+auto default_number_node<UserData>::lex(std::string_view input) -> cpf::token_sequence {
+   return detail::lex_default_attrs_generated(input);
+}
+
+template<typename UserData>
+auto default_number_node<UserData>::parse(std::string_view input, const cpf::parse_options& options) -> parse_result {
+   if constexpr (std::is_void_v<UserData>) {
+      return detail::parse_default_number_default(input, options);
+   } else {
+      auto default_result = detail::parse_default_number_default(input, options);
+      parse_result converted;
+      converted.status = default_result.status;
+      converted.success = default_result.success;
+      converted.partial = default_result.partial;
+      converted.error = std::move(default_result.error);
+      if (!options.build_ast) {
+         return converted;
+      }
+      converted.forest.reserve(default_result.forest.size());
+      for (const auto& tree : default_result.forest) {
+         auto materialized = tree.get();
+         converted.forest.emplace_back(materialized != nullptr ? detail::rebind_default_number_node<UserData>(*materialized) : nullptr);
+      }
+      return converted;
+   }
+}
+
+template<typename UserData>
+auto default_number_node<UserData>::parse(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> parse_result {
+   if constexpr (std::is_void_v<UserData>) {
+      return detail::parse_default_number_default(tokens, options);
+   } else {
+      auto default_result = detail::parse_default_number_default(tokens, options);
+      parse_result converted;
+      converted.status = default_result.status;
+      converted.success = default_result.success;
+      converted.partial = default_result.partial;
+      converted.error = std::move(default_result.error);
+      if (!options.build_ast) {
+         return converted;
+      }
+      converted.forest.reserve(default_result.forest.size());
+      for (const auto& tree : default_result.forest) {
+         auto materialized = tree.get();
+         converted.forest.emplace_back(materialized != nullptr ? detail::rebind_default_number_node<UserData>(*materialized) : nullptr);
+      }
+      return converted;
+   }
+}
+
+template<typename UserData>
+auto default_number_node<UserData>::recognize(std::string_view input) -> cpf::recognize_result {
+   return detail::recognize_default_number_default(input);
+}
+
+template<typename UserData>
+auto default_number_node<UserData>::recognize(const cpf::token_sequence& tokens) -> cpf::recognize_result {
+   return detail::recognize_default_number_default(tokens);
+}
+
+template<typename UserData>
+auto default_number_node<UserData>::complexity(std::size_t production_index) -> const cpf::complexity& {
+   return detail::complexity_default_number_default(production_index);
+}
+
+template<typename UserData>
+auto default_number_node<UserData>::complexity_inputs(std::size_t production_index) -> std::span<const std::string_view> {
+   return detail::complexity_inputs_default_number_default(production_index);
+}
+
+template<typename UserData>
+auto default_number_node<UserData>::recompute_complexity(std::size_t production_index) -> const cpf::complexity& {
+   return detail::recompute_complexity_default_number_default(production_index);
+}
+
+template<typename UserData>
+auto default_number_node<UserData>::clone() const -> std::unique_ptr<default_number_node<UserData>> {
+   return detail::rebind_default_number_node<UserData>(*this);
+}
+
+template<typename UserData>
+std::unique_ptr<cpf::node> default_number_node<UserData>::clone_node() const {
+   return detail::rebind_default_number_node<UserData>(*this);
+}
+
+template<typename UserData>
+std::ostream& operator<<(std::ostream& os, const default_number_node<UserData>& node) {
+   os << "default_number(\n";
+   detail::write_default_attrs_debug_indent(os, 1);
+   os << "value =";
+   os << " " << std::quoted(node.value.text);
+   os << '\n';
+   os << ')';
+   return os;
+}
+

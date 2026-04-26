@@ -1,0 +1,1087 @@
+/// @file
+/// @brief Generated parser API for grammar 'imported_bundle'.
+/// @details
+/// @li Public rules: 5.
+/// @li Synthetic helper rules introduced during lowering: 0.
+/// @li Recursive public rules detected from the grammar graph: none.
+/// @li Rules with repeated-member storage: none.
+/// @li Every generated parse entry point uses the shared Earley runtime with worst-case O(n^3) time and O(n^2) chart space for input length n.
+/// @li Highly ambiguous grammars can grow the returned parse forest beyond the core Earley chart.
+#pragma once
+
+#include <array>
+#include <cpflib>
+#include <iomanip>
+#include <iosfwd>
+#include <memory>
+#include <optional>
+#include <sstream>
+#include <span>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <typeinfo>
+#include <type_traits>
+#include <utility>
+#include <variant>
+#include <vector>
+
+template<typename UserData = void> struct imported_bundle_word_node;
+using imported_bundle_word = imported_bundle_word_node<>;
+template<typename UserData = void> struct imported_bundle_suffix_node;
+using imported_bundle_suffix = imported_bundle_suffix_node<>;
+template<typename UserData = void> struct imported_bundle_greeting_node;
+using imported_bundle_greeting = imported_bundle_greeting_node<>;
+template<typename UserData = void> struct imported_bundle_parting_node;
+using imported_bundle_parting = imported_bundle_parting_node<>;
+template<typename UserData = void> struct imported_bundle_message_node;
+using imported_bundle_message = imported_bundle_message_node<>;
+
+namespace detail {
+
+template<typename Node, typename Parent, typename Visitor>
+void invoke_imported_bundle_recursive_visitor(Node& node, Parent* parent, Visitor&& visitor) {
+   if constexpr (std::is_invocable_v<Visitor&&, Node&, Parent*>) {
+      std::forward<Visitor>(visitor)(node, parent);
+   } else {
+      std::forward<Visitor>(visitor)(node);
+   }
+}
+
+inline void write_imported_bundle_debug_indent(std::ostream& os, std::size_t indent) {
+   for (std::size_t i = 0; i < indent; ++i) {
+      os << "  ";
+   }
+}
+
+inline void write_imported_bundle_debug_block(std::ostream& os, std::string_view block, std::size_t indent) {
+   auto position = std::size_t{0};
+   while (position <= block.size()) {
+      auto line_end = block.find('\n', position);
+      if (line_end == std::string_view::npos) {
+         line_end = block.size();
+      }
+      write_imported_bundle_debug_indent(os, indent);
+      os << block.substr(position, line_end - position);
+      if (line_end == block.size()) {
+         break;
+      }
+      os << '\n';
+      position = line_end + 1;
+   }
+}
+
+} // namespace detail
+
+/// @brief Generated AST node for grammar rule 'imported_bundle_word'.
+/// @details
+/// @li `parse(...)` uses the shared Earley runtime with worst-case O(n^3) time and O(n^2) chart space for input length n.
+/// @li `clone()`, `operator<<`, and `visit_recursive(...)` are O(s) in the size of the reachable subtree.
+/// @li Exclusive node storage is O(1).
+/// @li Captured members: 1 total (terminal scalar=1, terminal optional=0, terminal repeated=0, node scalar=0, node repeated=0, variants=0).
+/// @li Grammar analysis: this rule does not participate in a recursive rule cycle.
+template<typename UserData>
+struct imported_bundle_word_node : cpf::node_with_user_data<UserData> {
+   static constexpr std::size_t RuleId = 0;
+   static constexpr std::size_t ProductionCount = 2;
+   using parse_result = cpf::parse_result<imported_bundle_word_node<UserData>>;
+   cpf::matched_string value;
+
+   imported_bundle_word_node() = default;
+   imported_bundle_word_node(imported_bundle_word_node&&) = default;
+   auto operator=(imported_bundle_word_node&&) -> imported_bundle_word_node& = default;
+   imported_bundle_word_node(const imported_bundle_word_node&) = delete;
+   auto operator=(const imported_bundle_word_node&) -> imported_bundle_word_node& = delete;
+   ~imported_bundle_word_node() override = default;
+   static auto lex(std::string_view input) -> cpf::token_sequence;
+   static parse_result parse(std::string_view input, const cpf::parse_options& options = {});
+   static parse_result parse(const cpf::token_sequence& tokens, const cpf::parse_options& options = {});
+   static cpf::recognize_result recognize(std::string_view input);
+   static cpf::recognize_result recognize(const cpf::token_sequence& tokens);
+   static auto complexity(std::size_t production_index) -> const cpf::complexity&;
+   static auto complexity_inputs(std::size_t production_index) -> std::span<const std::string_view>;
+   static auto recompute_complexity(std::size_t production_index) -> const cpf::complexity&;
+   std::size_t rule_id() const override { return RuleId; }
+   std::unique_ptr<imported_bundle_word_node<UserData>> clone() const;
+
+   protected:
+      std::unique_ptr<cpf::node> clone_node() const override;
+};
+template<typename UserData>
+std::ostream& operator<<(std::ostream& os, const imported_bundle_word_node<UserData>& node);
+
+/// @brief Generated AST node for grammar rule 'imported_bundle_suffix'.
+/// @details
+/// @li `parse(...)` uses the shared Earley runtime with worst-case O(n^3) time and O(n^2) chart space for input length n.
+/// @li `clone()`, `operator<<`, and `visit_recursive(...)` are O(s) in the size of the reachable subtree.
+/// @li Exclusive node storage is O(1).
+/// @li Captured members: 1 total (terminal scalar=1, terminal optional=0, terminal repeated=0, node scalar=0, node repeated=0, variants=0).
+/// @li Grammar analysis: this rule does not participate in a recursive rule cycle.
+template<typename UserData>
+struct imported_bundle_suffix_node : cpf::node_with_user_data<UserData> {
+   static constexpr std::size_t RuleId = 1;
+   static constexpr std::size_t ProductionCount = 1;
+   using parse_result = cpf::parse_result<imported_bundle_suffix_node<UserData>>;
+   cpf::matched_string value;
+
+   imported_bundle_suffix_node() = default;
+   imported_bundle_suffix_node(imported_bundle_suffix_node&&) = default;
+   auto operator=(imported_bundle_suffix_node&&) -> imported_bundle_suffix_node& = default;
+   imported_bundle_suffix_node(const imported_bundle_suffix_node&) = delete;
+   auto operator=(const imported_bundle_suffix_node&) -> imported_bundle_suffix_node& = delete;
+   ~imported_bundle_suffix_node() override = default;
+   static auto lex(std::string_view input) -> cpf::token_sequence;
+   static parse_result parse(std::string_view input, const cpf::parse_options& options = {});
+   static parse_result parse(const cpf::token_sequence& tokens, const cpf::parse_options& options = {});
+   static cpf::recognize_result recognize(std::string_view input);
+   static cpf::recognize_result recognize(const cpf::token_sequence& tokens);
+   static auto complexity(std::size_t production_index) -> const cpf::complexity&;
+   static auto complexity_inputs(std::size_t production_index) -> std::span<const std::string_view>;
+   static auto recompute_complexity(std::size_t production_index) -> const cpf::complexity&;
+   std::size_t rule_id() const override { return RuleId; }
+   std::unique_ptr<imported_bundle_suffix_node<UserData>> clone() const;
+
+   protected:
+      std::unique_ptr<cpf::node> clone_node() const override;
+};
+template<typename UserData>
+std::ostream& operator<<(std::ostream& os, const imported_bundle_suffix_node<UserData>& node);
+
+/// @brief Generated AST node for grammar rule 'imported_bundle_greeting'.
+/// @details
+/// @li `parse(...)` uses the shared Earley runtime with worst-case O(n^3) time and O(n^2) chart space for input length n.
+/// @li `clone()`, `operator<<`, and `visit_recursive(...)` are O(s) in the size of the reachable subtree.
+/// @li Exclusive node storage is O(1).
+/// @li Captured members: 2 total (terminal scalar=0, terminal optional=0, terminal repeated=0, node scalar=2, node repeated=0, variants=0).
+/// @li Grammar analysis: this rule does not participate in a recursive rule cycle.
+template<typename UserData>
+struct imported_bundle_greeting_node : imported_bundle_message_node<UserData> {
+   static constexpr std::size_t RuleId = 2;
+   static constexpr std::size_t ProductionCount = 1;
+   using parse_result = cpf::parse_result<imported_bundle_greeting_node<UserData>>;
+   std::unique_ptr<imported_bundle_word_node<UserData>> text;
+   std::unique_ptr<imported_bundle_suffix_node<UserData>> suffix;
+
+   imported_bundle_greeting_node() = default;
+   imported_bundle_greeting_node(imported_bundle_greeting_node&&) = default;
+   auto operator=(imported_bundle_greeting_node&&) -> imported_bundle_greeting_node& = default;
+   imported_bundle_greeting_node(const imported_bundle_greeting_node&) = delete;
+   auto operator=(const imported_bundle_greeting_node&) -> imported_bundle_greeting_node& = delete;
+   ~imported_bundle_greeting_node() override = default;
+   static auto lex(std::string_view input) -> cpf::token_sequence;
+   static parse_result parse(std::string_view input, const cpf::parse_options& options = {});
+   static parse_result parse(const cpf::token_sequence& tokens, const cpf::parse_options& options = {});
+   static cpf::recognize_result recognize(std::string_view input);
+   static cpf::recognize_result recognize(const cpf::token_sequence& tokens);
+   static auto complexity(std::size_t production_index) -> const cpf::complexity&;
+   static auto complexity_inputs(std::size_t production_index) -> std::span<const std::string_view>;
+   static auto recompute_complexity(std::size_t production_index) -> const cpf::complexity&;
+   std::size_t rule_id() const override { return RuleId; }
+   std::unique_ptr<imported_bundle_greeting_node<UserData>> clone() const;
+
+   protected:
+      std::unique_ptr<cpf::node> clone_node() const override;
+};
+template<typename UserData>
+std::ostream& operator<<(std::ostream& os, const imported_bundle_greeting_node<UserData>& node);
+
+/// @brief Generated AST node for grammar rule 'imported_bundle_parting'.
+/// @details
+/// @li `parse(...)` uses the shared Earley runtime with worst-case O(n^3) time and O(n^2) chart space for input length n.
+/// @li `clone()`, `operator<<`, and `visit_recursive(...)` are O(s) in the size of the reachable subtree.
+/// @li Exclusive node storage is O(1).
+/// @li Captured members: 1 total (terminal scalar=1, terminal optional=0, terminal repeated=0, node scalar=0, node repeated=0, variants=0).
+/// @li Grammar analysis: this rule does not participate in a recursive rule cycle.
+template<typename UserData>
+struct imported_bundle_parting_node : imported_bundle_message_node<UserData> {
+   static constexpr std::size_t RuleId = 3;
+   static constexpr std::size_t ProductionCount = 1;
+   using parse_result = cpf::parse_result<imported_bundle_parting_node<UserData>>;
+   cpf::matched_string text;
+
+   imported_bundle_parting_node() = default;
+   imported_bundle_parting_node(imported_bundle_parting_node&&) = default;
+   auto operator=(imported_bundle_parting_node&&) -> imported_bundle_parting_node& = default;
+   imported_bundle_parting_node(const imported_bundle_parting_node&) = delete;
+   auto operator=(const imported_bundle_parting_node&) -> imported_bundle_parting_node& = delete;
+   ~imported_bundle_parting_node() override = default;
+   static auto lex(std::string_view input) -> cpf::token_sequence;
+   static parse_result parse(std::string_view input, const cpf::parse_options& options = {});
+   static parse_result parse(const cpf::token_sequence& tokens, const cpf::parse_options& options = {});
+   static cpf::recognize_result recognize(std::string_view input);
+   static cpf::recognize_result recognize(const cpf::token_sequence& tokens);
+   static auto complexity(std::size_t production_index) -> const cpf::complexity&;
+   static auto complexity_inputs(std::size_t production_index) -> std::span<const std::string_view>;
+   static auto recompute_complexity(std::size_t production_index) -> const cpf::complexity&;
+   std::size_t rule_id() const override { return RuleId; }
+   std::unique_ptr<imported_bundle_parting_node<UserData>> clone() const;
+
+   protected:
+      std::unique_ptr<cpf::node> clone_node() const override;
+};
+template<typename UserData>
+std::ostream& operator<<(std::ostream& os, const imported_bundle_parting_node<UserData>& node);
+
+/// @brief Generated AST node for grammar rule 'imported_bundle_message'.
+/// @details
+/// @li `parse(...)` uses the shared Earley runtime with worst-case O(n^3) time and O(n^2) chart space for input length n.
+/// @li `clone()`, `operator<<`, and `visit_recursive(...)` are O(s) in the size of the reachable subtree.
+/// @li Exclusive node storage is O(1).
+/// @li Captured members: 0 total (terminal scalar=0, terminal optional=0, terminal repeated=0, node scalar=0, node repeated=0, variants=0).
+/// @li Grammar analysis: this rule does not participate in a recursive rule cycle.
+template<typename UserData>
+struct imported_bundle_message_node : cpf::node_with_user_data<UserData> {
+   static constexpr std::size_t RuleId = 4;
+   static constexpr std::size_t ProductionCount = 2;
+   using parse_result = cpf::parse_result<imported_bundle_message_node<UserData>>;
+   imported_bundle_message_node() = default;
+   imported_bundle_message_node(imported_bundle_message_node&&) = default;
+   auto operator=(imported_bundle_message_node&&) -> imported_bundle_message_node& = default;
+   imported_bundle_message_node(const imported_bundle_message_node&) = delete;
+   auto operator=(const imported_bundle_message_node&) -> imported_bundle_message_node& = delete;
+   ~imported_bundle_message_node() override = default;
+   static auto lex(std::string_view input) -> cpf::token_sequence;
+   static parse_result parse(std::string_view input, const cpf::parse_options& options = {});
+   static parse_result parse(const cpf::token_sequence& tokens, const cpf::parse_options& options = {});
+   static cpf::recognize_result recognize(std::string_view input);
+   static cpf::recognize_result recognize(const cpf::token_sequence& tokens);
+   static auto complexity(std::size_t production_index) -> const cpf::complexity&;
+   static auto complexity_inputs(std::size_t production_index) -> std::span<const std::string_view>;
+   static auto recompute_complexity(std::size_t production_index) -> const cpf::complexity&;
+   std::size_t rule_id() const override { return RuleId; }
+   std::unique_ptr<imported_bundle_message_node<UserData>> clone() const;
+
+   protected:
+      std::unique_ptr<cpf::node> clone_node() const override;
+};
+template<typename UserData>
+std::ostream& operator<<(std::ostream& os, const imported_bundle_message_node<UserData>& node);
+
+template<typename UserData, typename Visitor>
+auto visit(const imported_bundle_word_node<UserData>& node, Visitor&& visitor) {
+   return std::forward<Visitor>(visitor)(node);
+}
+
+template<typename UserData, typename Visitor>
+auto visit(imported_bundle_word_node<UserData>& node, Visitor&& visitor) {
+   return std::forward<Visitor>(visitor)(node);
+}
+
+template<typename UserData, typename Visitor>
+void visit_recursive(const imported_bundle_word_node<UserData>& node, Visitor&& visitor) {
+   visit_recursive(node, std::forward<Visitor>(visitor), static_cast<const cpf::node*>(nullptr));
+}
+
+template<typename UserData, typename Visitor, typename Parent>
+void visit_recursive(const imported_bundle_word_node<UserData>& node, Visitor&& visitor, const Parent* parent) {
+   detail::invoke_imported_bundle_recursive_visitor(node, parent, std::forward<Visitor>(visitor));
+}
+
+template<typename UserData, typename Visitor>
+void visit_recursive(imported_bundle_word_node<UserData>& node, Visitor&& visitor) {
+   visit_recursive(node, std::forward<Visitor>(visitor), static_cast<cpf::node*>(nullptr));
+}
+
+template<typename UserData, typename Visitor, typename Parent>
+void visit_recursive(imported_bundle_word_node<UserData>& node, Visitor&& visitor, Parent* parent) {
+   detail::invoke_imported_bundle_recursive_visitor(node, parent, std::forward<Visitor>(visitor));
+}
+
+template<typename UserData, typename Visitor>
+auto visit(const imported_bundle_suffix_node<UserData>& node, Visitor&& visitor) {
+   return std::forward<Visitor>(visitor)(node);
+}
+
+template<typename UserData, typename Visitor>
+auto visit(imported_bundle_suffix_node<UserData>& node, Visitor&& visitor) {
+   return std::forward<Visitor>(visitor)(node);
+}
+
+template<typename UserData, typename Visitor>
+void visit_recursive(const imported_bundle_suffix_node<UserData>& node, Visitor&& visitor) {
+   visit_recursive(node, std::forward<Visitor>(visitor), static_cast<const cpf::node*>(nullptr));
+}
+
+template<typename UserData, typename Visitor, typename Parent>
+void visit_recursive(const imported_bundle_suffix_node<UserData>& node, Visitor&& visitor, const Parent* parent) {
+   detail::invoke_imported_bundle_recursive_visitor(node, parent, std::forward<Visitor>(visitor));
+}
+
+template<typename UserData, typename Visitor>
+void visit_recursive(imported_bundle_suffix_node<UserData>& node, Visitor&& visitor) {
+   visit_recursive(node, std::forward<Visitor>(visitor), static_cast<cpf::node*>(nullptr));
+}
+
+template<typename UserData, typename Visitor, typename Parent>
+void visit_recursive(imported_bundle_suffix_node<UserData>& node, Visitor&& visitor, Parent* parent) {
+   detail::invoke_imported_bundle_recursive_visitor(node, parent, std::forward<Visitor>(visitor));
+}
+
+template<typename UserData, typename Visitor>
+auto visit(const imported_bundle_greeting_node<UserData>& node, Visitor&& visitor) {
+   return std::forward<Visitor>(visitor)(node);
+}
+
+template<typename UserData, typename Visitor>
+auto visit(imported_bundle_greeting_node<UserData>& node, Visitor&& visitor) {
+   return std::forward<Visitor>(visitor)(node);
+}
+
+template<typename UserData, typename Visitor>
+void visit_recursive(const imported_bundle_greeting_node<UserData>& node, Visitor&& visitor) {
+   visit_recursive(node, std::forward<Visitor>(visitor), static_cast<const cpf::node*>(nullptr));
+}
+
+template<typename UserData, typename Visitor, typename Parent>
+void visit_recursive(const imported_bundle_greeting_node<UserData>& node, Visitor&& visitor, const Parent* parent) {
+   detail::invoke_imported_bundle_recursive_visitor(node, parent, std::forward<Visitor>(visitor));
+   if (node.text) {
+      visit_recursive(*node.text, visitor, &node);
+   }
+   if (node.suffix) {
+      visit_recursive(*node.suffix, visitor, &node);
+   }
+}
+
+template<typename UserData, typename Visitor>
+void visit_recursive(imported_bundle_greeting_node<UserData>& node, Visitor&& visitor) {
+   visit_recursive(node, std::forward<Visitor>(visitor), static_cast<cpf::node*>(nullptr));
+}
+
+template<typename UserData, typename Visitor, typename Parent>
+void visit_recursive(imported_bundle_greeting_node<UserData>& node, Visitor&& visitor, Parent* parent) {
+   detail::invoke_imported_bundle_recursive_visitor(node, parent, std::forward<Visitor>(visitor));
+   if (node.text) {
+      visit_recursive(*node.text, visitor, &node);
+   }
+   if (node.suffix) {
+      visit_recursive(*node.suffix, visitor, &node);
+   }
+}
+
+template<typename UserData, typename Visitor>
+auto visit(const imported_bundle_parting_node<UserData>& node, Visitor&& visitor) {
+   return std::forward<Visitor>(visitor)(node);
+}
+
+template<typename UserData, typename Visitor>
+auto visit(imported_bundle_parting_node<UserData>& node, Visitor&& visitor) {
+   return std::forward<Visitor>(visitor)(node);
+}
+
+template<typename UserData, typename Visitor>
+void visit_recursive(const imported_bundle_parting_node<UserData>& node, Visitor&& visitor) {
+   visit_recursive(node, std::forward<Visitor>(visitor), static_cast<const cpf::node*>(nullptr));
+}
+
+template<typename UserData, typename Visitor, typename Parent>
+void visit_recursive(const imported_bundle_parting_node<UserData>& node, Visitor&& visitor, const Parent* parent) {
+   detail::invoke_imported_bundle_recursive_visitor(node, parent, std::forward<Visitor>(visitor));
+}
+
+template<typename UserData, typename Visitor>
+void visit_recursive(imported_bundle_parting_node<UserData>& node, Visitor&& visitor) {
+   visit_recursive(node, std::forward<Visitor>(visitor), static_cast<cpf::node*>(nullptr));
+}
+
+template<typename UserData, typename Visitor, typename Parent>
+void visit_recursive(imported_bundle_parting_node<UserData>& node, Visitor&& visitor, Parent* parent) {
+   detail::invoke_imported_bundle_recursive_visitor(node, parent, std::forward<Visitor>(visitor));
+}
+
+template<typename UserData, typename Visitor>
+auto visit(const imported_bundle_message_node<UserData>& node, Visitor&& visitor) {
+   switch (node.rule_id()) {
+      case imported_bundle_greeting_node<UserData>::RuleId:
+         return visit(static_cast<const imported_bundle_greeting_node<UserData>&>(node), visitor);
+      case imported_bundle_parting_node<UserData>::RuleId:
+         return visit(static_cast<const imported_bundle_parting_node<UserData>&>(node), visitor);
+      default:
+         throw std::bad_cast{};
+   }
+}
+
+template<typename UserData, typename Visitor>
+auto visit(imported_bundle_message_node<UserData>& node, Visitor&& visitor) {
+   switch (node.rule_id()) {
+      case imported_bundle_greeting_node<UserData>::RuleId:
+         return visit(static_cast<imported_bundle_greeting_node<UserData>&>(node), visitor);
+      case imported_bundle_parting_node<UserData>::RuleId:
+         return visit(static_cast<imported_bundle_parting_node<UserData>&>(node), visitor);
+      default:
+         throw std::bad_cast{};
+   }
+}
+
+template<typename UserData, typename Visitor>
+void visit_recursive(const imported_bundle_message_node<UserData>& node, Visitor&& visitor) {
+   visit_recursive(node, std::forward<Visitor>(visitor), static_cast<const cpf::node*>(nullptr));
+}
+
+template<typename UserData, typename Visitor, typename Parent>
+void visit_recursive(const imported_bundle_message_node<UserData>& node, Visitor&& visitor, const Parent* parent) {
+   switch (node.rule_id()) {
+      case imported_bundle_greeting_node<UserData>::RuleId:
+         visit_recursive(static_cast<const imported_bundle_greeting_node<UserData>&>(node), visitor, parent);
+         return;
+      case imported_bundle_parting_node<UserData>::RuleId:
+         visit_recursive(static_cast<const imported_bundle_parting_node<UserData>&>(node), visitor, parent);
+         return;
+      default:
+         throw std::bad_cast{};
+   }
+}
+
+template<typename UserData, typename Visitor>
+void visit_recursive(imported_bundle_message_node<UserData>& node, Visitor&& visitor) {
+   visit_recursive(node, std::forward<Visitor>(visitor), static_cast<cpf::node*>(nullptr));
+}
+
+template<typename UserData, typename Visitor, typename Parent>
+void visit_recursive(imported_bundle_message_node<UserData>& node, Visitor&& visitor, Parent* parent) {
+   switch (node.rule_id()) {
+      case imported_bundle_greeting_node<UserData>::RuleId:
+         visit_recursive(static_cast<imported_bundle_greeting_node<UserData>&>(node), visitor, parent);
+         return;
+      case imported_bundle_parting_node<UserData>::RuleId:
+         visit_recursive(static_cast<imported_bundle_parting_node<UserData>&>(node), visitor, parent);
+         return;
+      default:
+         throw std::bad_cast{};
+   }
+}
+
+namespace detail {
+
+auto lex_imported_bundle_generated(std::string_view input) -> cpf::token_sequence;
+
+auto parse_imported_bundle_word_default(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<imported_bundle_word>;
+auto parse_imported_bundle_word_default(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<imported_bundle_word>;
+auto recognize_imported_bundle_word_default(std::string_view input) -> cpf::recognize_result;
+auto recognize_imported_bundle_word_default(const cpf::token_sequence& tokens) -> cpf::recognize_result;
+auto complexity_inputs_imported_bundle_word_default(std::size_t production_index) -> std::span<const std::string_view>;
+auto complexity_imported_bundle_word_default(std::size_t production_index) -> const cpf::complexity&;
+auto recompute_complexity_imported_bundle_word_default(std::size_t production_index) -> const cpf::complexity&;
+auto parse_imported_bundle_suffix_default(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<imported_bundle_suffix>;
+auto parse_imported_bundle_suffix_default(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<imported_bundle_suffix>;
+auto recognize_imported_bundle_suffix_default(std::string_view input) -> cpf::recognize_result;
+auto recognize_imported_bundle_suffix_default(const cpf::token_sequence& tokens) -> cpf::recognize_result;
+auto complexity_inputs_imported_bundle_suffix_default(std::size_t production_index) -> std::span<const std::string_view>;
+auto complexity_imported_bundle_suffix_default(std::size_t production_index) -> const cpf::complexity&;
+auto recompute_complexity_imported_bundle_suffix_default(std::size_t production_index) -> const cpf::complexity&;
+auto parse_imported_bundle_message_default(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<imported_bundle_message>;
+auto parse_imported_bundle_message_default(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<imported_bundle_message>;
+auto recognize_imported_bundle_message_default(std::string_view input) -> cpf::recognize_result;
+auto recognize_imported_bundle_message_default(const cpf::token_sequence& tokens) -> cpf::recognize_result;
+auto complexity_inputs_imported_bundle_message_default(std::size_t production_index) -> std::span<const std::string_view>;
+auto complexity_imported_bundle_message_default(std::size_t production_index) -> const cpf::complexity&;
+auto recompute_complexity_imported_bundle_message_default(std::size_t production_index) -> const cpf::complexity&;
+auto parse_imported_bundle_greeting_default(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<imported_bundle_greeting>;
+auto parse_imported_bundle_greeting_default(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<imported_bundle_greeting>;
+auto recognize_imported_bundle_greeting_default(std::string_view input) -> cpf::recognize_result;
+auto recognize_imported_bundle_greeting_default(const cpf::token_sequence& tokens) -> cpf::recognize_result;
+auto complexity_inputs_imported_bundle_greeting_default(std::size_t production_index) -> std::span<const std::string_view>;
+auto complexity_imported_bundle_greeting_default(std::size_t production_index) -> const cpf::complexity&;
+auto recompute_complexity_imported_bundle_greeting_default(std::size_t production_index) -> const cpf::complexity&;
+auto parse_imported_bundle_parting_default(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<imported_bundle_parting>;
+auto parse_imported_bundle_parting_default(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<imported_bundle_parting>;
+auto recognize_imported_bundle_parting_default(std::string_view input) -> cpf::recognize_result;
+auto recognize_imported_bundle_parting_default(const cpf::token_sequence& tokens) -> cpf::recognize_result;
+auto complexity_inputs_imported_bundle_parting_default(std::size_t production_index) -> std::span<const std::string_view>;
+auto complexity_imported_bundle_parting_default(std::size_t production_index) -> const cpf::complexity&;
+auto recompute_complexity_imported_bundle_parting_default(std::size_t production_index) -> const cpf::complexity&;
+template<typename TargetUserData, typename SourceUserData>
+auto rebind_imported_bundle_word_node(const imported_bundle_word_node<SourceUserData>& node) -> std::unique_ptr<imported_bundle_word_node<TargetUserData>>;
+
+template<typename TargetUserData, typename SourceUserData>
+auto rebind_imported_bundle_suffix_node(const imported_bundle_suffix_node<SourceUserData>& node) -> std::unique_ptr<imported_bundle_suffix_node<TargetUserData>>;
+
+template<typename TargetUserData, typename SourceUserData>
+auto rebind_imported_bundle_greeting_node(const imported_bundle_greeting_node<SourceUserData>& node) -> std::unique_ptr<imported_bundle_greeting_node<TargetUserData>>;
+
+template<typename TargetUserData, typename SourceUserData>
+auto rebind_imported_bundle_parting_node(const imported_bundle_parting_node<SourceUserData>& node) -> std::unique_ptr<imported_bundle_parting_node<TargetUserData>>;
+
+template<typename TargetUserData, typename SourceUserData>
+auto rebind_imported_bundle_message_node(const imported_bundle_message_node<SourceUserData>& node) -> std::unique_ptr<imported_bundle_message_node<TargetUserData>>;
+
+template<typename TargetUserData, typename SourceUserData>
+auto rebind_imported_bundle_word_node(const imported_bundle_word_node<SourceUserData>& node) -> std::unique_ptr<imported_bundle_word_node<TargetUserData>> {
+   auto copy = std::make_unique<imported_bundle_word_node<TargetUserData>>();
+   copy->production_index = node.production_index;
+   copy->range = node.range;
+   for (const auto& damage : node.damage()) {
+      cpf::detail::add_damage(*copy, damage);
+   }
+   if constexpr (!std::is_void_v<TargetUserData> && !std::is_void_v<SourceUserData>) {
+      copy->user_data = node.user_data;
+   }
+   copy->value = node.value;
+   return copy;
+}
+
+template<typename TargetUserData, typename SourceUserData>
+auto rebind_imported_bundle_suffix_node(const imported_bundle_suffix_node<SourceUserData>& node) -> std::unique_ptr<imported_bundle_suffix_node<TargetUserData>> {
+   auto copy = std::make_unique<imported_bundle_suffix_node<TargetUserData>>();
+   copy->production_index = node.production_index;
+   copy->range = node.range;
+   for (const auto& damage : node.damage()) {
+      cpf::detail::add_damage(*copy, damage);
+   }
+   if constexpr (!std::is_void_v<TargetUserData> && !std::is_void_v<SourceUserData>) {
+      copy->user_data = node.user_data;
+   }
+   copy->value = node.value;
+   return copy;
+}
+
+template<typename TargetUserData, typename SourceUserData>
+auto rebind_imported_bundle_greeting_node(const imported_bundle_greeting_node<SourceUserData>& node) -> std::unique_ptr<imported_bundle_greeting_node<TargetUserData>> {
+   auto copy = std::make_unique<imported_bundle_greeting_node<TargetUserData>>();
+   copy->production_index = node.production_index;
+   copy->range = node.range;
+   for (const auto& damage : node.damage()) {
+      cpf::detail::add_damage(*copy, damage);
+   }
+   if constexpr (!std::is_void_v<TargetUserData> && !std::is_void_v<SourceUserData>) {
+      copy->user_data = node.user_data;
+   }
+   copy->text = node.text ? detail::rebind_imported_bundle_word_node<TargetUserData>(*node.text) : nullptr;
+   copy->suffix = node.suffix ? detail::rebind_imported_bundle_suffix_node<TargetUserData>(*node.suffix) : nullptr;
+   return copy;
+}
+
+template<typename TargetUserData, typename SourceUserData>
+auto rebind_imported_bundle_parting_node(const imported_bundle_parting_node<SourceUserData>& node) -> std::unique_ptr<imported_bundle_parting_node<TargetUserData>> {
+   auto copy = std::make_unique<imported_bundle_parting_node<TargetUserData>>();
+   copy->production_index = node.production_index;
+   copy->range = node.range;
+   for (const auto& damage : node.damage()) {
+      cpf::detail::add_damage(*copy, damage);
+   }
+   if constexpr (!std::is_void_v<TargetUserData> && !std::is_void_v<SourceUserData>) {
+      copy->user_data = node.user_data;
+   }
+   copy->text = node.text;
+   return copy;
+}
+
+template<typename TargetUserData, typename SourceUserData>
+auto rebind_imported_bundle_message_node(const imported_bundle_message_node<SourceUserData>& node) -> std::unique_ptr<imported_bundle_message_node<TargetUserData>> {
+   switch (node.rule_id()) {
+      case imported_bundle_greeting_node<SourceUserData>::RuleId:
+         return rebind_imported_bundle_greeting_node<TargetUserData>(static_cast<const imported_bundle_greeting_node<SourceUserData>&>(node));
+      case imported_bundle_parting_node<SourceUserData>::RuleId:
+         return rebind_imported_bundle_parting_node<TargetUserData>(static_cast<const imported_bundle_parting_node<SourceUserData>&>(node));
+      default:
+         throw std::bad_cast{};
+   }
+}
+
+} // namespace detail
+
+template<typename UserData>
+auto imported_bundle_word_node<UserData>::lex(std::string_view input) -> cpf::token_sequence {
+   return detail::lex_imported_bundle_generated(input);
+}
+
+template<typename UserData>
+auto imported_bundle_word_node<UserData>::parse(std::string_view input, const cpf::parse_options& options) -> parse_result {
+   if constexpr (std::is_void_v<UserData>) {
+      return detail::parse_imported_bundle_word_default(input, options);
+   } else {
+      auto default_result = detail::parse_imported_bundle_word_default(input, options);
+      parse_result converted;
+      converted.status = default_result.status;
+      converted.success = default_result.success;
+      converted.partial = default_result.partial;
+      converted.error = std::move(default_result.error);
+      if (!options.build_ast) {
+         return converted;
+      }
+      converted.forest.reserve(default_result.forest.size());
+      for (const auto& tree : default_result.forest) {
+         auto materialized = tree.get();
+         converted.forest.emplace_back(materialized != nullptr ? detail::rebind_imported_bundle_word_node<UserData>(*materialized) : nullptr);
+      }
+      return converted;
+   }
+}
+
+template<typename UserData>
+auto imported_bundle_word_node<UserData>::parse(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> parse_result {
+   if constexpr (std::is_void_v<UserData>) {
+      return detail::parse_imported_bundle_word_default(tokens, options);
+   } else {
+      auto default_result = detail::parse_imported_bundle_word_default(tokens, options);
+      parse_result converted;
+      converted.status = default_result.status;
+      converted.success = default_result.success;
+      converted.partial = default_result.partial;
+      converted.error = std::move(default_result.error);
+      if (!options.build_ast) {
+         return converted;
+      }
+      converted.forest.reserve(default_result.forest.size());
+      for (const auto& tree : default_result.forest) {
+         auto materialized = tree.get();
+         converted.forest.emplace_back(materialized != nullptr ? detail::rebind_imported_bundle_word_node<UserData>(*materialized) : nullptr);
+      }
+      return converted;
+   }
+}
+
+template<typename UserData>
+auto imported_bundle_word_node<UserData>::recognize(std::string_view input) -> cpf::recognize_result {
+   return detail::recognize_imported_bundle_word_default(input);
+}
+
+template<typename UserData>
+auto imported_bundle_word_node<UserData>::recognize(const cpf::token_sequence& tokens) -> cpf::recognize_result {
+   return detail::recognize_imported_bundle_word_default(tokens);
+}
+
+template<typename UserData>
+auto imported_bundle_word_node<UserData>::complexity(std::size_t production_index) -> const cpf::complexity& {
+   return detail::complexity_imported_bundle_word_default(production_index);
+}
+
+template<typename UserData>
+auto imported_bundle_word_node<UserData>::complexity_inputs(std::size_t production_index) -> std::span<const std::string_view> {
+   return detail::complexity_inputs_imported_bundle_word_default(production_index);
+}
+
+template<typename UserData>
+auto imported_bundle_word_node<UserData>::recompute_complexity(std::size_t production_index) -> const cpf::complexity& {
+   return detail::recompute_complexity_imported_bundle_word_default(production_index);
+}
+
+template<typename UserData>
+auto imported_bundle_word_node<UserData>::clone() const -> std::unique_ptr<imported_bundle_word_node<UserData>> {
+   return detail::rebind_imported_bundle_word_node<UserData>(*this);
+}
+
+template<typename UserData>
+std::unique_ptr<cpf::node> imported_bundle_word_node<UserData>::clone_node() const {
+   return detail::rebind_imported_bundle_word_node<UserData>(*this);
+}
+
+template<typename UserData>
+std::ostream& operator<<(std::ostream& os, const imported_bundle_word_node<UserData>& node) {
+   os << "imported_bundle_word(\n";
+   detail::write_imported_bundle_debug_indent(os, 1);
+   os << "value =";
+   os << " " << std::quoted(node.value.text);
+   os << '\n';
+   os << ')';
+   return os;
+}
+
+template<typename UserData>
+auto imported_bundle_suffix_node<UserData>::lex(std::string_view input) -> cpf::token_sequence {
+   return detail::lex_imported_bundle_generated(input);
+}
+
+template<typename UserData>
+auto imported_bundle_suffix_node<UserData>::parse(std::string_view input, const cpf::parse_options& options) -> parse_result {
+   if constexpr (std::is_void_v<UserData>) {
+      return detail::parse_imported_bundle_suffix_default(input, options);
+   } else {
+      auto default_result = detail::parse_imported_bundle_suffix_default(input, options);
+      parse_result converted;
+      converted.status = default_result.status;
+      converted.success = default_result.success;
+      converted.partial = default_result.partial;
+      converted.error = std::move(default_result.error);
+      if (!options.build_ast) {
+         return converted;
+      }
+      converted.forest.reserve(default_result.forest.size());
+      for (const auto& tree : default_result.forest) {
+         auto materialized = tree.get();
+         converted.forest.emplace_back(materialized != nullptr ? detail::rebind_imported_bundle_suffix_node<UserData>(*materialized) : nullptr);
+      }
+      return converted;
+   }
+}
+
+template<typename UserData>
+auto imported_bundle_suffix_node<UserData>::parse(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> parse_result {
+   if constexpr (std::is_void_v<UserData>) {
+      return detail::parse_imported_bundle_suffix_default(tokens, options);
+   } else {
+      auto default_result = detail::parse_imported_bundle_suffix_default(tokens, options);
+      parse_result converted;
+      converted.status = default_result.status;
+      converted.success = default_result.success;
+      converted.partial = default_result.partial;
+      converted.error = std::move(default_result.error);
+      if (!options.build_ast) {
+         return converted;
+      }
+      converted.forest.reserve(default_result.forest.size());
+      for (const auto& tree : default_result.forest) {
+         auto materialized = tree.get();
+         converted.forest.emplace_back(materialized != nullptr ? detail::rebind_imported_bundle_suffix_node<UserData>(*materialized) : nullptr);
+      }
+      return converted;
+   }
+}
+
+template<typename UserData>
+auto imported_bundle_suffix_node<UserData>::recognize(std::string_view input) -> cpf::recognize_result {
+   return detail::recognize_imported_bundle_suffix_default(input);
+}
+
+template<typename UserData>
+auto imported_bundle_suffix_node<UserData>::recognize(const cpf::token_sequence& tokens) -> cpf::recognize_result {
+   return detail::recognize_imported_bundle_suffix_default(tokens);
+}
+
+template<typename UserData>
+auto imported_bundle_suffix_node<UserData>::complexity(std::size_t production_index) -> const cpf::complexity& {
+   return detail::complexity_imported_bundle_suffix_default(production_index);
+}
+
+template<typename UserData>
+auto imported_bundle_suffix_node<UserData>::complexity_inputs(std::size_t production_index) -> std::span<const std::string_view> {
+   return detail::complexity_inputs_imported_bundle_suffix_default(production_index);
+}
+
+template<typename UserData>
+auto imported_bundle_suffix_node<UserData>::recompute_complexity(std::size_t production_index) -> const cpf::complexity& {
+   return detail::recompute_complexity_imported_bundle_suffix_default(production_index);
+}
+
+template<typename UserData>
+auto imported_bundle_suffix_node<UserData>::clone() const -> std::unique_ptr<imported_bundle_suffix_node<UserData>> {
+   return detail::rebind_imported_bundle_suffix_node<UserData>(*this);
+}
+
+template<typename UserData>
+std::unique_ptr<cpf::node> imported_bundle_suffix_node<UserData>::clone_node() const {
+   return detail::rebind_imported_bundle_suffix_node<UserData>(*this);
+}
+
+template<typename UserData>
+std::ostream& operator<<(std::ostream& os, const imported_bundle_suffix_node<UserData>& node) {
+   os << "imported_bundle_suffix(\n";
+   detail::write_imported_bundle_debug_indent(os, 1);
+   os << "value =";
+   os << " " << std::quoted(node.value.text);
+   os << '\n';
+   os << ')';
+   return os;
+}
+
+template<typename UserData>
+auto imported_bundle_greeting_node<UserData>::lex(std::string_view input) -> cpf::token_sequence {
+   return detail::lex_imported_bundle_generated(input);
+}
+
+template<typename UserData>
+auto imported_bundle_greeting_node<UserData>::parse(std::string_view input, const cpf::parse_options& options) -> parse_result {
+   if constexpr (std::is_void_v<UserData>) {
+      return detail::parse_imported_bundle_greeting_default(input, options);
+   } else {
+      auto default_result = detail::parse_imported_bundle_greeting_default(input, options);
+      parse_result converted;
+      converted.status = default_result.status;
+      converted.success = default_result.success;
+      converted.partial = default_result.partial;
+      converted.error = std::move(default_result.error);
+      if (!options.build_ast) {
+         return converted;
+      }
+      converted.forest.reserve(default_result.forest.size());
+      for (const auto& tree : default_result.forest) {
+         auto materialized = tree.get();
+         converted.forest.emplace_back(materialized != nullptr ? detail::rebind_imported_bundle_greeting_node<UserData>(*materialized) : nullptr);
+      }
+      return converted;
+   }
+}
+
+template<typename UserData>
+auto imported_bundle_greeting_node<UserData>::parse(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> parse_result {
+   if constexpr (std::is_void_v<UserData>) {
+      return detail::parse_imported_bundle_greeting_default(tokens, options);
+   } else {
+      auto default_result = detail::parse_imported_bundle_greeting_default(tokens, options);
+      parse_result converted;
+      converted.status = default_result.status;
+      converted.success = default_result.success;
+      converted.partial = default_result.partial;
+      converted.error = std::move(default_result.error);
+      if (!options.build_ast) {
+         return converted;
+      }
+      converted.forest.reserve(default_result.forest.size());
+      for (const auto& tree : default_result.forest) {
+         auto materialized = tree.get();
+         converted.forest.emplace_back(materialized != nullptr ? detail::rebind_imported_bundle_greeting_node<UserData>(*materialized) : nullptr);
+      }
+      return converted;
+   }
+}
+
+template<typename UserData>
+auto imported_bundle_greeting_node<UserData>::recognize(std::string_view input) -> cpf::recognize_result {
+   return detail::recognize_imported_bundle_greeting_default(input);
+}
+
+template<typename UserData>
+auto imported_bundle_greeting_node<UserData>::recognize(const cpf::token_sequence& tokens) -> cpf::recognize_result {
+   return detail::recognize_imported_bundle_greeting_default(tokens);
+}
+
+template<typename UserData>
+auto imported_bundle_greeting_node<UserData>::complexity(std::size_t production_index) -> const cpf::complexity& {
+   return detail::complexity_imported_bundle_greeting_default(production_index);
+}
+
+template<typename UserData>
+auto imported_bundle_greeting_node<UserData>::complexity_inputs(std::size_t production_index) -> std::span<const std::string_view> {
+   return detail::complexity_inputs_imported_bundle_greeting_default(production_index);
+}
+
+template<typename UserData>
+auto imported_bundle_greeting_node<UserData>::recompute_complexity(std::size_t production_index) -> const cpf::complexity& {
+   return detail::recompute_complexity_imported_bundle_greeting_default(production_index);
+}
+
+template<typename UserData>
+auto imported_bundle_greeting_node<UserData>::clone() const -> std::unique_ptr<imported_bundle_greeting_node<UserData>> {
+   return detail::rebind_imported_bundle_greeting_node<UserData>(*this);
+}
+
+template<typename UserData>
+std::unique_ptr<cpf::node> imported_bundle_greeting_node<UserData>::clone_node() const {
+   return detail::rebind_imported_bundle_greeting_node<UserData>(*this);
+}
+
+template<typename UserData>
+std::ostream& operator<<(std::ostream& os, const imported_bundle_greeting_node<UserData>& node) {
+   os << "imported_bundle_greeting(\n";
+   detail::write_imported_bundle_debug_indent(os, 1);
+   os << "text =";
+   if (node.text) {
+      os << '\n';
+      auto nested_stream = std::ostringstream{};
+      nested_stream << *node.text;
+      detail::write_imported_bundle_debug_block(os, nested_stream.str(), 2);
+   } else {
+      os << " null";
+   }
+   os << ',';
+   os << '\n';
+   detail::write_imported_bundle_debug_indent(os, 1);
+   os << "suffix =";
+   if (node.suffix) {
+      os << '\n';
+      auto nested_stream = std::ostringstream{};
+      nested_stream << *node.suffix;
+      detail::write_imported_bundle_debug_block(os, nested_stream.str(), 2);
+   } else {
+      os << " null";
+   }
+   os << '\n';
+   os << ')';
+   return os;
+}
+
+template<typename UserData>
+auto imported_bundle_parting_node<UserData>::lex(std::string_view input) -> cpf::token_sequence {
+   return detail::lex_imported_bundle_generated(input);
+}
+
+template<typename UserData>
+auto imported_bundle_parting_node<UserData>::parse(std::string_view input, const cpf::parse_options& options) -> parse_result {
+   if constexpr (std::is_void_v<UserData>) {
+      return detail::parse_imported_bundle_parting_default(input, options);
+   } else {
+      auto default_result = detail::parse_imported_bundle_parting_default(input, options);
+      parse_result converted;
+      converted.status = default_result.status;
+      converted.success = default_result.success;
+      converted.partial = default_result.partial;
+      converted.error = std::move(default_result.error);
+      if (!options.build_ast) {
+         return converted;
+      }
+      converted.forest.reserve(default_result.forest.size());
+      for (const auto& tree : default_result.forest) {
+         auto materialized = tree.get();
+         converted.forest.emplace_back(materialized != nullptr ? detail::rebind_imported_bundle_parting_node<UserData>(*materialized) : nullptr);
+      }
+      return converted;
+   }
+}
+
+template<typename UserData>
+auto imported_bundle_parting_node<UserData>::parse(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> parse_result {
+   if constexpr (std::is_void_v<UserData>) {
+      return detail::parse_imported_bundle_parting_default(tokens, options);
+   } else {
+      auto default_result = detail::parse_imported_bundle_parting_default(tokens, options);
+      parse_result converted;
+      converted.status = default_result.status;
+      converted.success = default_result.success;
+      converted.partial = default_result.partial;
+      converted.error = std::move(default_result.error);
+      if (!options.build_ast) {
+         return converted;
+      }
+      converted.forest.reserve(default_result.forest.size());
+      for (const auto& tree : default_result.forest) {
+         auto materialized = tree.get();
+         converted.forest.emplace_back(materialized != nullptr ? detail::rebind_imported_bundle_parting_node<UserData>(*materialized) : nullptr);
+      }
+      return converted;
+   }
+}
+
+template<typename UserData>
+auto imported_bundle_parting_node<UserData>::recognize(std::string_view input) -> cpf::recognize_result {
+   return detail::recognize_imported_bundle_parting_default(input);
+}
+
+template<typename UserData>
+auto imported_bundle_parting_node<UserData>::recognize(const cpf::token_sequence& tokens) -> cpf::recognize_result {
+   return detail::recognize_imported_bundle_parting_default(tokens);
+}
+
+template<typename UserData>
+auto imported_bundle_parting_node<UserData>::complexity(std::size_t production_index) -> const cpf::complexity& {
+   return detail::complexity_imported_bundle_parting_default(production_index);
+}
+
+template<typename UserData>
+auto imported_bundle_parting_node<UserData>::complexity_inputs(std::size_t production_index) -> std::span<const std::string_view> {
+   return detail::complexity_inputs_imported_bundle_parting_default(production_index);
+}
+
+template<typename UserData>
+auto imported_bundle_parting_node<UserData>::recompute_complexity(std::size_t production_index) -> const cpf::complexity& {
+   return detail::recompute_complexity_imported_bundle_parting_default(production_index);
+}
+
+template<typename UserData>
+auto imported_bundle_parting_node<UserData>::clone() const -> std::unique_ptr<imported_bundle_parting_node<UserData>> {
+   return detail::rebind_imported_bundle_parting_node<UserData>(*this);
+}
+
+template<typename UserData>
+std::unique_ptr<cpf::node> imported_bundle_parting_node<UserData>::clone_node() const {
+   return detail::rebind_imported_bundle_parting_node<UserData>(*this);
+}
+
+template<typename UserData>
+std::ostream& operator<<(std::ostream& os, const imported_bundle_parting_node<UserData>& node) {
+   os << "imported_bundle_parting(\n";
+   detail::write_imported_bundle_debug_indent(os, 1);
+   os << "text =";
+   os << " " << std::quoted(node.text.text);
+   os << '\n';
+   os << ')';
+   return os;
+}
+
+template<typename UserData>
+auto imported_bundle_message_node<UserData>::lex(std::string_view input) -> cpf::token_sequence {
+   return detail::lex_imported_bundle_generated(input);
+}
+
+template<typename UserData>
+auto imported_bundle_message_node<UserData>::parse(std::string_view input, const cpf::parse_options& options) -> parse_result {
+   if constexpr (std::is_void_v<UserData>) {
+      return detail::parse_imported_bundle_message_default(input, options);
+   } else {
+      auto default_result = detail::parse_imported_bundle_message_default(input, options);
+      parse_result converted;
+      converted.status = default_result.status;
+      converted.success = default_result.success;
+      converted.partial = default_result.partial;
+      converted.error = std::move(default_result.error);
+      if (!options.build_ast) {
+         return converted;
+      }
+      converted.forest.reserve(default_result.forest.size());
+      for (const auto& tree : default_result.forest) {
+         auto materialized = tree.get();
+         converted.forest.emplace_back(materialized != nullptr ? detail::rebind_imported_bundle_message_node<UserData>(*materialized) : nullptr);
+      }
+      return converted;
+   }
+}
+
+template<typename UserData>
+auto imported_bundle_message_node<UserData>::parse(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> parse_result {
+   if constexpr (std::is_void_v<UserData>) {
+      return detail::parse_imported_bundle_message_default(tokens, options);
+   } else {
+      auto default_result = detail::parse_imported_bundle_message_default(tokens, options);
+      parse_result converted;
+      converted.status = default_result.status;
+      converted.success = default_result.success;
+      converted.partial = default_result.partial;
+      converted.error = std::move(default_result.error);
+      if (!options.build_ast) {
+         return converted;
+      }
+      converted.forest.reserve(default_result.forest.size());
+      for (const auto& tree : default_result.forest) {
+         auto materialized = tree.get();
+         converted.forest.emplace_back(materialized != nullptr ? detail::rebind_imported_bundle_message_node<UserData>(*materialized) : nullptr);
+      }
+      return converted;
+   }
+}
+
+template<typename UserData>
+auto imported_bundle_message_node<UserData>::recognize(std::string_view input) -> cpf::recognize_result {
+   return detail::recognize_imported_bundle_message_default(input);
+}
+
+template<typename UserData>
+auto imported_bundle_message_node<UserData>::recognize(const cpf::token_sequence& tokens) -> cpf::recognize_result {
+   return detail::recognize_imported_bundle_message_default(tokens);
+}
+
+template<typename UserData>
+auto imported_bundle_message_node<UserData>::complexity(std::size_t production_index) -> const cpf::complexity& {
+   return detail::complexity_imported_bundle_message_default(production_index);
+}
+
+template<typename UserData>
+auto imported_bundle_message_node<UserData>::complexity_inputs(std::size_t production_index) -> std::span<const std::string_view> {
+   return detail::complexity_inputs_imported_bundle_message_default(production_index);
+}
+
+template<typename UserData>
+auto imported_bundle_message_node<UserData>::recompute_complexity(std::size_t production_index) -> const cpf::complexity& {
+   return detail::recompute_complexity_imported_bundle_message_default(production_index);
+}
+
+template<typename UserData>
+auto imported_bundle_message_node<UserData>::clone() const -> std::unique_ptr<imported_bundle_message_node<UserData>> {
+   return detail::rebind_imported_bundle_message_node<UserData>(*this);
+}
+
+template<typename UserData>
+std::unique_ptr<cpf::node> imported_bundle_message_node<UserData>::clone_node() const {
+   return detail::rebind_imported_bundle_message_node<UserData>(*this);
+}
+
+template<typename UserData>
+std::ostream& operator<<(std::ostream& os, const imported_bundle_message_node<UserData>& node) {
+   switch (node.rule_id()) {
+      case imported_bundle_greeting_node<UserData>::RuleId:
+         return os << static_cast<const imported_bundle_greeting_node<UserData>&>(node);
+      case imported_bundle_parting_node<UserData>::RuleId:
+         return os << static_cast<const imported_bundle_parting_node<UserData>&>(node);
+      default:
+         return os << "imported_bundle_message()";
+   }
+}
+

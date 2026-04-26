@@ -1,0 +1,915 @@
+#include "imported_bundle.h"
+#include <runtime/runtime.h>
+
+#include <array>
+#include <ostream>
+#include <regex>
+#include <stdexcept>
+#include <utility>
+
+namespace {
+   using parse_node_ptr = cpf::detail::parse_node_ptr;
+   constexpr std::array<std::string_view, 4> imported_bundle_word_complexity_inputs_0{{
+      "hello",
+      "hello",
+      "hello",
+      "hello"
+   }};
+   constexpr std::array<std::string_view, 4> imported_bundle_word_complexity_inputs_1{{
+      "hi",
+      "hi",
+      "hi",
+      "hi"
+   }};
+   constexpr std::array<std::string_view, 4> imported_bundle_suffix_complexity_inputs_0{{
+      "!",
+      "!",
+      "!",
+      "!"
+   }};
+   constexpr std::array<std::string_view, 4> imported_bundle_message_complexity_inputs_0{{
+      "hi !",
+      "hello !",
+      "hello !",
+      "hello !"
+   }};
+   constexpr std::array<std::string_view, 4> imported_bundle_message_complexity_inputs_1{{
+      "bye",
+      "bye",
+      "bye",
+      "bye"
+   }};
+   constexpr std::array<std::string_view, 4> imported_bundle_greeting_complexity_inputs_0{{
+      "hi !",
+      "hello !",
+      "hello !",
+      "hello !"
+   }};
+   constexpr std::array<std::string_view, 4> imported_bundle_parting_complexity_inputs_0{{
+      "bye",
+      "bye",
+      "bye",
+      "bye"
+   }};
+} // namespace
+
+namespace {
+   constexpr std::array<cpf::detail::parser_symbol, 1> production_0_symbols{{
+      {cpf::detail::parser_symbol_kind::terminal, 0, "hello"}
+   }};
+} // namespace
+
+namespace {
+   constexpr std::array<cpf::detail::parser_symbol, 1> production_1_symbols{{
+      {cpf::detail::parser_symbol_kind::terminal, 1, "hi"}
+   }};
+} // namespace
+
+namespace {
+   constexpr std::array<cpf::detail::parser_symbol, 1> production_2_symbols{{
+      {cpf::detail::parser_symbol_kind::terminal, 2, "!"}
+   }};
+} // namespace
+
+namespace {
+   constexpr std::array<cpf::detail::parser_symbol, 2> production_3_symbols{{
+      {cpf::detail::parser_symbol_kind::nonterminal, 0, "imported_bundle_word"},
+      {cpf::detail::parser_symbol_kind::nonterminal, 1, "imported_bundle_suffix"}
+   }};
+} // namespace
+
+namespace {
+   constexpr std::array<cpf::detail::parser_symbol, 1> production_4_symbols{{
+      {cpf::detail::parser_symbol_kind::terminal, 3, "bye"}
+   }};
+} // namespace
+
+namespace {
+   constexpr std::array<cpf::detail::parser_symbol, 1> production_5_symbols{{
+      {cpf::detail::parser_symbol_kind::nonterminal, 2, "imported_bundle_greeting"}
+   }};
+} // namespace
+
+namespace {
+   constexpr std::array<cpf::detail::parser_symbol, 1> production_6_symbols{{
+      {cpf::detail::parser_symbol_kind::nonterminal, 3, "imported_bundle_parting"}
+   }};
+} // namespace
+
+namespace {
+   constexpr std::array<cpf::detail::lexer_symbol_spec, 4> grammar_token_symbols{{
+      {cpf::detail::lexer_symbol_kind::literal, "hello", nullptr, 1},
+      {cpf::detail::lexer_symbol_kind::literal, "hi", nullptr, 1},
+      {cpf::detail::lexer_symbol_kind::literal, "!", nullptr, 2},
+      {cpf::detail::lexer_symbol_kind::literal, "bye", nullptr, 9}
+   }};
+   constexpr std::array<cpf::detail::production_spec, 7> grammar_productions{{
+      {0, "imported_bundle_word", "imported_bundle_word -> 'hello':value", production_0_symbols.data(), production_0_symbols.size()},
+      {0, "imported_bundle_word", "imported_bundle_word -> 'hi':value", production_1_symbols.data(), production_1_symbols.size()},
+      {1, "imported_bundle_suffix", "imported_bundle_suffix -> '!':value", production_2_symbols.data(), production_2_symbols.size()},
+      {2, "imported_bundle_greeting", "imported_bundle_greeting -> imported_bundle_word:text imported_bundle_suffix:suffix", production_3_symbols.data(), production_3_symbols.size()},
+      {3, "imported_bundle_parting", "imported_bundle_parting -> 'bye':text", production_4_symbols.data(), production_4_symbols.size()},
+      {4, "imported_bundle_message", "imported_bundle_message -> imported_bundle_greeting", production_5_symbols.data(), production_5_symbols.size()},
+      {4, "imported_bundle_message", "imported_bundle_message -> imported_bundle_parting", production_6_symbols.data(), production_6_symbols.size()}
+   }};
+   constexpr std::array<std::size_t, 7> grammar_rule_production_indices{{
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6
+   }};
+   constexpr std::array<std::size_t, 5> grammar_rule_production_offsets{{
+      0,
+      2,
+      3,
+      4,
+      5
+   }};
+   constexpr std::array<std::size_t, 5> grammar_rule_production_counts{{
+      2,
+      1,
+      1,
+      1,
+      2
+   }};
+   constexpr std::array<std::string_view, 5> grammar_rule_expected_labels{{
+      "",
+      "",
+      "",
+      "",
+      ""
+   }};
+   constexpr std::array<cpf::detail::lexer_symbol_spec, 0> grammar_skip_symbols{{
+   }};
+   constexpr cpf::detail::grammar_spec grammar_spec{grammar_productions.data(), grammar_productions.size(), 5, grammar_rule_expected_labels.data(), grammar_rule_production_indices.data(), grammar_rule_production_offsets.data(), grammar_rule_production_counts.data(), grammar_token_symbols.data(), grammar_token_symbols.size(), grammar_skip_symbols.data(), grammar_skip_symbols.size(), true};
+   constexpr std::array<std::string_view, 5> grammar_rule_names{{
+      "imported_bundle_word",
+      "imported_bundle_suffix",
+      "imported_bundle_greeting",
+      "imported_bundle_parting",
+      "imported_bundle_message"
+   }};
+
+   template<typename Rule, std::size_t SampleCount>
+   cpf::complexity compute_generated_rule_complexity(const std::array<std::string_view, SampleCount>& inputs, std::string_view rule_name, std::size_t rule_id, std::size_t root_rule) {
+      std::vector<std::tuple<std::string_view>> args;
+      args.reserve(inputs.size());
+      std::vector<double> arg_sizes;
+      arg_sizes.reserve(inputs.size());
+      for (const auto input : inputs) {
+         args.emplace_back(input);
+         arg_sizes.push_back(static_cast<double>(input.size()));
+      }
+      return cpf::complexity_of(
+         [rule_name, rule_id, root_rule](std::string_view input) {
+            auto result = cpf::detail::earley_recognize(input, grammar_spec, root_rule);
+            if (!result.success) {
+               throw std::runtime_error{"Generated complexity sample for rule '" + std::string{rule_name} + "' definition " + std::to_string(rule_id) + " failed to parse input: " + (result.error.has_value() ? result.error->message : std::string{"unknown parse failure"})};
+            }
+            return static_cast<std::size_t>(result.success);
+         },
+         std::move(args),
+         std::move(arg_sizes));
+   }
+   std::unique_ptr<cpf::node> build_node(const parse_node_ptr& tree);
+
+   template<typename T>
+   std::unique_ptr<T> release_built_node_as(std::unique_ptr<cpf::node> built) {
+      if (built == nullptr) {
+         return nullptr;
+      }
+      auto* raw = dynamic_cast<T*>(built.get());
+      if (raw == nullptr) {
+         throw std::runtime_error{"Generated node cast failed"};
+      }
+      built.release();
+      return std::unique_ptr<T>{raw};
+   }
+
+   parse_node_ptr node_child_at(const parse_node_ptr& tree, std::size_t index) {
+      if (index >= tree->children.size()) {
+         throw std::runtime_error{"Generated parse tree missing node child"};
+      }
+      const auto* child = std::get_if<parse_node_ptr>(&tree->children[index]);
+      if (child == nullptr || *child == nullptr) {
+         throw std::runtime_error{"Generated parse tree child is not a node"};
+      }
+      return *child;
+   }
+
+   cpf::matched_string matched_child_at(const parse_node_ptr& tree, std::size_t index) {
+      if (index >= tree->children.size()) {
+         throw std::runtime_error{"Generated parse tree missing terminal child"};
+      }
+      const auto* child = std::get_if<cpf::matched_string>(&tree->children[index]);
+      if (child == nullptr) {
+         throw std::runtime_error{"Generated parse tree child is not a terminal"};
+      }
+      return *child;
+   }
+
+   [[maybe_unused]] void append_matched_tree_text(const parse_node_ptr& tree, std::string& text) {
+      for (const auto& child : tree->children) {
+         if (const auto* matched = std::get_if<cpf::matched_string>(&child); matched != nullptr) {
+            text += matched->text;
+            continue;
+         }
+         const auto* node = std::get_if<parse_node_ptr>(&child);
+         if (node == nullptr || *node == nullptr) {
+            throw std::runtime_error{"Generated parse tree child is not materializable as token text"};
+         }
+         append_matched_tree_text(*node, text);
+      }
+   }
+
+   [[maybe_unused]] cpf::matched_string matched_tree_at(const parse_node_ptr& tree) {
+      cpf::matched_string matched;
+      matched.range = tree->range;
+      append_matched_tree_text(tree, matched.text);
+      return matched;
+   }
+
+
+   std::size_t definition_of_generated_tree(const parse_node_ptr& tree) {
+      switch (tree->production) {
+         case 0:
+            return 0;
+         case 1:
+            return 1;
+         case 2:
+            return 0;
+         case 3:
+            return 0;
+         case 4:
+            return 0;
+         case 5:
+            return 0;
+         case 6:
+            return 1;
+         default:
+            return 0;
+      }
+   }
+
+   [[maybe_unused]] bool validate_generated_node(const cpf::node& node) {
+      switch (node.rule_id()) {
+         case imported_bundle_word::RuleId: {
+            return true;
+         }
+         case imported_bundle_suffix::RuleId: {
+            return true;
+         }
+         case imported_bundle_greeting::RuleId: {
+            const auto& value = static_cast<const imported_bundle_greeting&>(node);
+            if (value.text && !validate_generated_node(*value.text)) {
+               return false;
+            }
+            if (value.suffix && !validate_generated_node(*value.suffix)) {
+               return false;
+            }
+            return true;
+         }
+         case imported_bundle_parting::RuleId: {
+            return true;
+         }
+         default:
+            return true;
+      }
+   }
+
+   bool validate_generated_tree(const parse_node_ptr& tree) {
+      for (const auto& child : tree->children) {
+         if (std::holds_alternative<parse_node_ptr>(child) && !validate_generated_tree(std::get<parse_node_ptr>(child))) {
+            return false;
+         }
+      }
+      switch (tree->production) {
+         case 0: {
+            return true;
+         }
+         case 1: {
+            return true;
+         }
+         case 2: {
+            return true;
+         }
+         case 3: {
+            return true;
+         }
+         case 4: {
+            return true;
+         }
+         case 5: {
+            return true;
+         }
+         case 6: {
+            return true;
+         }
+         default:
+            return true;
+      }
+   }
+
+   std::unique_ptr<cpf::node> build_node(const parse_node_ptr& tree) {
+      switch (tree->production) {
+         case 0: {
+            auto node = std::make_unique<imported_bundle_word>();
+            node->production_index = 0;
+            node->range = tree->range;
+            for (const auto& damage : tree->damage) {
+               cpf::detail::add_damage(*node, damage);
+            }
+            node->value = matched_child_at(tree, 0);
+            return node;
+         }
+         case 1: {
+            auto node = std::make_unique<imported_bundle_word>();
+            node->production_index = 1;
+            node->range = tree->range;
+            for (const auto& damage : tree->damage) {
+               cpf::detail::add_damage(*node, damage);
+            }
+            node->value = matched_child_at(tree, 0);
+            return node;
+         }
+         case 2: {
+            auto node = std::make_unique<imported_bundle_suffix>();
+            node->production_index = 0;
+            node->range = tree->range;
+            for (const auto& damage : tree->damage) {
+               cpf::detail::add_damage(*node, damage);
+            }
+            node->value = matched_child_at(tree, 0);
+            return node;
+         }
+         case 3: {
+            auto node = std::make_unique<imported_bundle_greeting>();
+            node->production_index = 0;
+            node->range = tree->range;
+            for (const auto& damage : tree->damage) {
+               cpf::detail::add_damage(*node, damage);
+            }
+            auto child_0 = build_node(node_child_at(tree, 0));
+            node->text = release_built_node_as<imported_bundle_word>(std::move(child_0));
+            auto child_1 = build_node(node_child_at(tree, 1));
+            node->suffix = release_built_node_as<imported_bundle_suffix>(std::move(child_1));
+            return node;
+         }
+         case 4: {
+            auto node = std::make_unique<imported_bundle_parting>();
+            node->production_index = 0;
+            node->range = tree->range;
+            for (const auto& damage : tree->damage) {
+               cpf::detail::add_damage(*node, damage);
+            }
+            node->text = matched_child_at(tree, 0);
+            return node;
+         }
+         case 5: {
+            return build_node(node_child_at(tree, 0));
+         }
+         case 6: {
+            return build_node(node_child_at(tree, 0));
+         }
+         default:
+            throw std::runtime_error{"Unknown parse production"};
+      }
+   }
+
+   template<typename T>
+   cpf::recognize_result recognize_generated(const cpf::token_sequence& tokens, std::size_t root_rule) {
+      cpf::recognize_result result;
+      auto recognized = cpf::detail::earley_recognize(tokens, grammar_spec, root_rule);
+      result.success = recognized.success;
+      if (!recognized.success) {
+         result.error = std::move(recognized.error);
+      }
+      return result;
+   }
+
+   template<typename T>
+   cpf::recognize_result recognize_generated(std::string_view input, std::size_t root_rule) {
+      auto tokens = cpf::detail::lex_input(input, grammar_spec);
+      return recognize_generated<T>(tokens, root_rule);
+   }
+
+   template<typename T>
+   cpf::parse_result<T> parse_generated(const cpf::token_sequence& tokens, std::size_t root_rule, const cpf::parse_options& options) {
+      cpf::parse_result<T> result;
+      auto forest = cpf::detail::earley_parse(tokens, grammar_spec, root_rule, options.allow_partial);
+      if (!forest.success) {
+         result.error = std::move(forest.error);
+         return result;
+      }
+      result.partial = forest.partial;
+      if (result.partial) {
+         result.error = forest.error;
+      }
+      auto valid_tree_count = std::size_t{0};
+      for (std::size_t tree_index = 0; tree_index < forest.forest.size(); ++tree_index) {
+         const auto& tree = forest.forest[tree_index];
+         if (!validate_generated_tree(tree)) {
+            continue;
+         }
+         ++valid_tree_count;
+         if (options.error_on_ambiguity && valid_tree_count > 1) {
+            result.status = cpf::parse_status::failure;
+            result.success = false;
+            result.forest.clear();
+            result.error = cpf::detail::make_ambiguity_error(grammar_rule_names[root_rule]);
+            return result;
+         }
+         result.status = result.partial ? cpf::parse_status::partial_success : cpf::parse_status::success;
+         result.success = true;
+         if (options.build_ast) {
+            result.forest.emplace_back(tree, definition_of_generated_tree(tree), tree->range, [tree]() {
+               auto built = build_node(tree);
+               return release_built_node_as<T>(std::move(built));
+            }, forest.tree_damage[tree_index], forest.tree_partial[tree_index], [](const T& root, std::vector<const cpf::node*>& damaged_nodes) {
+               visit_recursive(root, [&](auto& current) {
+                  if (current.is_damaged()) {
+                     damaged_nodes.push_back(&current);
+                  }
+               });
+            }, [tree](std::string_view repaired_input) { return cpf::detail::repaired_input_of(tree, repaired_input, grammar_spec); });
+         }
+      }
+      if (result.success) {
+         return result;
+      }
+      auto filtered_error = cpf::parse_error{};
+      filtered_error.expected.push_back("valid parse tree");
+      filtered_error.found.kind = cpf::parse_error_found_kind::filtered_parse;
+      filtered_error.notes.push_back(std::string{R"(completed Earley parses for rule ')"} + std::string{grammar_rule_names[root_rule]} + R"(' were rejected by precedence/associativity constraints)");
+      cpf::detail::error_tracker::finalize(filtered_error);
+      result.error = std::move(filtered_error);
+      return result;
+   }
+
+   template<typename T>
+   cpf::parse_result<T> parse_generated(std::string_view input, std::size_t root_rule, const cpf::parse_options& options) {
+      auto tokens = cpf::detail::lex_input(input, grammar_spec);
+      return parse_generated<T>(tokens, root_rule, options);
+   }
+} // namespace
+
+auto detail::lex_imported_bundle_generated(std::string_view input) -> cpf::token_sequence {
+   return cpf::detail::lex_input(input, grammar_spec);
+}
+
+auto detail::parse_imported_bundle_word_default(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<imported_bundle_word> {
+   auto tokens = detail::lex_imported_bundle_generated(input);
+   return parse_imported_bundle_word_default(tokens, options);
+}
+
+auto detail::parse_imported_bundle_word_default(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<imported_bundle_word> {
+   return parse_generated<imported_bundle_word>(tokens, 0, options);
+}
+
+auto detail::recognize_imported_bundle_word_default(std::string_view input) -> cpf::recognize_result {
+   auto tokens = detail::lex_imported_bundle_generated(input);
+   return recognize_imported_bundle_word_default(tokens);
+}
+
+auto detail::recognize_imported_bundle_word_default(const cpf::token_sequence& tokens) -> cpf::recognize_result {
+   return recognize_generated<imported_bundle_word>(tokens, 0);
+}
+
+namespace {
+   std::array<cpf::complexity, 2> imported_bundle_word_complexity_cache{};
+} // namespace
+
+auto detail::complexity_inputs_imported_bundle_word_default(std::size_t production_index) -> std::span<const std::string_view> {
+   switch (production_index) {
+      case 0:
+         return std::span<const std::string_view>{imported_bundle_word_complexity_inputs_0.data(), imported_bundle_word_complexity_inputs_0.size()};
+      case 1:
+         return std::span<const std::string_view>{imported_bundle_word_complexity_inputs_1.data(), imported_bundle_word_complexity_inputs_1.size()};
+      default:
+         throw std::out_of_range{"Unknown production index " + std::to_string(production_index) + " for rule 'imported_bundle_word'"};
+   }
+}
+
+auto detail::complexity_imported_bundle_word_default(std::size_t production_index) -> const cpf::complexity& {
+   switch (production_index) {
+      case 0:
+         return imported_bundle_word_complexity_cache[0];
+      case 1:
+         return imported_bundle_word_complexity_cache[1];
+      default:
+         throw std::out_of_range{"Unknown production index " + std::to_string(production_index) + " for rule 'imported_bundle_word'"};
+   }
+}
+
+auto detail::recompute_complexity_imported_bundle_word_default(std::size_t production_index) -> const cpf::complexity& {
+   switch (production_index) {
+      case 0:
+         imported_bundle_word_complexity_cache[0] = compute_generated_rule_complexity<imported_bundle_word>(imported_bundle_word_complexity_inputs_0, "imported_bundle_word", 0, 0);
+         return imported_bundle_word_complexity_cache[0];
+      case 1:
+         imported_bundle_word_complexity_cache[1] = compute_generated_rule_complexity<imported_bundle_word>(imported_bundle_word_complexity_inputs_1, "imported_bundle_word", 1, 0);
+         return imported_bundle_word_complexity_cache[1];
+      default:
+         throw std::out_of_range{"Unknown production index " + std::to_string(production_index) + " for rule 'imported_bundle_word'"};
+   }
+}
+
+auto detail::parse_imported_bundle_suffix_default(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<imported_bundle_suffix> {
+   auto tokens = detail::lex_imported_bundle_generated(input);
+   return parse_imported_bundle_suffix_default(tokens, options);
+}
+
+auto detail::parse_imported_bundle_suffix_default(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<imported_bundle_suffix> {
+   return parse_generated<imported_bundle_suffix>(tokens, 1, options);
+}
+
+auto detail::recognize_imported_bundle_suffix_default(std::string_view input) -> cpf::recognize_result {
+   auto tokens = detail::lex_imported_bundle_generated(input);
+   return recognize_imported_bundle_suffix_default(tokens);
+}
+
+auto detail::recognize_imported_bundle_suffix_default(const cpf::token_sequence& tokens) -> cpf::recognize_result {
+   return recognize_generated<imported_bundle_suffix>(tokens, 1);
+}
+
+namespace {
+   std::array<cpf::complexity, 1> imported_bundle_suffix_complexity_cache{};
+} // namespace
+
+auto detail::complexity_inputs_imported_bundle_suffix_default(std::size_t production_index) -> std::span<const std::string_view> {
+   switch (production_index) {
+      case 0:
+         return std::span<const std::string_view>{imported_bundle_suffix_complexity_inputs_0.data(), imported_bundle_suffix_complexity_inputs_0.size()};
+      default:
+         throw std::out_of_range{"Unknown production index " + std::to_string(production_index) + " for rule 'imported_bundle_suffix'"};
+   }
+}
+
+auto detail::complexity_imported_bundle_suffix_default(std::size_t production_index) -> const cpf::complexity& {
+   switch (production_index) {
+      case 0:
+         return imported_bundle_suffix_complexity_cache[0];
+      default:
+         throw std::out_of_range{"Unknown production index " + std::to_string(production_index) + " for rule 'imported_bundle_suffix'"};
+   }
+}
+
+auto detail::recompute_complexity_imported_bundle_suffix_default(std::size_t production_index) -> const cpf::complexity& {
+   switch (production_index) {
+      case 0:
+         imported_bundle_suffix_complexity_cache[0] = compute_generated_rule_complexity<imported_bundle_suffix>(imported_bundle_suffix_complexity_inputs_0, "imported_bundle_suffix", 0, 1);
+         return imported_bundle_suffix_complexity_cache[0];
+      default:
+         throw std::out_of_range{"Unknown production index " + std::to_string(production_index) + " for rule 'imported_bundle_suffix'"};
+   }
+}
+
+auto detail::parse_imported_bundle_greeting_default(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<imported_bundle_greeting> {
+   auto tokens = detail::lex_imported_bundle_generated(input);
+   return parse_imported_bundle_greeting_default(tokens, options);
+}
+
+auto detail::parse_imported_bundle_greeting_default(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<imported_bundle_greeting> {
+   return parse_generated<imported_bundle_greeting>(tokens, 2, options);
+}
+
+auto detail::recognize_imported_bundle_greeting_default(std::string_view input) -> cpf::recognize_result {
+   auto tokens = detail::lex_imported_bundle_generated(input);
+   return recognize_imported_bundle_greeting_default(tokens);
+}
+
+auto detail::recognize_imported_bundle_greeting_default(const cpf::token_sequence& tokens) -> cpf::recognize_result {
+   return recognize_generated<imported_bundle_greeting>(tokens, 2);
+}
+
+namespace {
+   std::array<cpf::complexity, 1> imported_bundle_greeting_complexity_cache{};
+} // namespace
+
+auto detail::complexity_inputs_imported_bundle_greeting_default(std::size_t production_index) -> std::span<const std::string_view> {
+   switch (production_index) {
+      case 0:
+         return std::span<const std::string_view>{imported_bundle_greeting_complexity_inputs_0.data(), imported_bundle_greeting_complexity_inputs_0.size()};
+      default:
+         throw std::out_of_range{"Unknown production index " + std::to_string(production_index) + " for rule 'imported_bundle_greeting'"};
+   }
+}
+
+auto detail::complexity_imported_bundle_greeting_default(std::size_t production_index) -> const cpf::complexity& {
+   switch (production_index) {
+      case 0:
+         return imported_bundle_greeting_complexity_cache[0];
+      default:
+         throw std::out_of_range{"Unknown production index " + std::to_string(production_index) + " for rule 'imported_bundle_greeting'"};
+   }
+}
+
+auto detail::recompute_complexity_imported_bundle_greeting_default(std::size_t production_index) -> const cpf::complexity& {
+   switch (production_index) {
+      case 0:
+         imported_bundle_greeting_complexity_cache[0] = compute_generated_rule_complexity<imported_bundle_greeting>(imported_bundle_greeting_complexity_inputs_0, "imported_bundle_greeting", 0, 2);
+         return imported_bundle_greeting_complexity_cache[0];
+      default:
+         throw std::out_of_range{"Unknown production index " + std::to_string(production_index) + " for rule 'imported_bundle_greeting'"};
+   }
+}
+
+auto detail::parse_imported_bundle_parting_default(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<imported_bundle_parting> {
+   auto tokens = detail::lex_imported_bundle_generated(input);
+   return parse_imported_bundle_parting_default(tokens, options);
+}
+
+auto detail::parse_imported_bundle_parting_default(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<imported_bundle_parting> {
+   return parse_generated<imported_bundle_parting>(tokens, 3, options);
+}
+
+auto detail::recognize_imported_bundle_parting_default(std::string_view input) -> cpf::recognize_result {
+   auto tokens = detail::lex_imported_bundle_generated(input);
+   return recognize_imported_bundle_parting_default(tokens);
+}
+
+auto detail::recognize_imported_bundle_parting_default(const cpf::token_sequence& tokens) -> cpf::recognize_result {
+   return recognize_generated<imported_bundle_parting>(tokens, 3);
+}
+
+namespace {
+   std::array<cpf::complexity, 1> imported_bundle_parting_complexity_cache{};
+} // namespace
+
+auto detail::complexity_inputs_imported_bundle_parting_default(std::size_t production_index) -> std::span<const std::string_view> {
+   switch (production_index) {
+      case 0:
+         return std::span<const std::string_view>{imported_bundle_parting_complexity_inputs_0.data(), imported_bundle_parting_complexity_inputs_0.size()};
+      default:
+         throw std::out_of_range{"Unknown production index " + std::to_string(production_index) + " for rule 'imported_bundle_parting'"};
+   }
+}
+
+auto detail::complexity_imported_bundle_parting_default(std::size_t production_index) -> const cpf::complexity& {
+   switch (production_index) {
+      case 0:
+         return imported_bundle_parting_complexity_cache[0];
+      default:
+         throw std::out_of_range{"Unknown production index " + std::to_string(production_index) + " for rule 'imported_bundle_parting'"};
+   }
+}
+
+auto detail::recompute_complexity_imported_bundle_parting_default(std::size_t production_index) -> const cpf::complexity& {
+   switch (production_index) {
+      case 0:
+         imported_bundle_parting_complexity_cache[0] = compute_generated_rule_complexity<imported_bundle_parting>(imported_bundle_parting_complexity_inputs_0, "imported_bundle_parting", 0, 3);
+         return imported_bundle_parting_complexity_cache[0];
+      default:
+         throw std::out_of_range{"Unknown production index " + std::to_string(production_index) + " for rule 'imported_bundle_parting'"};
+   }
+}
+
+auto detail::parse_imported_bundle_message_default(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<imported_bundle_message> {
+   auto tokens = detail::lex_imported_bundle_generated(input);
+   return parse_imported_bundle_message_default(tokens, options);
+}
+
+auto detail::parse_imported_bundle_message_default(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<imported_bundle_message> {
+   auto result = cpf::parse_result<imported_bundle_message>{ };
+   cpf::parse_error best_error;
+   auto have_error = false;
+   auto successful_children = std::size_t{0};
+   auto have_partial_success = false;
+   {
+      auto child_result = detail::parse_imported_bundle_greeting_default(tokens, options);
+      if (child_result.success) {
+         if (!child_result.partial) {
+            if (have_partial_success) {
+               have_partial_success = false;
+               successful_children = 0;
+               result.status = cpf::parse_status::failure;
+               result.partial = false;
+               result.forest.clear();
+            }
+            result.status = cpf::parse_status::success;
+            result.success = true;
+            result.error.reset();
+            successful_children += child_result.forest.size();
+            if (options.error_on_ambiguity && successful_children > 1) {
+               result.status = cpf::parse_status::failure;
+               result.success = false;
+               result.partial = false;
+               result.forest.clear();
+               result.error = cpf::detail::make_ambiguity_error("imported_bundle_message");
+               return result;
+            }
+            if (options.build_ast) {
+               for (const auto& tree : child_result.forest) {
+                  auto opaque = std::static_pointer_cast<const cpf::detail::parse_node>(cpf::detail::opaque_tree_of(tree));
+                  result.forest.emplace_back(opaque, tree.production_index(), tree.range(), [opaque]() {
+                     auto built = build_node(opaque);
+                     return release_built_node_as<imported_bundle_message>(std::move(built));
+                  }, cpf::detail::pending_damage_of(tree), tree.is_partial(), [](const imported_bundle_message& root, std::vector<const cpf::node*>& damaged_nodes) {
+                     visit_recursive(root, [&](auto& current) {
+                        if (current.is_damaged()) {
+                           damaged_nodes.push_back(&current);
+                        }
+                     });
+                  }, [opaque](std::string_view repaired_input) { return cpf::detail::repaired_input_of(opaque, repaired_input, grammar_spec); });
+               }
+            }
+         } else if (!result.success && !have_partial_success) {
+            result.status = cpf::parse_status::partial_success;
+            result.success = true;
+            result.partial = true;
+            result.error = child_result.error;
+            have_partial_success = true;
+            successful_children = child_result.forest.size();
+            if (options.build_ast) {
+               for (const auto& tree : child_result.forest) {
+                  auto opaque = std::static_pointer_cast<const cpf::detail::parse_node>(cpf::detail::opaque_tree_of(tree));
+                  result.forest.emplace_back(opaque, tree.production_index(), tree.range(), [opaque]() {
+                     auto built = build_node(opaque);
+                     return release_built_node_as<imported_bundle_message>(std::move(built));
+                  }, cpf::detail::pending_damage_of(tree), tree.is_partial(), [](const imported_bundle_message& root, std::vector<const cpf::node*>& damaged_nodes) {
+                     visit_recursive(root, [&](auto& current) {
+                        if (current.is_damaged()) {
+                           damaged_nodes.push_back(&current);
+                        }
+                     });
+                  }, [opaque](std::string_view repaired_input) { return cpf::detail::repaired_input_of(opaque, repaired_input, grammar_spec); });
+               }
+            }
+         }
+      } else if (!have_error) {
+         best_error = *child_result.error;
+         have_error = true;
+      } else {
+         cpf::detail::merge_parse_error(best_error, *child_result.error);
+      }
+   }
+   {
+      auto child_result = detail::parse_imported_bundle_parting_default(tokens, options);
+      if (child_result.success) {
+         if (!child_result.partial) {
+            if (have_partial_success) {
+               have_partial_success = false;
+               successful_children = 0;
+               result.status = cpf::parse_status::failure;
+               result.partial = false;
+               result.forest.clear();
+            }
+            result.status = cpf::parse_status::success;
+            result.success = true;
+            result.error.reset();
+            successful_children += child_result.forest.size();
+            if (options.error_on_ambiguity && successful_children > 1) {
+               result.status = cpf::parse_status::failure;
+               result.success = false;
+               result.partial = false;
+               result.forest.clear();
+               result.error = cpf::detail::make_ambiguity_error("imported_bundle_message");
+               return result;
+            }
+            if (options.build_ast) {
+               for (const auto& tree : child_result.forest) {
+                  auto opaque = std::static_pointer_cast<const cpf::detail::parse_node>(cpf::detail::opaque_tree_of(tree));
+                  result.forest.emplace_back(opaque, tree.production_index(), tree.range(), [opaque]() {
+                     auto built = build_node(opaque);
+                     return release_built_node_as<imported_bundle_message>(std::move(built));
+                  }, cpf::detail::pending_damage_of(tree), tree.is_partial(), [](const imported_bundle_message& root, std::vector<const cpf::node*>& damaged_nodes) {
+                     visit_recursive(root, [&](auto& current) {
+                        if (current.is_damaged()) {
+                           damaged_nodes.push_back(&current);
+                        }
+                     });
+                  }, [opaque](std::string_view repaired_input) { return cpf::detail::repaired_input_of(opaque, repaired_input, grammar_spec); });
+               }
+            }
+         } else if (!result.success && !have_partial_success) {
+            result.status = cpf::parse_status::partial_success;
+            result.success = true;
+            result.partial = true;
+            result.error = child_result.error;
+            have_partial_success = true;
+            successful_children = child_result.forest.size();
+            if (options.build_ast) {
+               for (const auto& tree : child_result.forest) {
+                  auto opaque = std::static_pointer_cast<const cpf::detail::parse_node>(cpf::detail::opaque_tree_of(tree));
+                  result.forest.emplace_back(opaque, tree.production_index(), tree.range(), [opaque]() {
+                     auto built = build_node(opaque);
+                     return release_built_node_as<imported_bundle_message>(std::move(built));
+                  }, cpf::detail::pending_damage_of(tree), tree.is_partial(), [](const imported_bundle_message& root, std::vector<const cpf::node*>& damaged_nodes) {
+                     visit_recursive(root, [&](auto& current) {
+                        if (current.is_damaged()) {
+                           damaged_nodes.push_back(&current);
+                        }
+                     });
+                  }, [opaque](std::string_view repaired_input) { return cpf::detail::repaired_input_of(opaque, repaired_input, grammar_spec); });
+               }
+            }
+         }
+      } else if (!have_error) {
+         best_error = *child_result.error;
+         have_error = true;
+      } else {
+         cpf::detail::merge_parse_error(best_error, *child_result.error);
+      }
+   }
+   if (result.success) {
+      return result;
+   }
+   if (have_error) {
+      cpf::detail::append_unique(best_error.notes, "while matching base rule 'imported_bundle_message'");
+      cpf::detail::error_tracker::finalize(best_error);
+      result.error = best_error;
+   }
+   return result;
+}
+
+auto detail::recognize_imported_bundle_message_default(std::string_view input) -> cpf::recognize_result {
+   auto tokens = detail::lex_imported_bundle_generated(input);
+   return recognize_imported_bundle_message_default(tokens);
+}
+
+auto detail::recognize_imported_bundle_message_default(const cpf::token_sequence& tokens) -> cpf::recognize_result {
+   cpf::recognize_result result;
+   cpf::parse_error best_error;
+   auto have_error = false;
+   {
+      auto child_result = detail::recognize_imported_bundle_greeting_default(tokens);
+      if (child_result.success) {
+         result.success = true;
+         result.error.reset();
+         return result;
+      }
+      if (child_result.error.has_value()) {
+         if (!have_error) {
+            best_error = *child_result.error;
+            have_error = true;
+         } else {
+            cpf::detail::merge_parse_error(best_error, *child_result.error);
+         }
+      }
+   }
+   {
+      auto child_result = detail::recognize_imported_bundle_parting_default(tokens);
+      if (child_result.success) {
+         result.success = true;
+         result.error.reset();
+         return result;
+      }
+      if (child_result.error.has_value()) {
+         if (!have_error) {
+            best_error = *child_result.error;
+            have_error = true;
+         } else {
+            cpf::detail::merge_parse_error(best_error, *child_result.error);
+         }
+      }
+   }
+   if (have_error) {
+      cpf::detail::append_unique(best_error.notes, "while matching base rule 'imported_bundle_message'");
+      cpf::detail::error_tracker::finalize(best_error);
+      result.error = best_error;
+   }
+   return result;
+}
+
+namespace {
+   std::array<cpf::complexity, 2> imported_bundle_message_complexity_cache{};
+} // namespace
+
+auto detail::complexity_inputs_imported_bundle_message_default(std::size_t production_index) -> std::span<const std::string_view> {
+   switch (production_index) {
+      case 0:
+         return std::span<const std::string_view>{imported_bundle_message_complexity_inputs_0.data(), imported_bundle_message_complexity_inputs_0.size()};
+      case 1:
+         return std::span<const std::string_view>{imported_bundle_message_complexity_inputs_1.data(), imported_bundle_message_complexity_inputs_1.size()};
+      default:
+         throw std::out_of_range{"Unknown production index " + std::to_string(production_index) + " for rule 'imported_bundle_message'"};
+   }
+}
+
+auto detail::complexity_imported_bundle_message_default(std::size_t production_index) -> const cpf::complexity& {
+   switch (production_index) {
+      case 0:
+         return imported_bundle_message_complexity_cache[0];
+      case 1:
+         return imported_bundle_message_complexity_cache[1];
+      default:
+         throw std::out_of_range{"Unknown production index " + std::to_string(production_index) + " for rule 'imported_bundle_message'"};
+   }
+}
+
+auto detail::recompute_complexity_imported_bundle_message_default(std::size_t production_index) -> const cpf::complexity& {
+   switch (production_index) {
+      case 0:
+         imported_bundle_message_complexity_cache[0] = compute_generated_rule_complexity<imported_bundle_message>(imported_bundle_message_complexity_inputs_0, "imported_bundle_message", 0, 4);
+         return imported_bundle_message_complexity_cache[0];
+      case 1:
+         imported_bundle_message_complexity_cache[1] = compute_generated_rule_complexity<imported_bundle_message>(imported_bundle_message_complexity_inputs_1, "imported_bundle_message", 1, 4);
+         return imported_bundle_message_complexity_cache[1];
+      default:
+         throw std::out_of_range{"Unknown production index " + std::to_string(production_index) + " for rule 'imported_bundle_message'"};
+   }
+}
+

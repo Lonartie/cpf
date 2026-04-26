@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <string>
+#include <vector>
 
 namespace {
    void write_file(const std::filesystem::path& path, std::string_view content) {
@@ -27,9 +29,58 @@ namespace {
       REQUIRE(return_end != std::string_view::npos);
       return std::stoi(std::string{generated_source.substr(return_position, return_end - return_position)});
    }
+
+   [[nodiscard]] std::string read_file(const std::filesystem::path& path) {
+      auto stream = std::ifstream{path};
+      REQUIRE(stream.good());
+      return {std::istreambuf_iterator<char>{stream}, std::istreambuf_iterator<char>{}};
+   }
+
+   struct golden_fixture_spec {
+      std::string grammar_name;
+      std::string snapshot_stem;
+      std::string code_namespace;
+   };
+
+   [[nodiscard]] auto repository_root() -> std::filesystem::path {
+      return std::filesystem::path{__FILE__}.parent_path().parent_path().parent_path().parent_path();
+   }
+
+   [[nodiscard]] auto grammar_fixture_path(std::string_view grammar_name) -> std::filesystem::path {
+      return repository_root() / "cpftools" / "cpftests" / "fixtures" / "grammars" /
+             (std::string{grammar_name} + ".cpf");
+   }
+
+   [[nodiscard]] auto snapshot_path(std::string_view stem, std::string_view extension) -> std::filesystem::path {
+      return std::filesystem::path{__FILE__}.parent_path() / "snapshots" /
+             (std::string{stem} + "." + std::string{extension});
+   }
+
+   void check_snapshot(std::string_view actual, const std::filesystem::path& path) {
+      const auto expected = read_file(path);
+      CHECK(actual == expected);
+   }
 } // namespace
 
 TEST_SUITE("cpflib.code_generator") {
+   TEST_CASE("representative grammars keep stable golden generated outputs") {
+      const auto fixtures = std::vector<golden_fixture_spec>{
+            {"calculator", "calculator", ""},
+            {"default_attrs", "default_attrs", ""},
+            {"imported_bundle", "imported_bundle", ""},
+            {"namespaced_calculator", "namespaced_calculator", "generated::fixtures"},
+      };
+
+      for (const auto& fixture: fixtures) {
+         CAPTURE(fixture.grammar_name);
+         auto grammar = cpf::parse_grammar_file(grammar_fixture_path(fixture.grammar_name));
+         auto generated = cpf::generate_code(grammar, fixture.grammar_name, fixture.code_namespace);
+
+         check_snapshot(generated.header, snapshot_path(fixture.snapshot_stem, "h.snap"));
+         check_snapshot(generated.source, snapshot_path(fixture.snapshot_stem, "cpp.snap"));
+      }
+   }
+
    TEST_CASE("calculator grammar generates the documented public surface") {
       auto grammar = cpf::parse_grammar(R"(
          expression -> addition | subtraction | multiplication | division | number;

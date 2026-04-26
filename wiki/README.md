@@ -23,6 +23,7 @@ This directory contains the structured project documentation for CPF.
 - [`tooling.md`](./tooling.md)
     - Build commands
     - Test execution
+    - Generator golden snapshots
     - Benchmark workflows and benchmark families
 
 ## Suggested reading order

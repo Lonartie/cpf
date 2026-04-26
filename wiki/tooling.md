@@ -30,6 +30,17 @@ The test tools live under `cpftools` and use the vendored `doctest` single-heade
 executables directly produces the underlying doctest failure output, which is usually easier to diagnose than the
 aggregated CTest summary.
 
+`cpflibtests` now also contains golden snapshot coverage for representative generated headers and sources under
+`cpftools/cpflibtests/codegen/snapshots/`. These snapshots lock in code generation for:
+
+- baseline/lazy-forest scaffolding (`calculator`)
+- default precedence and associativity fallbacks (`default_attrs`)
+- `@import`-driven generation (`imported_bundle`)
+- explicit namespace wrapping (`namespaced_calculator`)
+
+When intentionally changing generator output, refresh the snapshot files from a verified build tree and review the diff
+like any other public API change.
+
 This is also the easiest place to inspect lexer-facing behavior while developing CPF changes:
 
 - generated `lex(...)` entry points return `cpf::token_sequence`

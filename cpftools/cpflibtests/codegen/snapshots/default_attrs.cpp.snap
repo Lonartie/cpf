@@ -1,0 +1,1271 @@
+#include "default_attrs.h"
+#include <runtime/runtime.h>
+
+#include <array>
+#include <ostream>
+#include <regex>
+#include <stdexcept>
+#include <utility>
+
+namespace {
+   using parse_node_ptr = cpf::detail::parse_node_ptr;
+   const std::regex regex_0{"[0-9]+", std::regex_constants::optimize};
+   constexpr std::array<std::string_view, 4> default_expr_complexity_inputs_0{{
+      "0 + 0",
+      "0 + 0 + 0 + 0",
+      "0 + 0 + 0 + 0 + 0 + 0 + 0 + 0",
+      "0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0"
+   }};
+   constexpr std::array<std::string_view, 4> default_expr_complexity_inputs_1{{
+      "0 - 0",
+      "0 - 0",
+      "0 + 0 - 0 + 0",
+      "0 + 0 + 0 + 0 - 0 + 0 + 0 + 0"
+   }};
+   constexpr std::array<std::string_view, 4> default_expr_complexity_inputs_2{{
+      "0 * 0",
+      "0 * 0",
+      "0 + 0 * 0 + 0",
+      "0 + 0 + 0 + 0 * 0 + 0 + 0 + 0"
+   }};
+   constexpr std::array<std::string_view, 4> default_expr_complexity_inputs_3{{
+      "0",
+      "00",
+      "000",
+      "0000"
+   }};
+   constexpr std::array<std::string_view, 4> default_add_complexity_inputs_0{{
+      "0 + 0",
+      "0 + 0 + 0 + 0",
+      "0 + 0 + 0 + 0 + 0 + 0 + 0 + 0",
+      "0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0"
+   }};
+   constexpr std::array<std::string_view, 4> default_subtract_complexity_inputs_0{{
+      "0 - 0",
+      "0 + 0 - 0 + 0",
+      "0 + 0 + 0 + 0 - 0 + 0 + 0 + 0",
+      "0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 - 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0"
+   }};
+   constexpr std::array<std::string_view, 4> default_multiply_complexity_inputs_0{{
+      "0 * 0",
+      "0 + 0 * 0 + 0",
+      "0 + 0 + 0 + 0 * 0 + 0 + 0 + 0",
+      "0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 * 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0"
+   }};
+   constexpr std::array<std::string_view, 4> default_number_complexity_inputs_0{{
+      "0",
+      "00",
+      "000",
+      "0000"
+   }};
+} // namespace
+
+namespace {
+   constexpr std::array<cpf::detail::parser_symbol, 1> production_0_symbols{{
+      {cpf::detail::parser_symbol_kind::nonterminal, 1, "default_add"}
+   }};
+} // namespace
+
+namespace {
+   constexpr std::array<cpf::detail::parser_symbol, 1> production_1_symbols{{
+      {cpf::detail::parser_symbol_kind::nonterminal, 2, "default_subtract"}
+   }};
+} // namespace
+
+namespace {
+   constexpr std::array<cpf::detail::parser_symbol, 1> production_2_symbols{{
+      {cpf::detail::parser_symbol_kind::nonterminal, 3, "default_multiply"}
+   }};
+} // namespace
+
+namespace {
+   constexpr std::array<cpf::detail::parser_symbol, 1> production_3_symbols{{
+      {cpf::detail::parser_symbol_kind::nonterminal, 4, "default_number"}
+   }};
+} // namespace
+
+namespace {
+   constexpr std::array<cpf::detail::parser_symbol, 3> production_4_symbols{{
+      {cpf::detail::parser_symbol_kind::nonterminal, 0, "default_expr"},
+      {cpf::detail::parser_symbol_kind::terminal, 0, "+"},
+      {cpf::detail::parser_symbol_kind::nonterminal, 0, "default_expr"}
+   }};
+} // namespace
+
+namespace {
+   constexpr std::array<cpf::detail::parser_symbol, 3> production_5_symbols{{
+      {cpf::detail::parser_symbol_kind::nonterminal, 0, "default_expr"},
+      {cpf::detail::parser_symbol_kind::terminal, 1, "-"},
+      {cpf::detail::parser_symbol_kind::nonterminal, 0, "default_expr"}
+   }};
+} // namespace
+
+namespace {
+   constexpr std::array<cpf::detail::parser_symbol, 3> production_6_symbols{{
+      {cpf::detail::parser_symbol_kind::nonterminal, 0, "default_expr"},
+      {cpf::detail::parser_symbol_kind::terminal, 2, "*"},
+      {cpf::detail::parser_symbol_kind::nonterminal, 0, "default_expr"}
+   }};
+} // namespace
+
+namespace {
+   constexpr std::array<cpf::detail::parser_symbol, 1> production_7_symbols{{
+      {cpf::detail::parser_symbol_kind::terminal, 3, "[0-9]+"}
+   }};
+} // namespace
+
+namespace {
+   constexpr std::array<cpf::detail::lexer_symbol_spec, 4> grammar_token_symbols{{
+      {cpf::detail::lexer_symbol_kind::literal, "+", nullptr, 2},
+      {cpf::detail::lexer_symbol_kind::literal, "-", nullptr, 3},
+      {cpf::detail::lexer_symbol_kind::literal, "*", nullptr, 4},
+      {cpf::detail::lexer_symbol_kind::regex, "[0-9]+", &regex_0, 5}
+   }};
+   constexpr std::array<cpf::detail::production_spec, 8> grammar_productions{{
+      {0, "default_expr", "default_expr -> default_add", production_0_symbols.data(), production_0_symbols.size()},
+      {0, "default_expr", "default_expr -> default_subtract", production_1_symbols.data(), production_1_symbols.size()},
+      {0, "default_expr", "default_expr -> default_multiply", production_2_symbols.data(), production_2_symbols.size()},
+      {0, "default_expr", "default_expr -> default_number", production_3_symbols.data(), production_3_symbols.size()},
+      {1, "default_add", "default_add -> default_expr:left '+':op default_expr:right", production_4_symbols.data(), production_4_symbols.size()},
+      {2, "default_subtract", "default_subtract -> default_expr:left '-':op default_expr:right", production_5_symbols.data(), production_5_symbols.size()},
+      {3, "default_multiply", "default_multiply -> default_expr:left '*':op default_expr:right", production_6_symbols.data(), production_6_symbols.size()},
+      {4, "default_number", "default_number -> r'[0-9]+':value", production_7_symbols.data(), production_7_symbols.size()}
+   }};
+   constexpr std::array<std::size_t, 8> grammar_rule_production_indices{{
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+   }};
+   constexpr std::array<std::size_t, 5> grammar_rule_production_offsets{{
+      0,
+      4,
+      5,
+      6,
+      7
+   }};
+   constexpr std::array<std::size_t, 5> grammar_rule_production_counts{{
+      4,
+      1,
+      1,
+      1,
+      1
+   }};
+   constexpr std::array<std::string_view, 5> grammar_rule_expected_labels{{
+      "",
+      "",
+      "",
+      "",
+      ""
+   }};
+   constexpr std::array<cpf::detail::lexer_symbol_spec, 0> grammar_skip_symbols{{
+   }};
+   constexpr cpf::detail::grammar_spec grammar_spec{grammar_productions.data(), grammar_productions.size(), 5, grammar_rule_expected_labels.data(), grammar_rule_production_indices.data(), grammar_rule_production_offsets.data(), grammar_rule_production_counts.data(), grammar_token_symbols.data(), grammar_token_symbols.size(), grammar_skip_symbols.data(), grammar_skip_symbols.size(), true};
+   constexpr std::array<std::string_view, 5> grammar_rule_names{{
+      "default_expr",
+      "default_add",
+      "default_subtract",
+      "default_multiply",
+      "default_number"
+   }};
+
+   template<typename Rule, std::size_t SampleCount>
+   cpf::complexity compute_generated_rule_complexity(const std::array<std::string_view, SampleCount>& inputs, std::string_view rule_name, std::size_t rule_id, std::size_t root_rule) {
+      std::vector<std::tuple<std::string_view>> args;
+      args.reserve(inputs.size());
+      std::vector<double> arg_sizes;
+      arg_sizes.reserve(inputs.size());
+      for (const auto input : inputs) {
+         args.emplace_back(input);
+         arg_sizes.push_back(static_cast<double>(input.size()));
+      }
+      return cpf::complexity_of(
+         [rule_name, rule_id, root_rule](std::string_view input) {
+            auto result = cpf::detail::earley_recognize(input, grammar_spec, root_rule);
+            if (!result.success) {
+               throw std::runtime_error{"Generated complexity sample for rule '" + std::string{rule_name} + "' definition " + std::to_string(rule_id) + " failed to parse input: " + (result.error.has_value() ? result.error->message : std::string{"unknown parse failure"})};
+            }
+            return static_cast<std::size_t>(result.success);
+         },
+         std::move(args),
+         std::move(arg_sizes));
+   }
+   std::unique_ptr<cpf::node> build_node(const parse_node_ptr& tree);
+
+   template<typename T>
+   std::unique_ptr<T> release_built_node_as(std::unique_ptr<cpf::node> built) {
+      if (built == nullptr) {
+         return nullptr;
+      }
+      auto* raw = dynamic_cast<T*>(built.get());
+      if (raw == nullptr) {
+         throw std::runtime_error{"Generated node cast failed"};
+      }
+      built.release();
+      return std::unique_ptr<T>{raw};
+   }
+
+   parse_node_ptr node_child_at(const parse_node_ptr& tree, std::size_t index) {
+      if (index >= tree->children.size()) {
+         throw std::runtime_error{"Generated parse tree missing node child"};
+      }
+      const auto* child = std::get_if<parse_node_ptr>(&tree->children[index]);
+      if (child == nullptr || *child == nullptr) {
+         throw std::runtime_error{"Generated parse tree child is not a node"};
+      }
+      return *child;
+   }
+
+   cpf::matched_string matched_child_at(const parse_node_ptr& tree, std::size_t index) {
+      if (index >= tree->children.size()) {
+         throw std::runtime_error{"Generated parse tree missing terminal child"};
+      }
+      const auto* child = std::get_if<cpf::matched_string>(&tree->children[index]);
+      if (child == nullptr) {
+         throw std::runtime_error{"Generated parse tree child is not a terminal"};
+      }
+      return *child;
+   }
+
+   [[maybe_unused]] void append_matched_tree_text(const parse_node_ptr& tree, std::string& text) {
+      for (const auto& child : tree->children) {
+         if (const auto* matched = std::get_if<cpf::matched_string>(&child); matched != nullptr) {
+            text += matched->text;
+            continue;
+         }
+         const auto* node = std::get_if<parse_node_ptr>(&child);
+         if (node == nullptr || *node == nullptr) {
+            throw std::runtime_error{"Generated parse tree child is not materializable as token text"};
+         }
+         append_matched_tree_text(*node, text);
+      }
+   }
+
+   [[maybe_unused]] cpf::matched_string matched_tree_at(const parse_node_ptr& tree) {
+      cpf::matched_string matched;
+      matched.range = tree->range;
+      append_matched_tree_text(tree, matched.text);
+      return matched;
+   }
+
+
+   std::size_t definition_of_generated_tree(const parse_node_ptr& tree) {
+      switch (tree->production) {
+         case 0:
+            return 0;
+         case 1:
+            return 1;
+         case 2:
+            return 2;
+         case 3:
+            return 3;
+         case 4:
+            return 0;
+         case 5:
+            return 0;
+         case 6:
+            return 0;
+         case 7:
+            return 0;
+         default:
+            return 0;
+      }
+   }
+
+   int precedence_of_default_expr(const default_expr& node) {
+      switch (node.rule_id()) {
+         case default_add::RuleId: {
+            const auto& value = static_cast<const default_add&>(node);
+            switch (value.production_index) {
+               case 0:
+                  return 1;
+               default:
+                  return 0;
+            }
+         }
+         case default_subtract::RuleId: {
+            const auto& value = static_cast<const default_subtract&>(node);
+            switch (value.production_index) {
+               case 0:
+                  return 2;
+               default:
+                  return 0;
+            }
+         }
+         case default_multiply::RuleId: {
+            const auto& value = static_cast<const default_multiply&>(node);
+            switch (value.production_index) {
+               case 0:
+                  return 3;
+               default:
+                  return 0;
+            }
+         }
+         default:
+            return 0;
+      }
+   }
+
+   bool validate_default_expr_child(const default_expr& child, int precedence, bool left_associative, bool is_left_child) {
+      auto child_precedence = precedence_of_default_expr(child);
+      if (child_precedence == 0) {
+         return true;
+      }
+      if (child_precedence < precedence) {
+         return false;
+      }
+      if (child_precedence > precedence) {
+         return true;
+      }
+      return is_left_child ? left_associative : !left_associative;
+   }
+
+   int precedence_of_default_expr_tree(const parse_node_ptr& tree) {
+      switch (tree->production) {
+         case 0:
+            return precedence_of_default_expr_tree(node_child_at(tree, 0));
+         case 1:
+            return precedence_of_default_expr_tree(node_child_at(tree, 0));
+         case 2:
+            return precedence_of_default_expr_tree(node_child_at(tree, 0));
+         case 3:
+            return precedence_of_default_expr_tree(node_child_at(tree, 0));
+         case 4:
+            return 1;
+         case 5:
+            return 2;
+         case 6:
+            return 3;
+         default:
+            return 0;
+      }
+   }
+
+   bool validate_default_expr_child_tree(const parse_node_ptr& child, int precedence, bool left_associative, bool is_left_child) {
+      auto child_precedence = precedence_of_default_expr_tree(child);
+      if (child_precedence == 0) {
+         return true;
+      }
+      if (child_precedence < precedence) {
+         return false;
+      }
+      if (child_precedence > precedence) {
+         return true;
+      }
+      return is_left_child ? left_associative : !left_associative;
+   }
+
+   [[maybe_unused]] bool validate_generated_node(const cpf::node& node) {
+      switch (node.rule_id()) {
+         case default_add::RuleId: {
+            const auto& value = static_cast<const default_add&>(node);
+            if (value.left && !validate_generated_node(*value.left)) {
+               return false;
+            }
+            if (value.right && !validate_generated_node(*value.right)) {
+               return false;
+            }
+            switch (value.production_index) {
+               case 0:
+                  if (value.left && !validate_default_expr_child(*value.left, 1, true, true)) {
+                     return false;
+                  }
+                  if (value.right && !validate_default_expr_child(*value.right, 1, true, false)) {
+                     return false;
+                  }
+                  break;
+               default:
+                  break;
+            }
+            return true;
+         }
+         case default_subtract::RuleId: {
+            const auto& value = static_cast<const default_subtract&>(node);
+            if (value.left && !validate_generated_node(*value.left)) {
+               return false;
+            }
+            if (value.right && !validate_generated_node(*value.right)) {
+               return false;
+            }
+            switch (value.production_index) {
+               case 0:
+                  if (value.left && !validate_default_expr_child(*value.left, 2, true, true)) {
+                     return false;
+                  }
+                  if (value.right && !validate_default_expr_child(*value.right, 2, true, false)) {
+                     return false;
+                  }
+                  break;
+               default:
+                  break;
+            }
+            return true;
+         }
+         case default_multiply::RuleId: {
+            const auto& value = static_cast<const default_multiply&>(node);
+            if (value.left && !validate_generated_node(*value.left)) {
+               return false;
+            }
+            if (value.right && !validate_generated_node(*value.right)) {
+               return false;
+            }
+            switch (value.production_index) {
+               case 0:
+                  if (value.left && !validate_default_expr_child(*value.left, 3, true, true)) {
+                     return false;
+                  }
+                  if (value.right && !validate_default_expr_child(*value.right, 3, true, false)) {
+                     return false;
+                  }
+                  break;
+               default:
+                  break;
+            }
+            return true;
+         }
+         case default_number::RuleId: {
+            return true;
+         }
+         default:
+            return true;
+      }
+   }
+
+   bool validate_generated_tree(const parse_node_ptr& tree) {
+      for (const auto& child : tree->children) {
+         if (std::holds_alternative<parse_node_ptr>(child) && !validate_generated_tree(std::get<parse_node_ptr>(child))) {
+            return false;
+         }
+      }
+      switch (tree->production) {
+         case 0: {
+            return true;
+         }
+         case 1: {
+            return true;
+         }
+         case 2: {
+            return true;
+         }
+         case 3: {
+            return true;
+         }
+         case 4: {
+            if (!validate_default_expr_child_tree(node_child_at(tree, 0), 1, true, true)) {
+               return false;
+            }
+            if (!validate_default_expr_child_tree(node_child_at(tree, 2), 1, true, false)) {
+               return false;
+            }
+            return true;
+         }
+         case 5: {
+            if (!validate_default_expr_child_tree(node_child_at(tree, 0), 2, true, true)) {
+               return false;
+            }
+            if (!validate_default_expr_child_tree(node_child_at(tree, 2), 2, true, false)) {
+               return false;
+            }
+            return true;
+         }
+         case 6: {
+            if (!validate_default_expr_child_tree(node_child_at(tree, 0), 3, true, true)) {
+               return false;
+            }
+            if (!validate_default_expr_child_tree(node_child_at(tree, 2), 3, true, false)) {
+               return false;
+            }
+            return true;
+         }
+         case 7: {
+            return true;
+         }
+         default:
+            return true;
+      }
+   }
+
+   std::unique_ptr<cpf::node> build_node(const parse_node_ptr& tree) {
+      switch (tree->production) {
+         case 0: {
+            return build_node(node_child_at(tree, 0));
+         }
+         case 1: {
+            return build_node(node_child_at(tree, 0));
+         }
+         case 2: {
+            return build_node(node_child_at(tree, 0));
+         }
+         case 3: {
+            return build_node(node_child_at(tree, 0));
+         }
+         case 4: {
+            auto node = std::make_unique<default_add>();
+            node->production_index = 0;
+            node->range = tree->range;
+            for (const auto& damage : tree->damage) {
+               cpf::detail::add_damage(*node, damage);
+            }
+            auto child_0 = build_node(node_child_at(tree, 0));
+            node->left = release_built_node_as<default_expr>(std::move(child_0));
+            node->op = matched_child_at(tree, 1);
+            auto child_2 = build_node(node_child_at(tree, 2));
+            node->right = release_built_node_as<default_expr>(std::move(child_2));
+            return node;
+         }
+         case 5: {
+            auto node = std::make_unique<default_subtract>();
+            node->production_index = 0;
+            node->range = tree->range;
+            for (const auto& damage : tree->damage) {
+               cpf::detail::add_damage(*node, damage);
+            }
+            auto child_0 = build_node(node_child_at(tree, 0));
+            node->left = release_built_node_as<default_expr>(std::move(child_0));
+            node->op = matched_child_at(tree, 1);
+            auto child_2 = build_node(node_child_at(tree, 2));
+            node->right = release_built_node_as<default_expr>(std::move(child_2));
+            return node;
+         }
+         case 6: {
+            auto node = std::make_unique<default_multiply>();
+            node->production_index = 0;
+            node->range = tree->range;
+            for (const auto& damage : tree->damage) {
+               cpf::detail::add_damage(*node, damage);
+            }
+            auto child_0 = build_node(node_child_at(tree, 0));
+            node->left = release_built_node_as<default_expr>(std::move(child_0));
+            node->op = matched_child_at(tree, 1);
+            auto child_2 = build_node(node_child_at(tree, 2));
+            node->right = release_built_node_as<default_expr>(std::move(child_2));
+            return node;
+         }
+         case 7: {
+            auto node = std::make_unique<default_number>();
+            node->production_index = 0;
+            node->range = tree->range;
+            for (const auto& damage : tree->damage) {
+               cpf::detail::add_damage(*node, damage);
+            }
+            node->value = matched_child_at(tree, 0);
+            return node;
+         }
+         default:
+            throw std::runtime_error{"Unknown parse production"};
+      }
+   }
+
+   template<typename T>
+   cpf::recognize_result recognize_generated(const cpf::token_sequence& tokens, std::size_t root_rule) {
+      cpf::recognize_result result;
+      auto recognized = cpf::detail::earley_recognize(tokens, grammar_spec, root_rule);
+      result.success = recognized.success;
+      if (!recognized.success) {
+         result.error = std::move(recognized.error);
+      }
+      return result;
+   }
+
+   template<typename T>
+   cpf::recognize_result recognize_generated(std::string_view input, std::size_t root_rule) {
+      auto tokens = cpf::detail::lex_input(input, grammar_spec);
+      return recognize_generated<T>(tokens, root_rule);
+   }
+
+   template<typename T>
+   cpf::parse_result<T> parse_generated(const cpf::token_sequence& tokens, std::size_t root_rule, const cpf::parse_options& options) {
+      cpf::parse_result<T> result;
+      auto forest = cpf::detail::earley_parse(tokens, grammar_spec, root_rule, options.allow_partial);
+      if (!forest.success) {
+         result.error = std::move(forest.error);
+         return result;
+      }
+      result.partial = forest.partial;
+      if (result.partial) {
+         result.error = forest.error;
+      }
+      auto valid_tree_count = std::size_t{0};
+      for (std::size_t tree_index = 0; tree_index < forest.forest.size(); ++tree_index) {
+         const auto& tree = forest.forest[tree_index];
+         if (!validate_generated_tree(tree)) {
+            continue;
+         }
+         ++valid_tree_count;
+         if (options.error_on_ambiguity && valid_tree_count > 1) {
+            result.status = cpf::parse_status::failure;
+            result.success = false;
+            result.forest.clear();
+            result.error = cpf::detail::make_ambiguity_error(grammar_rule_names[root_rule]);
+            return result;
+         }
+         result.status = result.partial ? cpf::parse_status::partial_success : cpf::parse_status::success;
+         result.success = true;
+         if (options.build_ast) {
+            result.forest.emplace_back(tree, definition_of_generated_tree(tree), tree->range, [tree]() {
+               auto built = build_node(tree);
+               return release_built_node_as<T>(std::move(built));
+            }, forest.tree_damage[tree_index], forest.tree_partial[tree_index], [](const T& root, std::vector<const cpf::node*>& damaged_nodes) {
+               visit_recursive(root, [&](auto& current) {
+                  if (current.is_damaged()) {
+                     damaged_nodes.push_back(&current);
+                  }
+               });
+            }, [tree](std::string_view repaired_input) { return cpf::detail::repaired_input_of(tree, repaired_input, grammar_spec); });
+         }
+      }
+      if (result.success) {
+         return result;
+      }
+      auto filtered_error = cpf::parse_error{};
+      filtered_error.expected.push_back("valid parse tree");
+      filtered_error.found.kind = cpf::parse_error_found_kind::filtered_parse;
+      filtered_error.notes.push_back(std::string{R"(completed Earley parses for rule ')"} + std::string{grammar_rule_names[root_rule]} + R"(' were rejected by precedence/associativity constraints)");
+      cpf::detail::error_tracker::finalize(filtered_error);
+      result.error = std::move(filtered_error);
+      return result;
+   }
+
+   template<typename T>
+   cpf::parse_result<T> parse_generated(std::string_view input, std::size_t root_rule, const cpf::parse_options& options) {
+      auto tokens = cpf::detail::lex_input(input, grammar_spec);
+      return parse_generated<T>(tokens, root_rule, options);
+   }
+} // namespace
+
+auto detail::lex_default_attrs_generated(std::string_view input) -> cpf::token_sequence {
+   return cpf::detail::lex_input(input, grammar_spec);
+}
+
+auto detail::parse_default_expr_default(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<default_expr> {
+   auto tokens = detail::lex_default_attrs_generated(input);
+   return parse_default_expr_default(tokens, options);
+}
+
+auto detail::parse_default_expr_default(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<default_expr> {
+   auto result = cpf::parse_result<default_expr>{ };
+   cpf::parse_error best_error;
+   auto have_error = false;
+   auto successful_children = std::size_t{0};
+   auto have_partial_success = false;
+   {
+      auto child_result = detail::parse_default_add_default(tokens, options);
+      if (child_result.success) {
+         if (!child_result.partial) {
+            if (have_partial_success) {
+               have_partial_success = false;
+               successful_children = 0;
+               result.status = cpf::parse_status::failure;
+               result.partial = false;
+               result.forest.clear();
+            }
+            result.status = cpf::parse_status::success;
+            result.success = true;
+            result.error.reset();
+            successful_children += child_result.forest.size();
+            if (options.error_on_ambiguity && successful_children > 1) {
+               result.status = cpf::parse_status::failure;
+               result.success = false;
+               result.partial = false;
+               result.forest.clear();
+               result.error = cpf::detail::make_ambiguity_error("default_expr");
+               return result;
+            }
+            if (options.build_ast) {
+               for (const auto& tree : child_result.forest) {
+                  auto opaque = std::static_pointer_cast<const cpf::detail::parse_node>(cpf::detail::opaque_tree_of(tree));
+                  result.forest.emplace_back(opaque, tree.production_index(), tree.range(), [opaque]() {
+                     auto built = build_node(opaque);
+                     return release_built_node_as<default_expr>(std::move(built));
+                  }, cpf::detail::pending_damage_of(tree), tree.is_partial(), [](const default_expr& root, std::vector<const cpf::node*>& damaged_nodes) {
+                     visit_recursive(root, [&](auto& current) {
+                        if (current.is_damaged()) {
+                           damaged_nodes.push_back(&current);
+                        }
+                     });
+                  }, [opaque](std::string_view repaired_input) { return cpf::detail::repaired_input_of(opaque, repaired_input, grammar_spec); });
+               }
+            }
+         } else if (!result.success && !have_partial_success) {
+            result.status = cpf::parse_status::partial_success;
+            result.success = true;
+            result.partial = true;
+            result.error = child_result.error;
+            have_partial_success = true;
+            successful_children = child_result.forest.size();
+            if (options.build_ast) {
+               for (const auto& tree : child_result.forest) {
+                  auto opaque = std::static_pointer_cast<const cpf::detail::parse_node>(cpf::detail::opaque_tree_of(tree));
+                  result.forest.emplace_back(opaque, tree.production_index(), tree.range(), [opaque]() {
+                     auto built = build_node(opaque);
+                     return release_built_node_as<default_expr>(std::move(built));
+                  }, cpf::detail::pending_damage_of(tree), tree.is_partial(), [](const default_expr& root, std::vector<const cpf::node*>& damaged_nodes) {
+                     visit_recursive(root, [&](auto& current) {
+                        if (current.is_damaged()) {
+                           damaged_nodes.push_back(&current);
+                        }
+                     });
+                  }, [opaque](std::string_view repaired_input) { return cpf::detail::repaired_input_of(opaque, repaired_input, grammar_spec); });
+               }
+            }
+         }
+      } else if (!have_error) {
+         best_error = *child_result.error;
+         have_error = true;
+      } else {
+         cpf::detail::merge_parse_error(best_error, *child_result.error);
+      }
+   }
+   {
+      auto child_result = detail::parse_default_subtract_default(tokens, options);
+      if (child_result.success) {
+         if (!child_result.partial) {
+            if (have_partial_success) {
+               have_partial_success = false;
+               successful_children = 0;
+               result.status = cpf::parse_status::failure;
+               result.partial = false;
+               result.forest.clear();
+            }
+            result.status = cpf::parse_status::success;
+            result.success = true;
+            result.error.reset();
+            successful_children += child_result.forest.size();
+            if (options.error_on_ambiguity && successful_children > 1) {
+               result.status = cpf::parse_status::failure;
+               result.success = false;
+               result.partial = false;
+               result.forest.clear();
+               result.error = cpf::detail::make_ambiguity_error("default_expr");
+               return result;
+            }
+            if (options.build_ast) {
+               for (const auto& tree : child_result.forest) {
+                  auto opaque = std::static_pointer_cast<const cpf::detail::parse_node>(cpf::detail::opaque_tree_of(tree));
+                  result.forest.emplace_back(opaque, tree.production_index(), tree.range(), [opaque]() {
+                     auto built = build_node(opaque);
+                     return release_built_node_as<default_expr>(std::move(built));
+                  }, cpf::detail::pending_damage_of(tree), tree.is_partial(), [](const default_expr& root, std::vector<const cpf::node*>& damaged_nodes) {
+                     visit_recursive(root, [&](auto& current) {
+                        if (current.is_damaged()) {
+                           damaged_nodes.push_back(&current);
+                        }
+                     });
+                  }, [opaque](std::string_view repaired_input) { return cpf::detail::repaired_input_of(opaque, repaired_input, grammar_spec); });
+               }
+            }
+         } else if (!result.success && !have_partial_success) {
+            result.status = cpf::parse_status::partial_success;
+            result.success = true;
+            result.partial = true;
+            result.error = child_result.error;
+            have_partial_success = true;
+            successful_children = child_result.forest.size();
+            if (options.build_ast) {
+               for (const auto& tree : child_result.forest) {
+                  auto opaque = std::static_pointer_cast<const cpf::detail::parse_node>(cpf::detail::opaque_tree_of(tree));
+                  result.forest.emplace_back(opaque, tree.production_index(), tree.range(), [opaque]() {
+                     auto built = build_node(opaque);
+                     return release_built_node_as<default_expr>(std::move(built));
+                  }, cpf::detail::pending_damage_of(tree), tree.is_partial(), [](const default_expr& root, std::vector<const cpf::node*>& damaged_nodes) {
+                     visit_recursive(root, [&](auto& current) {
+                        if (current.is_damaged()) {
+                           damaged_nodes.push_back(&current);
+                        }
+                     });
+                  }, [opaque](std::string_view repaired_input) { return cpf::detail::repaired_input_of(opaque, repaired_input, grammar_spec); });
+               }
+            }
+         }
+      } else if (!have_error) {
+         best_error = *child_result.error;
+         have_error = true;
+      } else {
+         cpf::detail::merge_parse_error(best_error, *child_result.error);
+      }
+   }
+   {
+      auto child_result = detail::parse_default_multiply_default(tokens, options);
+      if (child_result.success) {
+         if (!child_result.partial) {
+            if (have_partial_success) {
+               have_partial_success = false;
+               successful_children = 0;
+               result.status = cpf::parse_status::failure;
+               result.partial = false;
+               result.forest.clear();
+            }
+            result.status = cpf::parse_status::success;
+            result.success = true;
+            result.error.reset();
+            successful_children += child_result.forest.size();
+            if (options.error_on_ambiguity && successful_children > 1) {
+               result.status = cpf::parse_status::failure;
+               result.success = false;
+               result.partial = false;
+               result.forest.clear();
+               result.error = cpf::detail::make_ambiguity_error("default_expr");
+               return result;
+            }
+            if (options.build_ast) {
+               for (const auto& tree : child_result.forest) {
+                  auto opaque = std::static_pointer_cast<const cpf::detail::parse_node>(cpf::detail::opaque_tree_of(tree));
+                  result.forest.emplace_back(opaque, tree.production_index(), tree.range(), [opaque]() {
+                     auto built = build_node(opaque);
+                     return release_built_node_as<default_expr>(std::move(built));
+                  }, cpf::detail::pending_damage_of(tree), tree.is_partial(), [](const default_expr& root, std::vector<const cpf::node*>& damaged_nodes) {
+                     visit_recursive(root, [&](auto& current) {
+                        if (current.is_damaged()) {
+                           damaged_nodes.push_back(&current);
+                        }
+                     });
+                  }, [opaque](std::string_view repaired_input) { return cpf::detail::repaired_input_of(opaque, repaired_input, grammar_spec); });
+               }
+            }
+         } else if (!result.success && !have_partial_success) {
+            result.status = cpf::parse_status::partial_success;
+            result.success = true;
+            result.partial = true;
+            result.error = child_result.error;
+            have_partial_success = true;
+            successful_children = child_result.forest.size();
+            if (options.build_ast) {
+               for (const auto& tree : child_result.forest) {
+                  auto opaque = std::static_pointer_cast<const cpf::detail::parse_node>(cpf::detail::opaque_tree_of(tree));
+                  result.forest.emplace_back(opaque, tree.production_index(), tree.range(), [opaque]() {
+                     auto built = build_node(opaque);
+                     return release_built_node_as<default_expr>(std::move(built));
+                  }, cpf::detail::pending_damage_of(tree), tree.is_partial(), [](const default_expr& root, std::vector<const cpf::node*>& damaged_nodes) {
+                     visit_recursive(root, [&](auto& current) {
+                        if (current.is_damaged()) {
+                           damaged_nodes.push_back(&current);
+                        }
+                     });
+                  }, [opaque](std::string_view repaired_input) { return cpf::detail::repaired_input_of(opaque, repaired_input, grammar_spec); });
+               }
+            }
+         }
+      } else if (!have_error) {
+         best_error = *child_result.error;
+         have_error = true;
+      } else {
+         cpf::detail::merge_parse_error(best_error, *child_result.error);
+      }
+   }
+   {
+      auto child_result = detail::parse_default_number_default(tokens, options);
+      if (child_result.success) {
+         if (!child_result.partial) {
+            if (have_partial_success) {
+               have_partial_success = false;
+               successful_children = 0;
+               result.status = cpf::parse_status::failure;
+               result.partial = false;
+               result.forest.clear();
+            }
+            result.status = cpf::parse_status::success;
+            result.success = true;
+            result.error.reset();
+            successful_children += child_result.forest.size();
+            if (options.error_on_ambiguity && successful_children > 1) {
+               result.status = cpf::parse_status::failure;
+               result.success = false;
+               result.partial = false;
+               result.forest.clear();
+               result.error = cpf::detail::make_ambiguity_error("default_expr");
+               return result;
+            }
+            if (options.build_ast) {
+               for (const auto& tree : child_result.forest) {
+                  auto opaque = std::static_pointer_cast<const cpf::detail::parse_node>(cpf::detail::opaque_tree_of(tree));
+                  result.forest.emplace_back(opaque, tree.production_index(), tree.range(), [opaque]() {
+                     auto built = build_node(opaque);
+                     return release_built_node_as<default_expr>(std::move(built));
+                  }, cpf::detail::pending_damage_of(tree), tree.is_partial(), [](const default_expr& root, std::vector<const cpf::node*>& damaged_nodes) {
+                     visit_recursive(root, [&](auto& current) {
+                        if (current.is_damaged()) {
+                           damaged_nodes.push_back(&current);
+                        }
+                     });
+                  }, [opaque](std::string_view repaired_input) { return cpf::detail::repaired_input_of(opaque, repaired_input, grammar_spec); });
+               }
+            }
+         } else if (!result.success && !have_partial_success) {
+            result.status = cpf::parse_status::partial_success;
+            result.success = true;
+            result.partial = true;
+            result.error = child_result.error;
+            have_partial_success = true;
+            successful_children = child_result.forest.size();
+            if (options.build_ast) {
+               for (const auto& tree : child_result.forest) {
+                  auto opaque = std::static_pointer_cast<const cpf::detail::parse_node>(cpf::detail::opaque_tree_of(tree));
+                  result.forest.emplace_back(opaque, tree.production_index(), tree.range(), [opaque]() {
+                     auto built = build_node(opaque);
+                     return release_built_node_as<default_expr>(std::move(built));
+                  }, cpf::detail::pending_damage_of(tree), tree.is_partial(), [](const default_expr& root, std::vector<const cpf::node*>& damaged_nodes) {
+                     visit_recursive(root, [&](auto& current) {
+                        if (current.is_damaged()) {
+                           damaged_nodes.push_back(&current);
+                        }
+                     });
+                  }, [opaque](std::string_view repaired_input) { return cpf::detail::repaired_input_of(opaque, repaired_input, grammar_spec); });
+               }
+            }
+         }
+      } else if (!have_error) {
+         best_error = *child_result.error;
+         have_error = true;
+      } else {
+         cpf::detail::merge_parse_error(best_error, *child_result.error);
+      }
+   }
+   if (result.success) {
+      return result;
+   }
+   if (have_error) {
+      cpf::detail::append_unique(best_error.notes, "while matching base rule 'default_expr'");
+      cpf::detail::error_tracker::finalize(best_error);
+      result.error = best_error;
+   }
+   return result;
+}
+
+auto detail::recognize_default_expr_default(std::string_view input) -> cpf::recognize_result {
+   auto tokens = detail::lex_default_attrs_generated(input);
+   return recognize_default_expr_default(tokens);
+}
+
+auto detail::recognize_default_expr_default(const cpf::token_sequence& tokens) -> cpf::recognize_result {
+   cpf::recognize_result result;
+   cpf::parse_error best_error;
+   auto have_error = false;
+   {
+      auto child_result = detail::recognize_default_add_default(tokens);
+      if (child_result.success) {
+         result.success = true;
+         result.error.reset();
+         return result;
+      }
+      if (child_result.error.has_value()) {
+         if (!have_error) {
+            best_error = *child_result.error;
+            have_error = true;
+         } else {
+            cpf::detail::merge_parse_error(best_error, *child_result.error);
+         }
+      }
+   }
+   {
+      auto child_result = detail::recognize_default_subtract_default(tokens);
+      if (child_result.success) {
+         result.success = true;
+         result.error.reset();
+         return result;
+      }
+      if (child_result.error.has_value()) {
+         if (!have_error) {
+            best_error = *child_result.error;
+            have_error = true;
+         } else {
+            cpf::detail::merge_parse_error(best_error, *child_result.error);
+         }
+      }
+   }
+   {
+      auto child_result = detail::recognize_default_multiply_default(tokens);
+      if (child_result.success) {
+         result.success = true;
+         result.error.reset();
+         return result;
+      }
+      if (child_result.error.has_value()) {
+         if (!have_error) {
+            best_error = *child_result.error;
+            have_error = true;
+         } else {
+            cpf::detail::merge_parse_error(best_error, *child_result.error);
+         }
+      }
+   }
+   {
+      auto child_result = detail::recognize_default_number_default(tokens);
+      if (child_result.success) {
+         result.success = true;
+         result.error.reset();
+         return result;
+      }
+      if (child_result.error.has_value()) {
+         if (!have_error) {
+            best_error = *child_result.error;
+            have_error = true;
+         } else {
+            cpf::detail::merge_parse_error(best_error, *child_result.error);
+         }
+      }
+   }
+   if (have_error) {
+      cpf::detail::append_unique(best_error.notes, "while matching base rule 'default_expr'");
+      cpf::detail::error_tracker::finalize(best_error);
+      result.error = best_error;
+   }
+   return result;
+}
+
+namespace {
+   std::array<cpf::complexity, 4> default_expr_complexity_cache{};
+} // namespace
+
+auto detail::complexity_inputs_default_expr_default(std::size_t production_index) -> std::span<const std::string_view> {
+   switch (production_index) {
+      case 0:
+         return std::span<const std::string_view>{default_expr_complexity_inputs_0.data(), default_expr_complexity_inputs_0.size()};
+      case 1:
+         return std::span<const std::string_view>{default_expr_complexity_inputs_1.data(), default_expr_complexity_inputs_1.size()};
+      case 2:
+         return std::span<const std::string_view>{default_expr_complexity_inputs_2.data(), default_expr_complexity_inputs_2.size()};
+      case 3:
+         return std::span<const std::string_view>{default_expr_complexity_inputs_3.data(), default_expr_complexity_inputs_3.size()};
+      default:
+         throw std::out_of_range{"Unknown production index " + std::to_string(production_index) + " for rule 'default_expr'"};
+   }
+}
+
+auto detail::complexity_default_expr_default(std::size_t production_index) -> const cpf::complexity& {
+   switch (production_index) {
+      case 0:
+         return default_expr_complexity_cache[0];
+      case 1:
+         return default_expr_complexity_cache[1];
+      case 2:
+         return default_expr_complexity_cache[2];
+      case 3:
+         return default_expr_complexity_cache[3];
+      default:
+         throw std::out_of_range{"Unknown production index " + std::to_string(production_index) + " for rule 'default_expr'"};
+   }
+}
+
+auto detail::recompute_complexity_default_expr_default(std::size_t production_index) -> const cpf::complexity& {
+   switch (production_index) {
+      case 0:
+         default_expr_complexity_cache[0] = compute_generated_rule_complexity<default_expr>(default_expr_complexity_inputs_0, "default_expr", 0, 0);
+         return default_expr_complexity_cache[0];
+      case 1:
+         default_expr_complexity_cache[1] = compute_generated_rule_complexity<default_expr>(default_expr_complexity_inputs_1, "default_expr", 1, 0);
+         return default_expr_complexity_cache[1];
+      case 2:
+         default_expr_complexity_cache[2] = compute_generated_rule_complexity<default_expr>(default_expr_complexity_inputs_2, "default_expr", 2, 0);
+         return default_expr_complexity_cache[2];
+      case 3:
+         default_expr_complexity_cache[3] = compute_generated_rule_complexity<default_expr>(default_expr_complexity_inputs_3, "default_expr", 3, 0);
+         return default_expr_complexity_cache[3];
+      default:
+         throw std::out_of_range{"Unknown production index " + std::to_string(production_index) + " for rule 'default_expr'"};
+   }
+}
+
+auto detail::parse_default_add_default(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<default_add> {
+   auto tokens = detail::lex_default_attrs_generated(input);
+   return parse_default_add_default(tokens, options);
+}
+
+auto detail::parse_default_add_default(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<default_add> {
+   return parse_generated<default_add>(tokens, 1, options);
+}
+
+auto detail::recognize_default_add_default(std::string_view input) -> cpf::recognize_result {
+   auto tokens = detail::lex_default_attrs_generated(input);
+   return recognize_default_add_default(tokens);
+}
+
+auto detail::recognize_default_add_default(const cpf::token_sequence& tokens) -> cpf::recognize_result {
+   return recognize_generated<default_add>(tokens, 1);
+}
+
+namespace {
+   std::array<cpf::complexity, 1> default_add_complexity_cache{};
+} // namespace
+
+auto detail::complexity_inputs_default_add_default(std::size_t production_index) -> std::span<const std::string_view> {
+   switch (production_index) {
+      case 0:
+         return std::span<const std::string_view>{default_add_complexity_inputs_0.data(), default_add_complexity_inputs_0.size()};
+      default:
+         throw std::out_of_range{"Unknown production index " + std::to_string(production_index) + " for rule 'default_add'"};
+   }
+}
+
+auto detail::complexity_default_add_default(std::size_t production_index) -> const cpf::complexity& {
+   switch (production_index) {
+      case 0:
+         return default_add_complexity_cache[0];
+      default:
+         throw std::out_of_range{"Unknown production index " + std::to_string(production_index) + " for rule 'default_add'"};
+   }
+}
+
+auto detail::recompute_complexity_default_add_default(std::size_t production_index) -> const cpf::complexity& {
+   switch (production_index) {
+      case 0:
+         default_add_complexity_cache[0] = compute_generated_rule_complexity<default_add>(default_add_complexity_inputs_0, "default_add", 0, 1);
+         return default_add_complexity_cache[0];
+      default:
+         throw std::out_of_range{"Unknown production index " + std::to_string(production_index) + " for rule 'default_add'"};
+   }
+}
+
+auto detail::parse_default_subtract_default(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<default_subtract> {
+   auto tokens = detail::lex_default_attrs_generated(input);
+   return parse_default_subtract_default(tokens, options);
+}
+
+auto detail::parse_default_subtract_default(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<default_subtract> {
+   return parse_generated<default_subtract>(tokens, 2, options);
+}
+
+auto detail::recognize_default_subtract_default(std::string_view input) -> cpf::recognize_result {
+   auto tokens = detail::lex_default_attrs_generated(input);
+   return recognize_default_subtract_default(tokens);
+}
+
+auto detail::recognize_default_subtract_default(const cpf::token_sequence& tokens) -> cpf::recognize_result {
+   return recognize_generated<default_subtract>(tokens, 2);
+}
+
+namespace {
+   std::array<cpf::complexity, 1> default_subtract_complexity_cache{};
+} // namespace
+
+auto detail::complexity_inputs_default_subtract_default(std::size_t production_index) -> std::span<const std::string_view> {
+   switch (production_index) {
+      case 0:
+         return std::span<const std::string_view>{default_subtract_complexity_inputs_0.data(), default_subtract_complexity_inputs_0.size()};
+      default:
+         throw std::out_of_range{"Unknown production index " + std::to_string(production_index) + " for rule 'default_subtract'"};
+   }
+}
+
+auto detail::complexity_default_subtract_default(std::size_t production_index) -> const cpf::complexity& {
+   switch (production_index) {
+      case 0:
+         return default_subtract_complexity_cache[0];
+      default:
+         throw std::out_of_range{"Unknown production index " + std::to_string(production_index) + " for rule 'default_subtract'"};
+   }
+}
+
+auto detail::recompute_complexity_default_subtract_default(std::size_t production_index) -> const cpf::complexity& {
+   switch (production_index) {
+      case 0:
+         default_subtract_complexity_cache[0] = compute_generated_rule_complexity<default_subtract>(default_subtract_complexity_inputs_0, "default_subtract", 0, 2);
+         return default_subtract_complexity_cache[0];
+      default:
+         throw std::out_of_range{"Unknown production index " + std::to_string(production_index) + " for rule 'default_subtract'"};
+   }
+}
+
+auto detail::parse_default_multiply_default(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<default_multiply> {
+   auto tokens = detail::lex_default_attrs_generated(input);
+   return parse_default_multiply_default(tokens, options);
+}
+
+auto detail::parse_default_multiply_default(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<default_multiply> {
+   return parse_generated<default_multiply>(tokens, 3, options);
+}
+
+auto detail::recognize_default_multiply_default(std::string_view input) -> cpf::recognize_result {
+   auto tokens = detail::lex_default_attrs_generated(input);
+   return recognize_default_multiply_default(tokens);
+}
+
+auto detail::recognize_default_multiply_default(const cpf::token_sequence& tokens) -> cpf::recognize_result {
+   return recognize_generated<default_multiply>(tokens, 3);
+}
+
+namespace {
+   std::array<cpf::complexity, 1> default_multiply_complexity_cache{};
+} // namespace
+
+auto detail::complexity_inputs_default_multiply_default(std::size_t production_index) -> std::span<const std::string_view> {
+   switch (production_index) {
+      case 0:
+         return std::span<const std::string_view>{default_multiply_complexity_inputs_0.data(), default_multiply_complexity_inputs_0.size()};
+      default:
+         throw std::out_of_range{"Unknown production index " + std::to_string(production_index) + " for rule 'default_multiply'"};
+   }
+}
+
+auto detail::complexity_default_multiply_default(std::size_t production_index) -> const cpf::complexity& {
+   switch (production_index) {
+      case 0:
+         return default_multiply_complexity_cache[0];
+      default:
+         throw std::out_of_range{"Unknown production index " + std::to_string(production_index) + " for rule 'default_multiply'"};
+   }
+}
+
+auto detail::recompute_complexity_default_multiply_default(std::size_t production_index) -> const cpf::complexity& {
+   switch (production_index) {
+      case 0:
+         default_multiply_complexity_cache[0] = compute_generated_rule_complexity<default_multiply>(default_multiply_complexity_inputs_0, "default_multiply", 0, 3);
+         return default_multiply_complexity_cache[0];
+      default:
+         throw std::out_of_range{"Unknown production index " + std::to_string(production_index) + " for rule 'default_multiply'"};
+   }
+}
+
+auto detail::parse_default_number_default(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<default_number> {
+   auto tokens = detail::lex_default_attrs_generated(input);
+   return parse_default_number_default(tokens, options);
+}
+
+auto detail::parse_default_number_default(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<default_number> {
+   return parse_generated<default_number>(tokens, 4, options);
+}
+
+auto detail::recognize_default_number_default(std::string_view input) -> cpf::recognize_result {
+   auto tokens = detail::lex_default_attrs_generated(input);
+   return recognize_default_number_default(tokens);
+}
+
+auto detail::recognize_default_number_default(const cpf::token_sequence& tokens) -> cpf::recognize_result {
+   return recognize_generated<default_number>(tokens, 4);
+}
+
+namespace {
+   std::array<cpf::complexity, 1> default_number_complexity_cache{};
+} // namespace
+
+auto detail::complexity_inputs_default_number_default(std::size_t production_index) -> std::span<const std::string_view> {
+   switch (production_index) {
+      case 0:
+         return std::span<const std::string_view>{default_number_complexity_inputs_0.data(), default_number_complexity_inputs_0.size()};
+      default:
+         throw std::out_of_range{"Unknown production index " + std::to_string(production_index) + " for rule 'default_number'"};
+   }
+}
+
+auto detail::complexity_default_number_default(std::size_t production_index) -> const cpf::complexity& {
+   switch (production_index) {
+      case 0:
+         return default_number_complexity_cache[0];
+      default:
+         throw std::out_of_range{"Unknown production index " + std::to_string(production_index) + " for rule 'default_number'"};
+   }
+}
+
+auto detail::recompute_complexity_default_number_default(std::size_t production_index) -> const cpf::complexity& {
+   switch (production_index) {
+      case 0:
+         default_number_complexity_cache[0] = compute_generated_rule_complexity<default_number>(default_number_complexity_inputs_0, "default_number", 0, 4);
+         return default_number_complexity_cache[0];
+      default:
+         throw std::out_of_range{"Unknown production index " + std::to_string(production_index) + " for rule 'default_number'"};
+   }
+}
+
