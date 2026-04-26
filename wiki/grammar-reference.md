@@ -234,10 +234,16 @@ CPF can analyze a parsed grammar before or during code generation:
 auto grammar = cpf::parse_grammar(source_text);
 auto analysis = cpf::analyze_grammar(grammar);
 
-if (analysis.has_errors()) {
+if (analysis.has_warnings() || analysis.has_errors()) {
    std::cerr << analysis.render_summary() << '\n';
 }
 ```
+
+The `cpfgen` executable runs the same analysis automatically. Any diagnostics it finds are printed to `stdout` while
+generation is running so grammar authors can see suspicious structures immediately.
+
+When diagnostics come from rules that entered the grammar through `@import`, CPF remaps the reported file and line back
+to the original imported source location instead of the expanded post-import line in the preprocessed grammar text.
 
 Current diagnostics include:
 
@@ -246,12 +252,19 @@ Current diagnostics include:
 - nullable cycles that can recurse without consuming input
 - suspicious self-recursive productions whose surrounding symbols are all nullable
 
+CPF's Earley runtime accepts left recursion, empty productions, and nullable recursive cycles. Nullable-cycle findings
+therefore remain warnings: they highlight grammars that may be surprising, ambiguous, or harder to reason about, but
+they do not block code generation on their own.
+
 The analysis summary treats the **first non-token rule** in the grammar as the primary entry rule. Reachability lints are
 reported relative to that rule so disconnected helper subgraphs are easy to spot while still leaving additional public
 entry points available in the generated API.
 
 `cpf::generate_code(...)` also returns the same analysis result alongside the generated header and source text so
 generator clients can surface warnings in their own tooling without re-running analysis separately.
+
+Only diagnostics with blocking severity prevent code generation. Warning-level findings, including nullable-cycle
+diagnostics, still emit the generated header/source pair.
 
 ## Multi-file grammars
 

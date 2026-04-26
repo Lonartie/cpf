@@ -748,6 +748,29 @@ TEST_SUITE("cpflib.grammar_parser") {
          CHECK(shared_expr->productions[1].definition == 1);
       }
 
+      SUBCASE("preprocessed source lines map back to the original imported files") {
+         write_file(test_directory / "child.cpf", "imported_rule -> 'x':value;\n");
+         write_file(test_directory / "root.cpf", "root_entry -> 'a':value;\n@import 'child.cpf';\n");
+
+         const auto loaded = cpf::load_grammar_file(test_directory / "root.cpf");
+
+         const auto imported_line = loaded.mapper.resolve({0, 2, 1}, loaded.preprocessed_source_id);
+         REQUIRE(imported_line.has_value());
+         REQUIRE(loaded.source_origins.contains(imported_line->id));
+         CHECK(loaded.source_origins.at(imported_line->id).path ==
+               std::filesystem::weakly_canonical(test_directory / "child.cpf"));
+         CHECK(loaded.source_origins.at(imported_line->id).begin.line + imported_line->location.line - 1 == 1);
+         CHECK(imported_line->location.column == 1);
+
+         const auto root_line = loaded.mapper.resolve({0, 1, 1}, loaded.preprocessed_source_id);
+         REQUIRE(root_line.has_value());
+         REQUIRE(loaded.source_origins.contains(root_line->id));
+         CHECK(loaded.source_origins.at(root_line->id).path ==
+               std::filesystem::weakly_canonical(test_directory / "root.cpf"));
+         CHECK(loaded.source_origins.at(root_line->id).begin.line + root_line->location.line - 1 == 1);
+         CHECK(root_line->location.column == 1);
+      }
+
       SUBCASE("duplicate @import expansions behave like textual inclusion") {
          write_file(test_directory / "leaf.cpf", R"(
             imported_leaf -> 'x':value;
@@ -878,13 +901,13 @@ TEST_SUITE("cpflib.grammar_parser") {
       CHECK(analysis.summary.nullable_cycle_count == 1);
       CHECK(analysis.summary.suspicious_recursive_pattern_count == 1);
       CHECK(analysis.has_warnings());
-      CHECK(analysis.has_errors());
+      CHECK_FALSE(analysis.has_errors());
 
       const auto nullable_cycle = std::ranges::find_if(analysis.diagnostics, [](const auto& diagnostic) {
          return diagnostic.code == cpf::grammar_diagnostic_code::nullable_cycle;
       });
       REQUIRE(nullable_cycle != analysis.diagnostics.end());
-      CHECK(nullable_cycle->severity == cpf::grammar_diagnostic_severity::error);
+      CHECK(nullable_cycle->severity == cpf::grammar_diagnostic_severity::warning);
       CHECK(nullable_cycle->rule == "loop");
       CHECK(nullable_cycle->message.find("Nullable cycle") != std::string::npos);
       CHECK(nullable_cycle->related_rules == std::vector<std::string>{"loop"});

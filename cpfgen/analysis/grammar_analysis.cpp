@@ -300,7 +300,7 @@ namespace cpf {
          }
 
          auto diagnostic = grammar_diagnostic{};
-         diagnostic.severity = grammar_diagnostic_severity::error;
+         diagnostic.severity = grammar_diagnostic_severity::warning;
          diagnostic.code = grammar_diagnostic_code::nullable_cycle;
          diagnostic.rule = related.front();
          diagnostic.related_rules = related;

@@ -8,6 +8,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -54,6 +55,80 @@ namespace cpf {
    struct source_range {
       source_position begin;
       source_position end;
+   };
+
+   /// @brief Source location within one logical source text.
+   using source_location = source_position;
+
+   /// @brief Resolved location paired with the logical source id it belongs to.
+   struct resolved_source_location {
+      source_location location;
+      std::size_t id = 0;
+   };
+
+   /// @brief Generic graph-based mapper for source texts related through in-place replacements.
+   class source_mapper {
+   public:
+      /// @brief Registers one logical source text under a caller-chosen id.
+      /// @param source Source text stored for later graph transitions and coordinate resolution.
+      /// @param id Stable caller-chosen source id.
+      void append_source(std::string_view source, std::size_t id);
+
+      /// @brief Registers that one source's full contents replaced a range inside another source.
+      /// @param from_id Source id whose full contents appear in the transformed destination.
+      /// @param to_id Destination source id that contains the replacement.
+      /// @param replacement_range Range inside `to_id` occupied by the contents of `from_id`.
+      void append(std::size_t from_id, std::size_t to_id, source_range replacement_range);
+
+      /// @brief Checks whether one source id has been registered.
+      /// @param id Source id to query.
+      /// @return True when the mapper knows that source.
+      [[nodiscard]] auto contains(std::size_t id) const -> bool;
+
+      /// @brief Returns the stored text for one source id.
+      /// @param id Source id to inspect.
+      /// @return Registered source text.
+      [[nodiscard]] auto source(std::size_t id) const -> std::string_view;
+
+      /// @brief Resolves one location through a single replacement edge when one applies.
+      /// @param location Location in the source identified by `id`.
+      /// @param id Source id containing `location`.
+      /// @return Either the directly replaced source location or the canonicalized original input location.
+      [[nodiscard]] auto resolve_once(source_location location, std::size_t id) const
+            -> std::optional<resolved_source_location>;
+
+      /// @brief Resolves one location recursively back to the deepest original source location.
+      /// @param location Location in the source identified by `id`.
+      /// @param id Source id containing `location`.
+      /// @return Deepest reachable source location.
+      [[nodiscard]] auto resolve(source_location location, std::size_t id) const
+            -> std::optional<resolved_source_location>;
+
+      /// @brief Resolves one location forward into every recursively transformed destination that contains it.
+      /// @param location Location in the source identified by `id`.
+      /// @param id Source id containing `location`.
+      /// @return Every reachable transformed location, or the source location itself when no transitions leave it.
+      [[nodiscard]] auto resolve_from(source_location location, std::size_t id) const
+            -> std::vector<resolved_source_location>;
+
+   private:
+      struct source_node {
+         std::string text;
+         std::vector<std::size_t> line_offsets;
+      };
+
+      struct replacement_edge {
+         std::size_t from_id = 0;
+         std::size_t to_id = 0;
+         source_range replacement_range;
+      };
+
+      [[nodiscard]] auto location_for(std::size_t id, std::size_t offset) const -> std::optional<source_location>;
+      [[nodiscard]] auto offset_for(std::size_t id, source_location location) const -> std::optional<std::size_t>;
+
+      std::unordered_map<std::size_t, source_node> m_sources;
+      std::unordered_map<std::size_t, std::vector<replacement_edge>> m_incoming;
+      std::unordered_map<std::size_t, std::vector<replacement_edge>> m_outgoing;
    };
 
    /// @brief Describes the furthest parse failure that occurred while parsing input.

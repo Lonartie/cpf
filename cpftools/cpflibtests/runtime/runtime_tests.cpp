@@ -4,6 +4,7 @@
 #include "support/doctest.h"
 
 #include <array>
+#include <filesystem>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -71,6 +72,40 @@ namespace {
          optional_grammar_rule_production_counts.data(),
          optional_token_symbols.data(),
          optional_token_symbols.size(),
+         nullptr,
+         0,
+         true};
+
+   constexpr std::array<cpf::detail::parser_symbol, 1> nullable_cycle_start_symbols{{
+         {cpf::detail::parser_symbol_kind::nonterminal, 1, "first"}
+   }};
+   constexpr std::array<cpf::detail::parser_symbol, 1> nullable_cycle_second_symbols{{
+         {cpf::detail::parser_symbol_kind::nonterminal, 2, "second"}
+   }};
+   constexpr std::array<cpf::detail::parser_symbol, 0> nullable_cycle_empty_symbols{{}};
+   constexpr std::array<cpf::detail::parser_symbol, 1> nullable_cycle_first_symbols{{
+         {cpf::detail::parser_symbol_kind::nonterminal, 1, "first"}
+   }};
+   constexpr std::array<cpf::detail::production_spec, 4> nullable_cycle_grammar_productions{{
+         {0, "start", "start -> first", nullable_cycle_start_symbols.data(), nullable_cycle_start_symbols.size()},
+         {1, "first", "first -> second", nullable_cycle_second_symbols.data(), nullable_cycle_second_symbols.size()},
+         {1, "first", "first -> /* empty */", nullable_cycle_empty_symbols.data(), nullable_cycle_empty_symbols.size()},
+         {2, "second", "second -> first", nullable_cycle_first_symbols.data(), nullable_cycle_first_symbols.size()}
+   }};
+   constexpr std::array<std::size_t, 4> nullable_cycle_grammar_rule_production_indices{{0, 1, 2, 3}};
+   constexpr std::array<std::size_t, 3> nullable_cycle_grammar_rule_production_offsets{{0, 1, 3}};
+   constexpr std::array<std::size_t, 3> nullable_cycle_grammar_rule_production_counts{{1, 2, 1}};
+   constexpr std::array<std::string_view, 3> nullable_cycle_grammar_rule_expected_labels{{"", "", ""}};
+   constexpr cpf::detail::grammar_spec nullable_cycle_grammar_spec{
+         nullable_cycle_grammar_productions.data(),
+         nullable_cycle_grammar_productions.size(),
+         3,
+         nullable_cycle_grammar_rule_expected_labels.data(),
+         nullable_cycle_grammar_rule_production_indices.data(),
+         nullable_cycle_grammar_rule_production_offsets.data(),
+         nullable_cycle_grammar_rule_production_counts.data(),
+         nullptr,
+         0,
          nullptr,
          0,
          true};
@@ -271,6 +306,34 @@ TEST_SUITE("cpflib.runtime") {
       CHECK(stream.str().find("range = 0..2 (1:1-1:3)") != std::string::npos);
    }
 
+   TEST_CASE("source_mapper resolves replacement graphs backward and forward") {
+      auto mapper = cpf::source_mapper{};
+      mapper.append_source("child\n", 1);
+      mapper.append_source("before\nchild\nafter\n", 2);
+      mapper.append_source("wrap\nbefore\nchild\nafter\n", 3);
+
+      mapper.append(1, 2, {{7, 2, 1}, {13, 3, 1}});
+      mapper.append(2, 3, {{5, 2, 1}, {24, 5, 1}});
+
+      const auto resolved = mapper.resolve({0, 3, 1}, 3);
+      REQUIRE(resolved.has_value());
+      CHECK(resolved->id == 1);
+      CHECK(resolved->location.line == 1);
+      CHECK(resolved->location.column == 1);
+
+      const auto one_step = mapper.resolve_once({0, 3, 1}, 3);
+      REQUIRE(one_step.has_value());
+      CHECK(one_step->id == 2);
+      CHECK(one_step->location.line == 2);
+      CHECK(one_step->location.column == 1);
+
+      const auto forward = mapper.resolve_from({0, 1, 1}, 1);
+      REQUIRE(forward.size() == 1);
+      CHECK(forward.front().id == 3);
+      CHECK(forward.front().location.line == 3);
+      CHECK(forward.front().location.column == 1);
+   }
+
    TEST_CASE("error tracker reports furthest failures with context notes") {
       cpf::detail::error_tracker tracker;
       tracker.record(4, "pattern [0-9]+", "while parsing rule 'number' via number -> r'[0-9]+' (after symbol 0 of 1)");
@@ -344,6 +407,33 @@ TEST_SUITE("cpflib.runtime") {
             CHECK(std::get<cpf::matched_string>(helper->children.front()).text == "a");
          }
       }
+   }
+
+   TEST_CASE("earley_parse accepts nullable recursive cycles and materializes a finite forest") {
+      auto parsed = cpf::detail::earley_parse("", nullable_cycle_grammar_spec, 0);
+
+      REQUIRE(parsed.success);
+      CHECK_FALSE(parsed.partial);
+      REQUIRE(parsed.forest.size() == 1);
+
+      const auto& root = parsed.forest.front();
+      REQUIRE(root != nullptr);
+      CHECK(root->production == 0);
+      CHECK(root->start == 0);
+      CHECK(root->end == 0);
+      REQUIRE(root->children.size() == 1);
+
+      const auto& first = std::get<cpf::detail::parse_node_ptr>(root->children.front());
+      REQUIRE(first != nullptr);
+      CHECK(first->production == 2);
+      CHECK(first->children.empty());
+      CHECK(first->start == 0);
+      CHECK(first->end == 0);
+
+      auto recognized = cpf::detail::earley_recognize("", nullable_cycle_grammar_spec, 0);
+
+      CHECK(recognized.success);
+      CHECK_FALSE(recognized.error.has_value());
    }
 
    TEST_CASE("earley_parse keeps ignored invalid input inside one recovered tree") {

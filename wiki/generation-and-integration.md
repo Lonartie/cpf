@@ -21,6 +21,10 @@ auto generated = cpf::generate_code(loaded.parsed_grammar, "root");
 
 - `parsed_grammar`: the parsed grammar model
 - `dependencies`: the root grammar plus every imported grammar that contributed to generation
+- `preprocessed_source`: the fully expanded grammar text
+- `mapper`: a generic `cpf::source_mapper` graph describing how expanded text ranges relate to imported source fragments
+- `preprocessed_source_id`: the mapper id for `preprocessed_source`
+- `source_origins`: loader metadata that anchors leaf mapper ids back to concrete grammar files and source positions
 
 If you only need the parsed grammar, `cpf::parse_grammar_file(...)` returns the `cpf::grammar` directly.
 
@@ -40,6 +44,8 @@ The `analysis` field mirrors `cpf::analyze_grammar(...)` and includes:
 - structured diagnostics for unused rules, unreachable rules, nullable cycles, and suspicious zero-progress recursion
 
 This lets generators, build tools, or IDE integrations surface grammar warnings without needing to scrape stderr text.
+Nullable cycles stay in the warning bucket because the generated Earley parsers already support left recursion, empty
+productions, and nullable recursion.
 
 Generated headers now expose both parser and lexer entry points. A generated root type such as `expression` provides:
 
@@ -65,12 +71,23 @@ Behavior:
 - when `output-directory` is omitted, generated files are written next to the grammar file
 - `--namespace` wraps the generated public API in a C++ namespace
 - `--depfile` writes a make-style depfile listing imported grammar dependencies
+- any grammar diagnostics found during generation are printed to `stdout`
+- warning diagnostics still allow generation to continue and files to be written
+- nullable-cycle diagnostics are emitted as warnings rather than blocking errors
+- blocking diagnostics fail generation before the header/source pair is written
+
+When a warning originates from text brought in through `@import`, `cpfgen` remaps the reported file and line back to the
+original imported grammar instead of the post-preprocessing line in the expanded root document.
 
 Example:
 
 ```zsh
 ./build/cpfgen/cpfgen /path/to/calculator.cpf /path/to/output --namespace demo::generated
 ```
+
+When diagnostics are present, `cpfgen` prints the analysis summary first and then one detailed line per finding. Each
+line includes the severity, stable diagnostic code, source line, rule name, and full message so shell scripts or IDEs
+can surface the warnings directly.
 
 ## Namespacing generated code
 

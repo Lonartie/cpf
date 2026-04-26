@@ -7,10 +7,91 @@
 #include <system_error>
 
 namespace {
+   struct file_source_location {
+      std::filesystem::path path;
+      cpf::source_location location;
+   };
+
+   [[nodiscard]] std::string_view diagnostic_code_name(cpf::grammar_diagnostic_code code) {
+      switch (code) {
+         case cpf::grammar_diagnostic_code::unreachable_rule:
+            return "unreachable_rule";
+         case cpf::grammar_diagnostic_code::unused_rule:
+            return "unused_rule";
+         case cpf::grammar_diagnostic_code::nullable_cycle:
+            return "nullable_cycle";
+         case cpf::grammar_diagnostic_code::suspicious_recursive_pattern:
+            return "suspicious_recursive_pattern";
+      }
+      return "unknown";
+   }
+
+   [[nodiscard]] std::string_view diagnostic_severity_name(cpf::grammar_diagnostic_severity severity) {
+      switch (severity) {
+         case cpf::grammar_diagnostic_severity::warning:
+            return "warning";
+         case cpf::grammar_diagnostic_severity::error:
+            return "error";
+      }
+      return "warning";
+   }
+
    [[nodiscard]] int print_usage() {
       std::cerr << "Usage: cpfgen <grammar-file> [output-directory] [--namespace <value>] [--depfile <path>]"
                 << std::endl;
       return 1;
+   }
+
+   [[nodiscard]] cpf::source_location add_relative_location(cpf::source_location base,
+                                                            const cpf::source_location& relative) {
+      base.offset += relative.offset;
+      base.line += relative.line - 1;
+      if (relative.line == 1) {
+         base.column += relative.column - 1;
+      } else {
+         base.column = relative.column;
+      }
+      return base;
+   }
+
+   [[nodiscard]] file_source_location diagnostic_location_for(const cpf::loaded_grammar& loaded,
+                                                              const std::filesystem::path& grammar_path,
+                                                              std::size_t generated_line) {
+      const auto resolved = loaded.mapper.resolve(cpf::source_location{0, generated_line, 1}, loaded.preprocessed_source_id);
+      if (resolved.has_value()) {
+         if (auto origin = loaded.source_origins.find(resolved->id); origin != loaded.source_origins.end()) {
+            return file_source_location{origin->second.path, add_relative_location(origin->second.begin, resolved->location)};
+         }
+         return file_source_location{grammar_path, resolved->location};
+      }
+      return file_source_location{grammar_path, {0, generated_line, 1}};
+   }
+
+   void print_diagnostics(const cpf::grammar_analysis& analysis, const cpf::loaded_grammar& loaded,
+                          const std::filesystem::path& grammar_path) {
+      if (analysis.diagnostics.empty()) {
+         return;
+      }
+
+      std::cout << analysis.render_summary() << std::endl;
+      for (const auto& diagnostic: analysis.diagnostics) {
+         const auto location = diagnostic_location_for(loaded, grammar_path, diagnostic.line);
+         std::cout << location.path.string() << ":" << location.location.line << ": "
+                   << diagnostic_severity_name(diagnostic.severity) << '[' << diagnostic_code_name(diagnostic.code)
+                   << "]";
+         if (!diagnostic.rule.empty()) {
+            std::cout << " rule '" << diagnostic.rule << "'";
+         }
+         std::cout << ": " << diagnostic.message;
+         if (!diagnostic.related_rules.empty()) {
+            std::cout << " (related:";
+            for (const auto& related_rule: diagnostic.related_rules) {
+               std::cout << " '" << related_rule << "'";
+            }
+            std::cout << ')';
+         }
+         std::cout << std::endl;
+      }
    }
 
    void write_text_file(const std::filesystem::path& path, const std::string& content) {
@@ -131,6 +212,13 @@ int main(int argc, char** argv) {
 
       auto base_name = grammar_path.stem().string();
       auto loaded = cpf::load_grammar_file(grammar_path);
+      auto analysis = cpf::analyze_grammar(loaded.parsed_grammar);
+      print_diagnostics(analysis, loaded, grammar_path);
+      if (analysis.has_errors()) {
+         std::cerr << "cpfgen: generation aborted because blocking grammar diagnostics were found" << std::endl;
+         return 1;
+      }
+
       auto generated = cpf::generate_code(loaded.parsed_grammar, base_name, code_namespace);
 
       std::filesystem::create_directories(output_directory);

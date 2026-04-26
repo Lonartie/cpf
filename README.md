@@ -35,6 +35,10 @@ Generate parser code from a grammar:
 ./build/cpfgen/cpfgen /path/to/grammar.cpf /path/to/output --namespace demo::generated
 ```
 
+`cpfgen` prints any grammar diagnostics it finds to standard output during generation. Non-blocking warnings, including
+nullable-cycle warnings for Earley-compatible grammars, still produce the generated files. Blocking diagnostics stop
+generation before writing the header/source pair.
+
 Link grammars into a CMake target:
 
 ```cmake
