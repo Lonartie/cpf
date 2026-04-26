@@ -1,4 +1,4 @@
-import 'nested/imported_literals.cpf';
+@import 'nested/imported_literals.cpf';
 
 imported_bundle_greeting -> imported_bundle_word:text imported_bundle_suffix:suffix;
 

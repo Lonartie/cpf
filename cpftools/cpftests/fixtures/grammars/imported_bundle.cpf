@@ -1,5 +1,5 @@
-import 'imports/imported_expr.cpf';
-import 'imports/imported_words.cpf';
+@import 'imports/imported_expr.cpf';
+@import 'imports/imported_words.cpf';
 
 imported_bundle_message -> imported_bundle_greeting | imported_bundle_parting;
 

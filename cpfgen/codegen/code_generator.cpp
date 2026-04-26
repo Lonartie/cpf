@@ -11,6 +11,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace cpf {
    namespace {
@@ -27,6 +28,7 @@ namespace cpf {
          std::string type;
          std::string resolved_rule;
          bool node = false;
+         bool lexical = false;
       };
 
       struct field_info {
@@ -355,8 +357,23 @@ namespace cpf {
 
       [[nodiscard]] bool uses_helper_rule(const symbol& symbol) { return !symbol.is_single(); }
 
+      [[nodiscard]] bool is_lexical_reference(const symbol& symbol,
+                                             const std::unordered_set<std::string>& lexical_rules) {
+         return symbol.kind == symbol_kind::reference && lexical_rules.contains(symbol.value);
+      }
+
+      [[nodiscard]] bool production_is_lexical(const production& production,
+                                               const std::unordered_set<std::string>& lexical_rules) {
+         if (!production.attributes.empty()) {
+            return false;
+         }
+         return std::all_of(production.symbols.begin(), production.symbols.end(), [&](const auto& symbol) {
+            return symbol.kind != symbol_kind::reference || lexical_rules.contains(symbol.value);
+         });
+      }
+
       [[nodiscard]] field_info
-      field_from_symbol(const symbol& symbol,
+      field_from_symbol(const symbol& symbol, const std::unordered_set<std::string>& lexical_rules,
                         const std::unordered_map<std::string, field_info>& synthetic_capture_fields = {}) {
          field_info field;
          field.name = symbol.label;
@@ -368,6 +385,19 @@ namespace cpf {
                   field.name = symbol.label;
                   return field;
                }
+            }
+            if (lexical_rules.contains(symbol.value)) {
+               if (symbol.is_repeated()) {
+                  field.shape = field_shape::terminal_vector;
+                  field.type = "std::vector<cpf::matched_string>";
+               } else if (symbol.is_optional()) {
+                  field.shape = field_shape::terminal_optional;
+                  field.type = "std::optional<cpf::matched_string>";
+               } else {
+                  field.shape = field_shape::terminal_scalar;
+                  field.type = "cpf::matched_string";
+               }
+               return field;
             }
             field.resolved_rule = symbol.value;
             if (symbol.is_repeated()) {
@@ -763,6 +793,98 @@ namespace cpf {
             }
          }
 
+         std::unordered_set<std::string> protected_parser_rules;
+         for (const auto& rule: grammar.rules) {
+            if (rule.synthetic) {
+               continue;
+            }
+            if (rule.is_choice_rule()) {
+               protected_parser_rules.insert(rule.identifier);
+            }
+         }
+         for (const auto& [child, base]: bases) {
+            protected_parser_rules.insert(child);
+            protected_parser_rules.insert(base);
+         }
+
+         std::unordered_set<std::string> token_reachable_rules;
+         std::function<void(std::string_view)> mark_token_reachable = [&](std::string_view rule_name) {
+            auto owned_rule_name = std::string{rule_name};
+            if (!token_reachable_rules.insert(owned_rule_name).second) {
+               return;
+            }
+            const auto* current_rule = rules_by_name.at(owned_rule_name);
+            for (const auto& production: current_rule->productions) {
+               for (const auto& symbol: production.symbols) {
+                  if (symbol.kind != symbol_kind::reference || !rules_by_name.contains(symbol.value)) {
+                     continue;
+                  }
+                  mark_token_reachable(symbol.value);
+               }
+            }
+         };
+         for (const auto& rule: grammar.rules) {
+            if (!rule.declared_as_token) {
+               continue;
+            }
+            mark_token_reachable(rule.identifier);
+         }
+
+         std::unordered_set<std::string> lexical_rules;
+
+         auto changed = true;
+         while (changed) {
+            changed = false;
+            for (const auto& rule: grammar.rules) {
+               if (lexical_rules.contains(rule.identifier)) {
+                  continue;
+               }
+               if (!rule.declared_as_token && !token_reachable_rules.contains(rule.identifier)) {
+                  continue;
+               }
+               if (!rule.declared_as_token && !rule.synthetic && protected_parser_rules.contains(rule.identifier)) {
+                  continue;
+               }
+               if (rule.productions.empty()) {
+                  continue;
+               }
+               if (!std::all_of(rule.productions.begin(), rule.productions.end(),
+                                [&](const auto& production) { return production_is_lexical(production, lexical_rules); })) {
+                  continue;
+               }
+               lexical_rules.insert(rule.identifier);
+               changed = true;
+            }
+         }
+
+         for (const auto& rule: grammar.rules) {
+            if (!rule.declared_as_token) {
+               continue;
+            }
+            if (protected_parser_rules.contains(rule.identifier)) {
+               throw std::runtime_error{"Token rule '" + rule.identifier +
+                                        "' cannot participate in choice-style inheritance"};
+            }
+            if (!lexical_rules.contains(rule.identifier)) {
+               throw std::runtime_error{"Token rule '" + rule.identifier +
+                                        "' must lower only to terminals or lexical rules"};
+            }
+         }
+
+         for (const auto& rule: grammar.rules) {
+            if (!rule.is_choice_rule()) {
+               continue;
+            }
+            for (const auto& production: rule.productions) {
+               const auto& child = production.symbols.front().value;
+               if (!lexical_rules.contains(child)) {
+                  continue;
+               }
+               throw std::runtime_error{"Choice rule '" + rule.identifier + "' cannot reference token-like rule '" +
+                                        child + "'"};
+            }
+         }
+
          std::vector<std::string> ordered_labeled_synthetic_rules;
          std::set<std::string> labeled_synthetic_rules;
          for (const auto& rule: grammar.rules) {
@@ -806,9 +928,10 @@ namespace cpf {
                                            "' cannot target another synthetic helper rule"};
                }
 
-               auto field = field_from_symbol(capture_symbol);
+               auto field = field_from_symbol(capture_symbol, lexical_rules);
                variant_alternative_info alternative;
                alternative.node = is_node_field(field);
+               alternative.lexical = is_lexical_reference(capture_symbol, lexical_rules);
                alternative.resolved_rule = field.resolved_rule;
                alternative.type = merged_field_type(field);
                production_alternatives.push_back(alternative);
@@ -905,7 +1028,7 @@ namespace cpf {
                                                  "' cannot expose label 'user_data' because generated node templates reserve that member name"};
                      }
 
-                     auto field = field_from_symbol(symbol, synthetic_capture_fields);
+                     auto field = field_from_symbol(symbol, lexical_rules, synthetic_capture_fields);
                      merge_field(std::move(field));
                   }
                }
@@ -2143,15 +2266,42 @@ namespace cpf {
          line(source, 2, "return *child;");
          line(source, 1, "}");
          line(source, 0);
+         line(source, 1, "[[maybe_unused]] void append_matched_tree_text(const parse_node_ptr& tree, std::string& text) {");
+         line(source, 2, "for (const auto& child : tree->children) {");
+         line(source, 3, "if (const auto* matched = std::get_if<cpf::matched_string>(&child); matched != nullptr) {");
+         line(source, 4, "text += matched->text;");
+         line(source, 4, "continue;");
+         line(source, 3, "}");
+         line(source, 3, "const auto* node = std::get_if<parse_node_ptr>(&child);");
+         line(source, 3, "if (node == nullptr || *node == nullptr) {");
+         line(source, 4, "throw std::runtime_error{\"Generated parse tree child is not materializable as token text\"};");
+         line(source, 3, "}");
+         line(source, 3, "append_matched_tree_text(*node, text);");
+         line(source, 2, "}");
+         line(source, 1, "}");
+         line(source, 0);
+         line(source, 1, "[[maybe_unused]] cpf::matched_string matched_tree_at(const parse_node_ptr& tree) {");
+         line(source, 2, "cpf::matched_string matched;");
+         line(source, 2, "matched.range = tree->range;");
+         line(source, 2, "append_matched_tree_text(tree, matched.text);");
+         line(source, 2, "return matched;");
+         line(source, 1, "}");
+         line(source, 0);
 
          for (const auto& capture: synthetic_captures) {
             auto capture_name = "group_capture_" + std::to_string(capture.id);
             if (capture.field.shape == field_shape::terminal_scalar) {
-               line(source, 1, "cpf::matched_string extract_" + capture_name + "(const parse_node_ptr& tree) {");
+               line(source, 1, "[[maybe_unused]] cpf::matched_string extract_" + capture_name + "(const parse_node_ptr& tree) {");
                line(source, 2, "switch (tree->production) {");
-               for (const auto capture_production_index: capture.production_indices) {
+               for (std::size_t production_offset = 0; production_offset < capture.production_indices.size(); ++production_offset) {
+                  const auto capture_production_index = capture.production_indices[production_offset];
+                  const auto& alternative = capture.production_alternatives[production_offset];
                   line(source, 3, "case " + std::to_string(capture_production_index) + ":");
-                  line(source, 4, "return matched_child_at(tree, 0);");
+                  if (alternative.lexical) {
+                     line(source, 4, "return matched_tree_at(node_child_at(tree, 0));");
+                  } else {
+                     line(source, 4, "return matched_child_at(tree, 0);");
+                  }
                }
                line(source, 3, "default:");
                line(source, 4, "throw std::runtime_error{\"Unknown labeled group production\"};");
@@ -2159,7 +2309,7 @@ namespace cpf {
                line(source, 1, "}");
             } else if (capture.field.shape == field_shape::node_scalar) {
                line(source, 1, "template<typename T>");
-               line(source, 1, "std::unique_ptr<T> extract_" + capture_name + "(const parse_node_ptr& tree) {");
+               line(source, 1, "[[maybe_unused]] std::unique_ptr<T> extract_" + capture_name + "(const parse_node_ptr& tree) {");
                line(source, 2, "switch (tree->production) {");
                for (const auto capture_production_index: capture.production_indices) {
                   line(source, 3, "case " + std::to_string(capture_production_index) + ": {");
@@ -2172,7 +2322,7 @@ namespace cpf {
                line(source, 2, "}");
                line(source, 1, "}");
             } else {
-               line(source, 1, capture.field.type + " extract_" + capture_name + "(const parse_node_ptr& tree) {");
+               line(source, 1, "[[maybe_unused]] " + capture.field.type + " extract_" + capture_name + "(const parse_node_ptr& tree) {");
                line(source, 2, "switch (tree->production) {");
                for (std::size_t production_offset = 0; production_offset < capture.production_indices.size();
                     ++production_offset) {
@@ -2185,9 +2335,15 @@ namespace cpf {
                            "return " + capture.field.type + "{std::in_place_type<" + alternative.type + ">, " +
                                 "release_built_node_as<" + alternative.resolved_rule + ">(std::move(built))};");
                   } else {
-                     line(source, 4,
-                          "return " + capture.field.type + "{std::in_place_type<" + alternative.type +
-                                ">, matched_child_at(tree, 0)};");
+                     if (alternative.lexical) {
+                        line(source, 4,
+                             "return " + capture.field.type + "{std::in_place_type<" + alternative.type +
+                                   ">, matched_tree_at(node_child_at(tree, 0))};");
+                     } else {
+                        line(source, 4,
+                             "return " + capture.field.type + "{std::in_place_type<" + alternative.type +
+                                   ">, matched_child_at(tree, 0)};");
+                     }
                   }
                   line(source, 3, "}");
                }
@@ -2201,10 +2357,62 @@ namespace cpf {
 
          for (const auto& helper: helpers) {
             auto helper_name = "helper_" + std::to_string(helper.id);
-            if (helper.base_symbol.kind == symbol_kind::reference) {
+            if (is_lexical_reference(helper.base_symbol, lexical_rules)) {
+               if (helper.kind == helper_kind::optional) {
+                  line(source, 1,
+                       "[[maybe_unused]] std::optional<cpf::matched_string> extract_" + helper_name + "(const parse_node_ptr& tree) {");
+                  line(source, 2, "switch (tree->production) {");
+                  line(source, 3, "case " + std::to_string(helper.production_indices[0]) + ":");
+                  line(source, 4, "return std::nullopt;");
+                  line(source, 3, "case " + std::to_string(helper.production_indices[1]) + ":");
+                  line(source, 4, "return matched_tree_at(node_child_at(tree, 0));");
+                  line(source, 3, "default:");
+                  line(source, 4, "throw std::runtime_error{\"Unknown quantified helper production\"};");
+                  line(source, 2, "}");
+                  line(source, 1, "}");
+               } else {
+                  line(source, 1,
+                       "[[maybe_unused]] void collect_" + helper_name +
+                             "(const parse_node_ptr& tree, std::vector<cpf::matched_string>& values) {");
+                  line(source, 2, "switch (tree->production) {");
+                  if (helper.kind == helper_kind::zero_or_more) {
+                     line(source, 3, "case " + std::to_string(helper.production_indices[0]) + ":");
+                     line(source, 4, "return;");
+                     line(source, 3, "case " + std::to_string(helper.production_indices[1]) + ":");
+                     line(source, 4, "values.push_back(matched_tree_at(node_child_at(tree, 0)));");
+                     line(source, 4, "collect_" + helper_name + "(node_child_at(tree, 1), values);");
+                     line(source, 4, "return;");
+                  } else if (helper.kind == helper_kind::one_or_more) {
+                     line(source, 3, "case " + std::to_string(helper.production_indices[0]) + ":");
+                     line(source, 4, "values.push_back(matched_tree_at(node_child_at(tree, 0)));");
+                     line(source, 4, "return;");
+                     line(source, 3, "case " + std::to_string(helper.production_indices[1]) + ":");
+                     line(source, 4, "values.push_back(matched_tree_at(node_child_at(tree, 0)));");
+                     line(source, 4, "collect_" + helper_name + "(node_child_at(tree, 1), values);");
+                     line(source, 4, "return;");
+                  } else {
+                     line(source, 3, "case " + std::to_string(helper.production_indices[0]) + ":");
+                     for (std::size_t i = 0; i < helper.exact_count; ++i) {
+                        line(source, 4,
+                             "values.push_back(matched_tree_at(node_child_at(tree, " + std::to_string(i) + ")));");
+                     }
+                     line(source, 4, "return;");
+                  }
+                  line(source, 3, "default:");
+                  line(source, 4, "throw std::runtime_error{\"Unknown quantified helper production\"};");
+                  line(source, 2, "}");
+                  line(source, 1, "}");
+                  line(source, 1,
+                       "[[maybe_unused]] std::vector<cpf::matched_string> extract_" + helper_name + "(const parse_node_ptr& tree) {");
+                  line(source, 2, "std::vector<cpf::matched_string> values;");
+                  line(source, 2, "collect_" + helper_name + "(tree, values);");
+                  line(source, 2, "return values;");
+                  line(source, 1, "}");
+               }
+            } else if (helper.base_symbol.kind == symbol_kind::reference) {
                if (helper.kind == helper_kind::optional) {
                   line(source, 1, "template<typename T>");
-                  line(source, 1, "std::unique_ptr<T> extract_" + helper_name + "(const parse_node_ptr& tree) {");
+                  line(source, 1, "[[maybe_unused]] std::unique_ptr<T> extract_" + helper_name + "(const parse_node_ptr& tree) {");
                   line(source, 2, "switch (tree->production) {");
                   line(source, 3, "case " + std::to_string(helper.production_indices[0]) + ":");
                   line(source, 4, "return nullptr;");
@@ -2217,9 +2425,9 @@ namespace cpf {
                   line(source, 2, "}");
                   line(source, 1, "}");
                } else {
-                  line(source, 1, "template<typename T>");
-                  line(source, 1,
-                       "void collect_" + helper_name +
+                     line(source, 1, "template<typename T>");
+                     line(source, 1,
+                          "[[maybe_unused]] void collect_" + helper_name +
                              "(const parse_node_ptr& tree, std::vector<std::unique_ptr<T>>& values) {");
                   line(source, 2, "switch (tree->production) {");
                   if (helper.kind == helper_kind::zero_or_more) {
@@ -2260,7 +2468,7 @@ namespace cpf {
                   line(source, 1, "}");
                   line(source, 1, "template<typename T>");
                   line(source, 1,
-                       "std::vector<std::unique_ptr<T>> extract_" + helper_name + "(const parse_node_ptr& tree) {");
+                       "[[maybe_unused]] std::vector<std::unique_ptr<T>> extract_" + helper_name + "(const parse_node_ptr& tree) {");
                   line(source, 2, "std::vector<std::unique_ptr<T>> values;");
                   line(source, 2, "collect_" + helper_name + "(tree, values);");
                   line(source, 2, "return values;");
@@ -2268,7 +2476,7 @@ namespace cpf {
                }
             } else if (helper.kind == helper_kind::optional) {
                line(source, 1,
-                    "std::optional<cpf::matched_string> extract_" + helper_name + "(const parse_node_ptr& tree) {");
+                    "[[maybe_unused]] std::optional<cpf::matched_string> extract_" + helper_name + "(const parse_node_ptr& tree) {");
                line(source, 2, "switch (tree->production) {");
                line(source, 3, "case " + std::to_string(helper.production_indices[0]) + ":");
                line(source, 4, "return std::nullopt;");
@@ -2280,7 +2488,7 @@ namespace cpf {
                line(source, 1, "}");
             } else {
                line(source, 1,
-                    "void collect_" + helper_name +
+                    "[[maybe_unused]] void collect_" + helper_name +
                           "(const parse_node_ptr& tree, std::vector<cpf::matched_string>& values) {");
                line(source, 2, "switch (tree->production) {");
                if (helper.kind == helper_kind::zero_or_more) {
@@ -2311,7 +2519,7 @@ namespace cpf {
                line(source, 2, "}");
                line(source, 1, "}");
                line(source, 1,
-                    "std::vector<cpf::matched_string> extract_" + helper_name + "(const parse_node_ptr& tree) {");
+                    "[[maybe_unused]] std::vector<cpf::matched_string> extract_" + helper_name + "(const parse_node_ptr& tree) {");
                line(source, 2, "std::vector<cpf::matched_string> values;");
                line(source, 2, "collect_" + helper_name + "(tree, values);");
                line(source, 2, "return values;");
@@ -2645,6 +2853,9 @@ namespace cpf {
                                    "node->" + symbol.label + " = extract_" + capture_name + "<" + field.resolved_rule +
                                           ">(node_child_at(tree, " + std::to_string(i) + "));");
                            }
+                        } else if (lexical_rules.contains(symbol.value)) {
+                           line(source, 4,
+                                "node->" + symbol.label + " = matched_tree_at(node_child_at(tree, " + std::to_string(i) + "));");
                         } else {
                            line(source, 4,
                                 "auto child_" + std::to_string(i) +

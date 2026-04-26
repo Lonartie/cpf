@@ -1,0 +1,10 @@
+token identifier -> identifier_head identifier_tail*;
+identifier_head -> r'[A-Za-z_]';
+identifier_tail -> r'[A-Za-z0-9_]';
+
+token qualified_identifier -> identifier ('.' identifier)*;
+token value_type -> 'int' | 'void';
+
+binding -> 'let':keyword qualified_identifier:name ':':colon value_type:type '=':assign identifier:value ';':semi;
+
+

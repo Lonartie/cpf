@@ -2,6 +2,32 @@
 
 #include "support/doctest.h"
 
+#include <filesystem>
+#include <fstream>
+
+namespace {
+   void write_file(const std::filesystem::path& path, std::string_view content) {
+      std::filesystem::create_directories(path.parent_path());
+      std::ofstream stream{path};
+      REQUIRE(stream.good());
+      stream << content;
+   }
+
+   int precedence_of_generated_rule(std::string_view generated_source, std::string_view rule_name) {
+      auto rule_case = std::string{"case "} + std::string{rule_name} + "::RuleId:";
+      auto rule_position = generated_source.find(rule_case);
+      REQUIRE(rule_position != std::string_view::npos);
+      auto production_case = generated_source.find("case 0:", rule_position);
+      REQUIRE(production_case != std::string_view::npos);
+      auto return_position = generated_source.find("return ", production_case);
+      REQUIRE(return_position != std::string_view::npos);
+      return_position += std::string_view{"return "}.size();
+      auto return_end = generated_source.find(';', return_position);
+      REQUIRE(return_end != std::string_view::npos);
+      return std::stoi(std::string{generated_source.substr(return_position, return_end - return_position)});
+   }
+} // namespace
+
 TEST_SUITE("cpflib.code_generator") {
    TEST_CASE("calculator grammar generates the documented public surface") {
       auto grammar = cpf::parse_grammar(R"(
@@ -137,6 +163,39 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(generated.header.find("struct default_number_node : default_expr_node<UserData>") != std::string::npos);
          CHECK(generated.header.find("cpf::matched_string value;") != std::string::npos);
       }
+   }
+
+   TEST_CASE("@import location affects default precedence through textual inclusion order") {
+      auto test_directory = std::filesystem::temp_directory_path() / "cpf_import_precedence_codegen_tests";
+      std::filesystem::remove_all(test_directory);
+
+      write_file(test_directory / "multiply_rule.cpf", R"(
+         import_precedence_multiply -> import_precedence_expr:left '*':op import_precedence_expr:right;
+      )");
+
+      write_file(test_directory / "import_after_add.cpf", R"(
+         import_precedence_expr -> import_precedence_add | import_precedence_multiply | import_precedence_number;
+         import_precedence_add -> import_precedence_expr:left '+':op import_precedence_expr:right;
+         @import 'multiply_rule.cpf';
+         import_precedence_number -> r'[0-9]+':value;
+      )");
+
+      write_file(test_directory / "import_before_add.cpf", R"(
+         import_precedence_expr -> import_precedence_add | import_precedence_multiply | import_precedence_number;
+         @import 'multiply_rule.cpf';
+         import_precedence_add -> import_precedence_expr:left '+':op import_precedence_expr:right;
+         import_precedence_number -> r'[0-9]+':value;
+      )");
+
+      auto import_after_add = cpf::generate_code(cpf::parse_grammar_file(test_directory / "import_after_add.cpf"),
+                                                 "import_after_add");
+      auto import_before_add = cpf::generate_code(cpf::parse_grammar_file(test_directory / "import_before_add.cpf"),
+                                                  "import_before_add");
+
+      CHECK(precedence_of_generated_rule(import_after_add.source, "import_precedence_add") == 1);
+      CHECK(precedence_of_generated_rule(import_after_add.source, "import_precedence_multiply") == 2);
+      CHECK(precedence_of_generated_rule(import_before_add.source, "import_precedence_multiply") == 1);
+      CHECK(precedence_of_generated_rule(import_before_add.source, "import_precedence_add") == 2);
    }
 
    TEST_CASE("default labels fall back to rule identifiers for relative precedence references") {
@@ -378,6 +437,49 @@ TEST_SUITE("cpflib.code_generator") {
       CHECK(generated.source.find("auto detail::parse_expression_default(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<expression>") !=
             std::string::npos);
       CHECK(generated.source.find("} // namespace generated::fixtures") != std::string::npos);
+   }
+
+   TEST_CASE("token declarations and inferred lexical helpers generate terminal captures") {
+      auto grammar = cpf::parse_grammar(R"(
+         token identifier -> identifier_head identifier_tail*;
+         identifier_head -> r'[A-Za-z_]';
+         identifier_tail -> r'[A-Za-z0-9_]';
+
+         token qualified_identifier -> identifier ('.' identifier)*;
+         token value_type -> 'int' | 'void';
+
+         binding -> 'let':keyword qualified_identifier:name ':':colon value_type:type '=':assign identifier:value ';':semi;
+      )");
+
+      auto generated = cpf::generate_code(grammar, "tokens");
+
+      SUBCASE("header output lowers token-like references to matched_string members") {
+         CHECK(generated.header.find("cpf::matched_string name;") != std::string::npos);
+         CHECK(generated.header.find("cpf::matched_string type;") != std::string::npos);
+         CHECK(generated.header.find("cpf::matched_string value;") != std::string::npos);
+         CHECK(generated.header.find("std::unique_ptr<qualified_identifier_node<UserData>> name;") == std::string::npos);
+         CHECK(generated.header.find("std::unique_ptr<value_type_node<UserData>> type;") == std::string::npos);
+      }
+
+      SUBCASE("source output collapses lexical helper subtrees into token text") {
+         CHECK(generated.source.find("cpf::matched_string matched_tree_at(const parse_node_ptr& tree)") != std::string::npos);
+         CHECK(generated.source.find("append_matched_tree_text") != std::string::npos);
+         CHECK(generated.source.find("node->name = matched_tree_at(") != std::string::npos);
+         CHECK(generated.source.find("node->type = matched_tree_at(") != std::string::npos);
+         CHECK(generated.source.find("node->value = matched_tree_at(") != std::string::npos);
+      }
+   }
+
+   TEST_CASE("invalid token declarations are rejected during code generation") {
+      auto grammar = cpf::parse_grammar(R"(
+         token bad_token -> expression '!';
+         expression -> number:value;
+         number [lbl = 'atom'] -> r'[0-9]+':value;
+      )");
+
+      CHECK_THROWS_WITH_AS(cpf::generate_code(grammar, "bad_token"),
+                           doctest::Contains("Token rule 'bad_token' must lower only to terminals or lexical rules"),
+                           std::runtime_error);
    }
 
    TEST_CASE("generated code emits node templates with default void user data") {

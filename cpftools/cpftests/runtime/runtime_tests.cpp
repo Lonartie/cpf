@@ -7,6 +7,7 @@
 #include "message.h"
 #include "namespaced_calculator.h"
 #include "quantified.h"
+#include "tokens.h"
 
 #include "support/doctest.h"
 
@@ -643,6 +644,31 @@ TEST_SUITE("generated.runtime") {
       auto cloned = tree->clone();
       REQUIRE(cloned != nullptr);
       CHECK(cloned->user_data == "token:42");
+   }
+
+   TEST_CASE("token declarations and inferred lexical helpers collapse to matched_string captures") {
+      auto result = binding::parse("let foo.bar:int = baz;");
+
+      REQUIRE(result.success);
+      REQUIRE(result.forest.size() == 1);
+
+      const auto& tree = result.forest.front();
+      CHECK(tree->keyword.text == "let");
+      CHECK(tree->name.text == "foo.bar");
+      CHECK(tree->type.text == "int");
+      CHECK(tree->value.text == "baz");
+      CHECK(tree->name.range.begin.offset == 4);
+      CHECK(tree->name.range.end.offset == 11);
+      CHECK(tree->type.range.begin.offset == 12);
+      CHECK(tree->type.range.end.offset == 15);
+      CHECK(tree->value.range.begin.offset == 18);
+      CHECK(tree->value.range.end.offset == 21);
+
+      std::ostringstream stream;
+      stream << *tree;
+      CHECK(stream.str().find("name=\"foo.bar\"") != std::string::npos);
+      CHECK(stream.str().find("type=\"int\"") != std::string::npos);
+      CHECK(stream.str().find("value=\"baz\"") != std::string::npos);
    }
 
    TEST_CASE("choice-only inheritance grammars stay visitable and printable") {

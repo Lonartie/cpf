@@ -70,6 +70,7 @@ namespace cpf {
    /// @brief Parsed grammar rule.
    struct rule {
       std::string identifier;
+      bool declared_as_token = false;
       bool synthetic = false;
       std::vector<production> productions;
 

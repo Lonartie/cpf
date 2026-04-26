@@ -255,6 +255,29 @@ TEST_SUITE("cpflib.grammar_parser") {
       CHECK(grammar.find_rule("number") != nullptr);
    }
 
+   TEST_CASE("token declarations are preserved as explicit token rules") {
+      auto grammar = cpf::parse_grammar(R"(
+         token identifier_head -> r'[A-Za-z_]';
+         token identifier_tail -> r'[A-Za-z0-9_]';
+         token identifier -> identifier_head identifier_tail*;
+
+         variable -> identifier:name;
+      )");
+
+      auto* identifier = grammar.find_rule("identifier");
+      auto* variable = grammar.find_rule("variable");
+
+      REQUIRE(identifier != nullptr);
+      REQUIRE(variable != nullptr);
+      CHECK(identifier->declared_as_token);
+      CHECK_FALSE(variable->declared_as_token);
+      REQUIRE(identifier->productions.size() == 1);
+      REQUIRE(identifier->productions.front().symbols.size() == 2);
+      CHECK(identifier->productions.front().symbols[0].value == "identifier_head");
+      CHECK(identifier->productions.front().symbols[1].value == "identifier_tail");
+      CHECK(identifier->productions.front().symbols[1].quantifier == cpf::symbol_quantifier::zero_or_more);
+   }
+
    TEST_CASE("malformed repetition suffixes report expressive parser errors") {
       auto capture_error = [](std::string_view source) -> std::string {
          try {
@@ -311,6 +334,25 @@ TEST_SUITE("cpflib.grammar_parser") {
 
          REQUIRE_FALSE(message.empty());
          CHECK(message.find("Grammar directive '@namespace' is not supported") != std::string::npos);
+      }
+
+      SUBCASE("token declarations do not accept rule attributes") {
+         auto message = capture_error(R"(
+            token identifier [lbl = 'atom'] -> r'[A-Za-z_]+';
+         )");
+
+         REQUIRE_FALSE(message.empty());
+         CHECK(message.find("Token declarations do not support rule attributes") != std::string::npos);
+      }
+
+      SUBCASE("rules cannot mix token and non-token declarations") {
+         auto message = capture_error(R"(
+            token identifier -> r'[A-Za-z_]+';
+            identifier -> 'x';
+         )");
+
+         REQUIRE_FALSE(message.empty());
+         CHECK(message.find("cannot be declared as both token and non-token") != std::string::npos);
       }
    }
 
@@ -436,20 +478,20 @@ TEST_SUITE("cpflib.grammar_parser") {
       }
    }
 
-   TEST_CASE("grammar loader expands imports across multiple files") {
+   TEST_CASE("grammar loader preprocesses @import directives across multiple files") {
       auto test_directory = std::filesystem::temp_directory_path() / "cpf_import_loader_tests";
       std::filesystem::remove_all(test_directory);
 
-      SUBCASE("relative imports are loaded depth-first and merged") {
+      SUBCASE("relative @import directives are expanded recursively before parsing") {
          write_file(test_directory / "parts" / "numbers.cpf", R"(
             imported_number -> r'[0-9]+':value;
          )");
          write_file(test_directory / "parts" / "expr.cpf", R"(
-            import "numbers.cpf";
+            @import "numbers.cpf";
             imported_expr -> imported_number;
          )");
          write_file(test_directory / "root.cpf", R"(
-            import 'parts/expr.cpf';
+            @import 'parts/expr.cpf';
             imported_root -> imported_expr;
          )");
 
@@ -470,8 +512,8 @@ TEST_SUITE("cpflib.grammar_parser") {
             shared_other -> '2':value;
          )");
          write_file(test_directory / "root.cpf", R"(
-            import 'first.cpf';
-            import 'second.cpf';
+            @import 'first.cpf';
+            @import 'second.cpf';
          )");
 
          auto grammar = cpf::parse_grammar_file(test_directory / "root.cpf");
@@ -482,44 +524,46 @@ TEST_SUITE("cpflib.grammar_parser") {
          CHECK(shared_expr->productions[1].definition == 1);
       }
 
-      SUBCASE("duplicate imports are loaded only once") {
+      SUBCASE("duplicate @import expansions behave like textual inclusion") {
          write_file(test_directory / "leaf.cpf", R"(
             imported_leaf -> 'x':value;
          )");
          write_file(test_directory / "left.cpf", R"(
-            import 'leaf.cpf';
+            @import 'leaf.cpf';
             imported_left -> imported_leaf;
          )");
          write_file(test_directory / "right.cpf", R"(
-            import 'leaf.cpf';
+            @import 'leaf.cpf';
             imported_right -> imported_leaf;
          )");
          write_file(test_directory / "root.cpf", R"(
-            import 'left.cpf';
-            import 'right.cpf';
+            @import 'left.cpf';
+            @import 'right.cpf';
          )");
 
          auto loaded = cpf::load_grammar_file(test_directory / "root.cpf");
          CHECK(loaded.dependencies.size() == 4);
-         CHECK(loaded.parsed_grammar.find_rule("imported_leaf") != nullptr);
+          auto* imported_leaf = loaded.parsed_grammar.find_rule("imported_leaf");
+          REQUIRE(imported_leaf != nullptr);
+          CHECK(imported_leaf->productions.size() == 2);
       }
 
-      SUBCASE("import cycles report a clear loader error") {
-         write_file(test_directory / "first.cpf", "import 'second.cpf';\ncycle_first -> 'a':value;\n");
-         write_file(test_directory / "second.cpf", "import 'first.cpf';\ncycle_second -> 'b':value;\n");
+      SUBCASE("@import cycles report a clear loader error") {
+         write_file(test_directory / "first.cpf", "@import 'second.cpf';\ncycle_first -> 'a':value;\n");
+         write_file(test_directory / "second.cpf", "@import 'first.cpf';\ncycle_second -> 'b':value;\n");
 
          CHECK_THROWS_WITH_AS(cpf::load_grammar_file(test_directory / "first.cpf"),
                               doctest::Contains("Grammar import cycle detected"), std::runtime_error);
       }
 
-      SUBCASE("double-quoted imports preserve escaped quotes and relative resolution") {
+      SUBCASE("double-quoted @import paths preserve escaped quotes and relative resolution") {
          auto quoted_directory = test_directory / "quoted imports";
 #if defined(_WIN32)
          auto child_path = quoted_directory / "child_grammar.cpf";
-         auto root_source = std::string{"import \"child_grammar.cpf\";\nquoted_root -> quoted_child;\n"};
+          auto root_source = std::string{"@import \"child_grammar.cpf\";\nquoted_root -> quoted_child;\n"};
 #else
          auto child_path = quoted_directory / "child\"grammar.cpf";
-         auto root_source = std::string{"import \"child\\\"grammar.cpf\";\nquoted_root -> quoted_child;\n"};
+          auto root_source = std::string{"@import \"child\\\"grammar.cpf\";\nquoted_root -> quoted_child;\n"};
 #endif
          write_file(child_path, "quoted_child -> \"x\":value;\n");
          write_file(quoted_directory / "root.cpf", root_source);
@@ -528,6 +572,40 @@ TEST_SUITE("cpflib.grammar_parser") {
          CHECK(loaded.dependencies.size() == 2);
          CHECK(loaded.parsed_grammar.find_rule("quoted_root") != nullptr);
          CHECK(loaded.parsed_grammar.find_rule("quoted_child") != nullptr);
+      }
+
+      SUBCASE("imported token declarations cannot conflict with parser rules") {
+         write_file(test_directory / "tokens.cpf", R"(
+            token identifier -> r'[A-Za-z_]+';
+         )");
+         write_file(test_directory / "rules.cpf", R"(
+            identifier -> 'x';
+         )");
+         write_file(test_directory / "root.cpf", R"(
+            @import 'tokens.cpf';
+            @import 'rules.cpf';
+         )");
+
+         CHECK_THROWS_WITH_AS(cpf::load_grammar_file(test_directory / "root.cpf"),
+                              doctest::Contains("cannot be declared as both token and non-token"),
+                              std::runtime_error);
+      }
+
+      SUBCASE("@import is preprocessed before directives and rules are parsed") {
+         write_file(test_directory / "trivia.cpf", R"(
+            @whitespace ws;
+            skip ws -> r'[ \t\r\n]+';
+         )");
+         write_file(test_directory / "root.cpf", R"(
+            @import 'trivia.cpf';
+            expr -> 'x':value;
+         )");
+
+         auto grammar = cpf::parse_grammar_file(test_directory / "root.cpf");
+         REQUIRE(grammar.whitespace_rule.has_value());
+         CHECK(*grammar.whitespace_rule == "ws");
+         CHECK(grammar.find_skip_rule("ws") != nullptr);
+         CHECK(grammar.find_rule("expr") != nullptr);
       }
    }
 

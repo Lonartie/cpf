@@ -36,16 +36,38 @@ namespace cpf {
             while (!eof()) {
                if (take("@")) {
                   parse_directive(result);
-               } else if (starts_with_keyword("skip")) {
+               } else if (starts_with_declaration_keyword("skip")) {
                   auto parsed_skip_rule = parse_skip_rule();
                   if (result.find_skip_rule(parsed_skip_rule.identifier) != nullptr) {
                      throw error("Duplicate skip rule '" + parsed_skip_rule.identifier + "'");
                   }
                   result.skip_rules.push_back(std::move(parsed_skip_rule));
-               } else {
-                  auto parsed_rules = parse_rule();
+               } else if (starts_with_declaration_keyword("token")) {
+                  auto parsed_rules = parse_rule(true);
                   auto& parsed_rule = parsed_rules.main_rule;
                   if (auto* existing = result.find_rule(parsed_rule.identifier); existing != nullptr) {
+                     if (existing->declared_as_token != parsed_rule.declared_as_token) {
+                        throw error("Rule '" + parsed_rule.identifier + "' cannot be declared as both token and non-token");
+                     }
+                     const auto definition_offset = existing->productions.size();
+                     for (auto& production: parsed_rule.productions) {
+                        production.definition += definition_offset;
+                     }
+                     existing->productions.insert(existing->productions.end(), parsed_rule.productions.begin(),
+                                                  parsed_rule.productions.end());
+                  } else {
+                     result.rules.push_back(std::move(parsed_rule));
+                  }
+                  for (auto& synthetic_rule: parsed_rules.synthetic_rules) {
+                     result.rules.push_back(std::move(synthetic_rule));
+                  }
+               } else {
+                  auto parsed_rules = parse_rule(false);
+                  auto& parsed_rule = parsed_rules.main_rule;
+                  if (auto* existing = result.find_rule(parsed_rule.identifier); existing != nullptr) {
+                     if (existing->declared_as_token != parsed_rule.declared_as_token) {
+                        throw error("Rule '" + parsed_rule.identifier + "' cannot be declared as both token and non-token");
+                     }
                      const auto definition_offset = existing->productions.size();
                      for (auto& production: parsed_rule.productions) {
                         production.definition += definition_offset;
@@ -144,6 +166,21 @@ namespace cpf {
             }
             const auto next = static_cast<unsigned char>(text_[end]);
             return std::isalnum(next) == 0 && text_[end] != '_';
+         }
+
+         [[nodiscard]] bool starts_with_declaration_keyword(std::string_view keyword) {
+            if (!starts_with_keyword(keyword)) {
+               return false;
+            }
+
+            auto probe = position_ + keyword.size();
+            while (probe < text_.size() && std::isspace(static_cast<unsigned char>(text_[probe])) != 0) {
+               ++probe;
+            }
+            if (probe + 1 < text_.size() && text_.substr(probe, 2) == "->") {
+               return false;
+            }
+            return probe < text_.size() && (std::isalpha(static_cast<unsigned char>(text_[probe])) != 0 || text_[probe] == '_');
          }
 
          void expect_keyword(std::string_view keyword) {
@@ -525,12 +562,20 @@ namespace cpf {
             return parsed_production;
          }
 
-         parsed_rule_bundle parse_rule() {
+         parsed_rule_bundle parse_rule(bool declared_as_token) {
             auto line = line_;
             parsed_rule_bundle parsed_rules;
+            if (declared_as_token) {
+               expect_keyword("token");
+               skip_ignored();
+            }
             parsed_rules.main_rule.identifier = parse_identifier();
+            parsed_rules.main_rule.declared_as_token = declared_as_token;
             current_rule_ = parsed_rules.main_rule.identifier;
             auto attributes = parse_attributes();
+            if (declared_as_token && !attributes.empty()) {
+               throw error("Token declarations do not support rule attributes");
+            }
             expect("->");
 
             auto parsed_alternatives = parse_alternatives("production", ';');

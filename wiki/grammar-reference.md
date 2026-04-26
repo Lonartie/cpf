@@ -7,6 +7,7 @@ CPF reads `.cpf` grammar files and emits matching C++20 parser code.
 CPF currently supports:
 
 - grammar-level trivia via `skip` declarations and `@whitespace`
+- explicit `token` declarations
 - literals and regex terminals
 - labeled captures
 - choice-style base rules
@@ -14,7 +15,7 @@ CPF currently supports:
 - quantified symbols: `?`, `*`, `+`, `{n}`
 - grouped alternatives
 - labeled single-symbol group captures such as `('x' | 'y'):value`
-- multi-file grammars through `import`
+- multi-file grammars through `@import`
 - generated-code namespaces
 
 Grammar strings may use either single quotes or double quotes for literals, regex bodies, quoted attribute values, and
@@ -51,6 +52,32 @@ Default behavior when attributes are omitted:
 - infix-rule precedence defaults to source order
 - associativity defaults to `left`
 - labels default to the rule identifier
+
+## Tokens and lexical helper rules
+
+CPF grammars can declare reusable token rules explicitly:
+
+```text
+token identifier -> identifier_head identifier_tail*;
+identifier_head -> r'[A-Za-z_]';
+identifier_tail -> r'[A-Za-z0-9_]';
+```
+
+Parser rules can reference tokens exactly like ordinary rules:
+
+```text
+qualified_identifier -> identifier ('.' identifier)*;
+binding -> 'let':keyword qualified_identifier:name ':':colon value_type:type '=':assign identifier:value ';':semi;
+value_type -> 'int' | 'void';
+```
+
+Rules:
+
+- `token <identifier> -> ...;` declares an explicitly lexical rule
+- token declarations do not accept rule attributes such as `[prec = ...]`
+- ordinary helper rules reachable from token declarations are inferred as lexical automatically when they lower only to terminals and other lexical rules
+- references to lexical rules capture `cpf::matched_string` values instead of nested AST nodes
+- direct parse entry points are still generated for these rules for compatibility with the existing API surface
 
 ## Quantifiers and groups
 
@@ -98,18 +125,26 @@ Generated member types follow the captured symbol kind:
 
 ## Multi-file grammars
 
-Grammars can import other grammars:
+Grammars can preprocess other grammars with `@import`:
 
 ```text
-import 'imports/imported_expr.cpf';
-import 'imports/imported_words.cpf';
+@import 'imports/imported_expr.cpf';
+@import 'imports/imported_words.cpf';
 
 imported_bundle_message -> imported_bundle_greeting | imported_bundle_parting;
 ```
 
-Double-quoted imports such as `import "imports/imported_expr.cpf";` work the same way.
+Double-quoted imports such as `@import "imports/imported_expr.cpf";` work the same way.
 
-Imports are resolved relative to the importing file, expanded transitively, and cycle-checked.
+`@import` behaves like a preprocessing include step: CPF recursively replaces the `@import ...;` directive with the
+raw contents of the referenced file before any grammar parsing happens. Paths are resolved relative to the importing
+file, expanded transitively, and cycle-checked.
+
+Consequences:
+
+- repeated `@import` directives expand repeatedly, just like repeated textual inclusion
+- imported declarations participate in parsing exactly as if their source text had been pasted into the importing file
+- parse errors are reported against the final preprocessed grammar text
 
 See [`generation-and-integration.md`](./generation-and-integration.md) for the corresponding loader and generator APIs.
 
