@@ -155,7 +155,7 @@ namespace cpfbench {
          return;
       }
 
-      const auto tree_template = result.forest.front();
+      const auto& tree_template = result.forest.front();
       if (tree_template.has_materialized()) {
          detail::report_materialization_failure(state, benchmark_name,
                                                 "forest handle was already materialized before benchmarking");

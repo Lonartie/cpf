@@ -76,6 +76,13 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(generated.header.find(
                      "static auto recompute_complexity(std::size_t production_index) -> const cpf::complexity&;") !=
                std::string::npos);
+          CHECK(generated.header.find("expression_node() = default;") != std::string::npos);
+          CHECK(generated.header.find("expression_node(expression_node&&) = default;") != std::string::npos);
+          CHECK(generated.header.find("auto operator=(expression_node&&) -> expression_node& = default;") !=
+                std::string::npos);
+          CHECK(generated.header.find("expression_node(const expression_node&) = delete;") != std::string::npos);
+          CHECK(generated.header.find("auto operator=(const expression_node&) -> expression_node& = delete;") !=
+                std::string::npos);
          CHECK(generated.header.find("std::unique_ptr<expression_node<UserData>> clone() const;") != std::string::npos);
          CHECK(generated.header.find("cpf::matched_string value;") != std::string::npos);
          CHECK(generated.header.find("std::unique_ptr<expression_node<UserData>> left;") != std::string::npos);

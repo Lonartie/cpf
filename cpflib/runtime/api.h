@@ -177,6 +177,12 @@ namespace cpf {
       /// @brief Source range that produced this node.
       source_range range;
 
+      node() = default;
+      node(node&&) = default;
+      auto operator=(node&&) -> node& = default;
+      node(const node&) = delete;
+      auto operator=(const node&) -> node& = delete;
+
       virtual ~node();
 
       /// @brief Returns the generated rule identifier of the concrete node.
@@ -223,6 +229,10 @@ namespace cpf {
    template<typename T> class parse_tree {
    public:
       parse_tree() : m_state{std::make_shared<state>()} {}
+      parse_tree(parse_tree&&) = default;
+      auto operator=(parse_tree&&) -> parse_tree& = default;
+      parse_tree(const parse_tree&) = delete;
+      auto operator=(const parse_tree&) -> parse_tree& = delete;
 
       parse_tree(std::unique_ptr<T> eager_tree) :
           m_state{std::make_shared<state>()} {

@@ -14,59 +14,6 @@ The suggestions below are based on the currently documented surface in [`wiki/gr
 
 ## Recommended near-term extensions
 
-### 3. Operator precedence blocks and table syntax
-
-**Problem**
-
-The current `[prec = ...]`, `[prec < ...]`, and `[dir = ...]` attributes are flexible, but expression grammars become verbose quickly.
-
-**Proposed syntax**
-
-```text
-precedence expression {
-   left '+' '-';
-   left '*' '/';
-   right '^';
-}
-```
-
-**Example**
-
-```text
-precedence expression {
-   left '+' '-';
-   left '*' '/';
-}
-
-expression -> expression:left '+':op expression:right
-            | expression:left '-':op expression:right
-            | expression:left '*':op expression:right
-            | expression:left '/':op expression:right
-            | number;
-
-number -> r'[0-9]+':value;
-```
-
-Another, more structured form could be:
-
-```text
-expression {
-   left  '+' '-' => additive;
-   left  '*' '/' => multiplicative;
-   atom  number;
-}
-```
-
-**Why it helps**
-
-- reduces precedence boilerplate
-- makes operator grammars easier to audit
-- lowers the entry cost for larger grammars like `simple_c.cpf`
-
-**Notes**
-
-This can be implemented as sugar over the current precedence metadata rather than a separate parsing model.
-
 ### 4. Full labeled groups, including quantified and multi-symbol groups
 
 **Problem**
@@ -144,39 +91,6 @@ enum_decl -> 'enum':keyword identifier:name '{':open trailing_sep_by(identifier,
 **Notes**
 
 If function-like syntax feels too special-purpose, a dedicated infix form would also work, for example `expression % ','`.
-
-### 6. Rule visibility, entry-point, and export metadata
-
-**Problem**
-
-Imported multi-file grammars are supported, but larger grammar ecosystems need a better way to distinguish public entry points from helper-only rules.
-
-**Proposed syntax**
-
-```text
-public translation_unit -> declaration*:declarations;
-public expression -> add | multiply | atom;
-private additive_tail -> '+':op expression:right;
-export expression;
-```
-
-**Example**
-
-```text
-public module -> declaration*:declarations;
-private declaration -> function | variable_decl;
-private identifier -> r'[A-Za-z_][A-Za-z0-9_]*':value;
-```
-
-**Why it helps**
-
-- makes generated APIs smaller and easier to understand
-- improves packaging for shared grammar libraries
-- fits well with the roadmap item about multi-root workflows and reusable grammar modules
-
-**Notes**
-
-This could control which parse entry points become public and which helper rules stay implementation details.
 
 ### 7. Lookahead predicates and commit/cut markers
 

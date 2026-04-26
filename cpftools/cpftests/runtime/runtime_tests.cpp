@@ -123,6 +123,23 @@ namespace {
 } // namespace
 
 TEST_SUITE("generated.runtime") {
+   TEST_CASE("generated clone-bearing node types are move-only") {
+      CHECK(std::is_move_constructible_v<expression>);
+      CHECK(std::is_move_assignable_v<expression>);
+      CHECK_FALSE(std::is_copy_constructible_v<expression>);
+      CHECK_FALSE(std::is_copy_assignable_v<expression>);
+
+      CHECK(std::is_move_constructible_v<number>);
+      CHECK(std::is_move_assignable_v<number>);
+      CHECK_FALSE(std::is_copy_constructible_v<number>);
+      CHECK_FALSE(std::is_copy_assignable_v<number>);
+
+      CHECK(std::is_move_constructible_v<namespaced::expression>);
+      CHECK(std::is_move_assignable_v<namespaced::expression>);
+      CHECK_FALSE(std::is_copy_constructible_v<namespaced::expression>);
+      CHECK_FALSE(std::is_copy_assignable_v<namespaced::expression>);
+   }
+
    TEST_CASE("calculator grammar matches the expected generated runtime behavior") {
       SUBCASE("README flow parses, evaluates, and streams") {
          auto result = expression::parse("1 + 2 * 3");

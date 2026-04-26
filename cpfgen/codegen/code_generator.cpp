@@ -1374,6 +1374,13 @@ namespace cpf {
             if (!info.fields.empty()) {
                line(header, 0);
             }
+            line(header, 1, info.name + "_node() = default;");
+            line(header, 1, info.name + "_node(" + info.name + "_node&&) = default;");
+            line(header, 1,
+                 "auto operator=(" + info.name + "_node&&) -> " + info.name + "_node& = default;");
+            line(header, 1, info.name + "_node(const " + info.name + "_node&) = delete;");
+            line(header, 1,
+                 "auto operator=(const " + info.name + "_node&) -> " + info.name + "_node& = delete;");
             line(header, 1, "~" + info.name + "_node() override = default;");
              line(header, 1, "static auto lex(std::string_view input) -> cpf::token_sequence;");
             line(header, 1,

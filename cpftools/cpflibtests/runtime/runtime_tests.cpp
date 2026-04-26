@@ -115,6 +115,10 @@ namespace {
       static constexpr std::size_t RuleId = 7;
 
       explicit fake_node(std::string value) : value{std::move(value)} {}
+      fake_node(fake_node&&) = default;
+      auto operator=(fake_node&&) -> fake_node& = default;
+      fake_node(const fake_node&) = delete;
+      auto operator=(const fake_node&) -> fake_node& = delete;
 
       std::string value;
 
@@ -123,7 +127,13 @@ namespace {
 
    protected:
       [[nodiscard]] std::unique_ptr<cpf::node> clone_node() const override {
-         return std::make_unique<fake_node>(*this);
+         auto clone = std::make_unique<fake_node>(value);
+         clone->production_index = production_index;
+         clone->range = range;
+         for (const auto& damage: damage()) {
+            cpf::detail::add_damage(*clone, damage);
+         }
+         return clone;
       }
    };
 } // namespace
@@ -161,24 +171,38 @@ TEST_SUITE("cpflib.runtime") {
       CHECK((&*const_tree) == static_cast<const fake_node*>(tree.get()));
    }
 
-   TEST_CASE("copied parse-tree handles share one lazy materialization state") {
+   TEST_CASE("clone-bearing runtime types are move-only") {
+      CHECK(std::is_move_constructible_v<fake_node>);
+      CHECK(std::is_move_assignable_v<fake_node>);
+      CHECK_FALSE(std::is_copy_constructible_v<fake_node>);
+      CHECK_FALSE(std::is_copy_assignable_v<fake_node>);
+      CHECK(std::is_move_constructible_v<cpf::parse_tree<fake_node>>);
+      CHECK(std::is_move_assignable_v<cpf::parse_tree<fake_node>>);
+      CHECK_FALSE(std::is_copy_constructible_v<cpf::parse_tree<fake_node>>);
+      CHECK_FALSE(std::is_copy_assignable_v<cpf::parse_tree<fake_node>>);
+   }
+
+   TEST_CASE("moved parse-tree handles preserve lazy materialization state") {
       auto materialize_count = std::size_t{0};
       cpf::parse_tree<fake_node> original{{}, 3, {}, [&]() {
                                            ++materialize_count;
                                            return std::make_unique<fake_node>("lazy");
                                         }};
-      auto copy = original;
+      auto moved = std::move(original);
 
-      CHECK_FALSE(original.has_materialized());
-      CHECK_FALSE(copy.has_materialized());
+      CHECK_FALSE(moved.has_materialized());
 
-      auto* materialized = copy.get();
+      auto* materialized = moved.get();
 
       REQUIRE(materialized != nullptr);
       CHECK(materialize_count == 1);
-      CHECK(original.has_materialized());
-      CHECK(copy.has_materialized());
-      CHECK(original.get() == materialized);
+      CHECK(moved.has_materialized());
+
+      cpf::parse_tree<fake_node> assigned;
+      assigned = std::move(moved);
+
+      CHECK(assigned.has_materialized());
+      CHECK(assigned.get() == materialized);
    }
 
    TEST_CASE("cloned parse-tree handles rematerialize lazily without mutating the original handle") {
