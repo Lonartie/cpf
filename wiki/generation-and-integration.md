@@ -32,6 +32,17 @@ If you only need the parsed grammar, `cpf::parse_grammar_file(...)` returns the 
 
 The `base_name` argument controls the generated file naming and internal include wiring.
 
+Generated headers now expose both parser and lexer entry points. A generated root type such as `expression` provides:
+
+- `lex(std::string_view)` -> `cpf::token_sequence`
+- `parse(std::string_view, ...)`
+- `parse(const cpf::token_sequence&, ...)`
+- `recognize(std::string_view)`
+- `recognize(const cpf::token_sequence&)`
+
+This lets callers lex once and parse the same source multiple times with different `cpf::parse_options` values without paying for
+lexing again.
+
 ## `cpfgen` command-line interface
 
 The `cpfgen` executable generates `<stem>.h` and `<stem>.cpp` from a grammar file.

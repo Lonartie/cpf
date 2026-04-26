@@ -49,13 +49,21 @@ namespace cpf {
       void merge_parse_error(parse_error& target, const parse_error& candidate);
       [[nodiscard]] auto make_ambiguity_error(std::string_view rule_name) -> parse_error;
 
-      enum class parser_symbol_kind { nonterminal, literal, regex };
+      enum class parser_symbol_kind { nonterminal, terminal };
+
+      enum class lexer_symbol_kind { literal, regex };
 
       struct parser_symbol {
-         parser_symbol_kind kind = parser_symbol_kind::literal;
+         parser_symbol_kind kind = parser_symbol_kind::terminal;
          std::size_t value = 0;
          std::string_view text;
+      };
+
+      struct lexer_symbol_spec {
+         lexer_symbol_kind kind = lexer_symbol_kind::literal;
+         std::string_view text;
          const std::regex* compiled_regex = nullptr;
+         std::size_t precedence = 0;
       };
 
       struct production_spec {
@@ -73,7 +81,9 @@ namespace cpf {
          const std::size_t* rule_production_indices = nullptr;
          const std::size_t* rule_production_offsets = nullptr;
          const std::size_t* rule_production_counts = nullptr;
-         const parser_symbol* skip_symbols = nullptr;
+         const lexer_symbol_spec* token_symbols = nullptr;
+         std::size_t token_symbol_count = 0;
+         const lexer_symbol_spec* skip_symbols = nullptr;
          std::size_t skip_symbol_count = 0;
          bool use_default_whitespace = true;
       };
@@ -106,10 +116,15 @@ namespace cpf {
          parse_error error;
       };
 
+      [[nodiscard]] auto lex_input(std::string_view input, const grammar_spec& grammar) -> token_sequence;
       [[nodiscard]] auto earley_parse(std::string_view input, const grammar_spec& grammar, std::size_t root_rule,
+                                      bool allow_partial = false) -> parse_forest;
+      [[nodiscard]] auto earley_parse(const token_sequence& tokens, const grammar_spec& grammar, std::size_t root_rule,
                                       bool allow_partial = false) -> parse_forest;
       [[nodiscard]] auto earley_recognize(std::string_view input, const grammar_spec& grammar, std::size_t root_rule)
             -> recognize_result;
+      [[nodiscard]] auto earley_recognize(const token_sequence& tokens, const grammar_spec& grammar,
+                                          std::size_t root_rule) -> recognize_result;
       [[nodiscard]] auto earley_inspect(std::string_view input, const grammar_spec& grammar, std::size_t root_rule,
                                         std::size_t ambiguity_limit = 2) -> inspect_result;
    } // namespace detail

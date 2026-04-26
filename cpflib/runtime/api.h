@@ -2,8 +2,10 @@
 
 #include <cstddef>
 #include <functional>
+#include <iosfwd>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -108,6 +110,43 @@ namespace cpf {
       std::string text;
       source_range range;
    };
+
+   /// @brief One lexed terminal produced by a generated CPF lexer.
+   struct lexed_token {
+      /// @brief Grammar-local terminal symbol id. Prefer tokens produced by the generated `lex(...)` helper.
+      std::size_t symbol = 0;
+      /// @brief Matched token text together with its source range in the original input.
+      matched_string text;
+      /// @brief True when the lexer could not classify this input slice as any declared token.
+      bool invalid = false;
+   };
+
+   /// @brief Reusable tokenized input that carries both the token sequence and the original source text.
+   struct token_sequence {
+      /// @brief Original source text used to produce `tokens`.
+      std::string input;
+      /// @brief Lexed tokens for the source text.
+      std::vector<lexed_token> tokens;
+
+      [[nodiscard]] auto empty() const -> bool { return tokens.empty(); }
+      [[nodiscard]] auto size() const -> std::size_t { return tokens.size(); }
+      [[nodiscard]] auto data() -> lexed_token* { return tokens.data(); }
+      [[nodiscard]] auto data() const -> const lexed_token* { return tokens.data(); }
+      [[nodiscard]] auto begin() -> std::vector<lexed_token>::iterator { return tokens.begin(); }
+      [[nodiscard]] auto begin() const -> std::vector<lexed_token>::const_iterator { return tokens.begin(); }
+      [[nodiscard]] auto end() -> std::vector<lexed_token>::iterator { return tokens.end(); }
+      [[nodiscard]] auto end() const -> std::vector<lexed_token>::const_iterator { return tokens.end(); }
+      [[nodiscard]] auto front() -> lexed_token& { return tokens.front(); }
+      [[nodiscard]] auto front() const -> const lexed_token& { return tokens.front(); }
+      [[nodiscard]] auto back() -> lexed_token& { return tokens.back(); }
+      [[nodiscard]] auto back() const -> const lexed_token& { return tokens.back(); }
+      [[nodiscard]] auto span() const -> std::span<const lexed_token> { return {tokens.data(), tokens.size()}; }
+      [[nodiscard]] auto operator[](std::size_t index) -> lexed_token& { return tokens[index]; }
+      [[nodiscard]] auto operator[](std::size_t index) const -> const lexed_token& { return tokens[index]; }
+   };
+
+   /// @brief Streams a human-readable multiline debug view of a token sequence.
+   std::ostream& operator<<(std::ostream& os, const token_sequence& sequence);
 
    /// @brief Damage annotation attached to a partially recovered AST node.
    struct node_damage {

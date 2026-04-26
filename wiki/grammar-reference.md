@@ -79,6 +79,22 @@ Rules:
 - references to lexical rules capture `cpf::matched_string` values instead of nested AST nodes
 - direct parse entry points are still generated for these rules for compatibility with the existing API surface
 
+The generated parser now also exposes the generated lexer publicly. For any generated root such as `binding`, callers can use:
+
+```c++
+auto tokens = binding::lex("let foo:int = bar;");
+auto recognized = binding::recognize(tokens);
+auto parsed = binding::parse(tokens);
+```
+
+Lexing behavior:
+
+- explicit `token` declarations become physical lexer token definitions
+- inline parser terminals such as `'let'` and `r'[0-9]+'` also participate in lexer tokenization
+- the lexer emits a pure token stream; the parser no longer mixes token matching with raw character matching
+- longest match wins first
+- equal-length conflicts are resolved by the generated lexer priority order derived from the grammar
+
 ## Quantifiers and groups
 
 Supported postfix forms:
@@ -168,6 +184,12 @@ Rules:
 - `@whitespace <identifier>;` optionally selects which declared skip rule is the canonical whitespace rule
 - skip rules are not exposed as generated AST nodes or parse entry points
 - when no `@whitespace` directive is present, CPF keeps its existing default behavior of skipping ordinary C/C++ whitespace between tokens
+
+Skip rules participate in generated lexing directly:
+
+- `lex(...)` removes configured skip tokens before building the returned `cpf::token_sequence`
+- skipped input still influences the source ranges stored on produced tokens and AST captures
+- token-sequence `parse(...)` and `recognize(...)` reuse those already-filtered tokens instead of re-running skip handling
 
 `@namespace` is not part of the grammar language. Generated C++ namespaces are still configured through
 `cpf::generate_code(..., code_namespace)`, `cpfgen --namespace ...`, or `cpf_link_grammars(... NAMESPACE ...)`.

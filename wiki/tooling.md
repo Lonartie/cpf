@@ -30,6 +30,12 @@ The test tools live under `cpftools` and use the vendored `doctest` single-heade
 executables directly produces the underlying doctest failure output, which is usually easier to diagnose than the
 aggregated CTest summary.
 
+This is also the easiest place to inspect lexer-facing behavior while developing CPF changes:
+
+- generated `lex(...)` entry points return `cpf::token_sequence`
+- `token_sequence` has a debug `operator<<` for inspecting the produced token stream
+- generated AST nodes also stream as indented multiline trees, which makes parser regressions easier to read in failing tests
+
 ## Benchmarks
 
 CPF ships a `cpfbench` executable under `cpftools/cpfbench` that measures generated parser runtime with Google

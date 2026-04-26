@@ -8,6 +8,7 @@ cpf_link_grammars(cpftests
         fixtures/grammars/calculator.cpf
         fixtures/grammars/grouped.cpf
         fixtures/grammars/imported_bundle.cpf
+        fixtures/grammars/lexer_priority.cpf
         fixtures/grammars/message.cpf
         fixtures/grammars/merged_definitions.cpf
         fixtures/grammars/tokens.cpf

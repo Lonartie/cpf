@@ -51,15 +51,25 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(generated.header.find("using expression = expression_node<>;") != std::string::npos);
          CHECK(generated.header.find("struct expression_node : cpf::node_with_user_data<UserData>") != std::string::npos);
          CHECK(generated.header.find("struct number_node : expression_node<UserData>") != std::string::npos);
+         CHECK(generated.header.find("#include <sstream>") != std::string::npos);
          CHECK(generated.header.find("static constexpr std::size_t RuleId = ") != std::string::npos);
          CHECK(generated.header.find("static constexpr std::size_t ProductionCount = 5;") != std::string::npos);
          CHECK(generated.header.find("static auto complexity(std::size_t production_index) -> const cpf::complexity&;") !=
                std::string::npos);
          CHECK(generated.header.find(
+                     "static auto lex(std::string_view input) -> cpf::token_sequence;") !=
+                std::string::npos);
+          CHECK(generated.header.find(
                      "static parse_result parse(std::string_view input, const cpf::parse_options& options = {});") !=
                std::string::npos);
+          CHECK(generated.header.find(
+                        "static parse_result parse(const cpf::token_sequence& tokens, const cpf::parse_options& options = {});") !=
+                std::string::npos);
          CHECK(generated.header.find("static cpf::recognize_result recognize(std::string_view input);") !=
                std::string::npos);
+          CHECK(generated.header.find(
+                        "static cpf::recognize_result recognize(const cpf::token_sequence& tokens);") !=
+                std::string::npos);
          CHECK(generated.header.find(
                      "static auto complexity_inputs(std::size_t production_index) -> std::span<const std::string_view>;") !=
                std::string::npos);
@@ -81,6 +91,10 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(generated.header.find(
                      "detail::invoke_calculator_recursive_visitor(node, parent, std::forward<Visitor>(visitor));") !=
                std::string::npos);
+         CHECK(generated.header.find("inline void write_calculator_debug_indent(std::ostream& os, std::size_t indent)") !=
+               std::string::npos);
+         CHECK(generated.header.find("inline void write_calculator_debug_block(std::ostream& os, std::string_view block, std::size_t indent)") !=
+               std::string::npos);
          CHECK(generated.header.find("visit_recursive(*node.left, visitor, &node);") != std::string::npos);
       }
 
@@ -93,8 +107,14 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(generated.source.find("std::array<cpf::complexity, 5> expression_complexity_cache{};") != std::string::npos);
          CHECK(generated.source.find("cpf::recognize_result recognize_generated(std::string_view input, std::size_t root_rule)") !=
                std::string::npos);
+          CHECK(generated.source.find(
+                      "cpf::recognize_result recognize_generated(const cpf::token_sequence& tokens, std::size_t root_rule)") !=
+                std::string::npos);
          CHECK(generated.source.find("cpf::parse_result<T> parse_generated(std::string_view input, std::size_t "
                                      "root_rule, const cpf::parse_options& options)") != std::string::npos);
+          CHECK(generated.source.find(
+                      "cpf::parse_result<T> parse_generated(const cpf::token_sequence& tokens, std::size_t root_rule, const cpf::parse_options& options)") !=
+                std::string::npos);
           CHECK(generated.source.find("options.allow_partial") != std::string::npos);
          CHECK(generated.source.find("auto valid_tree_count = std::size_t{0};") != std::string::npos);
          CHECK(generated.source.find("if (!validate_generated_tree(tree))") != std::string::npos);
@@ -116,7 +136,13 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(generated.source.find(
                      "auto detail::recompute_complexity_expression_default(std::size_t production_index) -> const cpf::complexity&") !=
                std::string::npos);
-          CHECK(generated.source.find("cpf::detail::earley_parse(input, grammar_spec, root_rule, options.allow_partial)") !=
+          CHECK(generated.source.find("auto tokens = cpf::detail::lex_input(input, grammar_spec);") !=
+                std::string::npos);
+           CHECK(generated.source.find("cpf::detail::earley_parse(tokens, grammar_spec, root_rule, options.allow_partial)") !=
+                std::string::npos);
+           CHECK(generated.source.find("cpf::detail::earley_recognize(tokens, grammar_spec, root_rule)") !=
+                std::string::npos);
+           CHECK(generated.source.find("auto detail::lex_calculator_generated(std::string_view input) -> cpf::token_sequence") !=
                 std::string::npos);
          CHECK(generated.source.find("expression -> addition") != std::string::npos);
          CHECK(generated.source.find("const std::regex regex_0{") != std::string::npos);
@@ -163,6 +189,27 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(generated.header.find("struct default_number_node : default_expr_node<UserData>") != std::string::npos);
          CHECK(generated.header.find("cpf::matched_string value;") != std::string::npos);
       }
+   }
+
+   TEST_CASE("generated source emits lexer symbol tables and terminal-id parser symbols") {
+      auto grammar = cpf::parse_grammar(R"(
+         token kw_if -> 'if';
+         token bare_word -> r'[A-Za-z_]+';
+         chosen_word -> kw_if:text;
+         chosen_word -> bare_word:text;
+         comparison_op -> '==':text;
+         comparison_op -> '=':text;
+      )");
+
+      auto generated = cpf::generate_code(grammar, "lexer_tables");
+
+      CHECK(generated.source.find("grammar_token_symbols{{") != std::string::npos);
+      CHECK(generated.source.find("cpf::detail::lexer_symbol_spec") != std::string::npos);
+      CHECK(generated.source.find("cpf::detail::lexer_symbol_kind::literal, \"if\"") != std::string::npos);
+      CHECK(generated.source.find("cpf::detail::lexer_symbol_kind::regex, \"[A-Za-z_]+\"") != std::string::npos);
+      CHECK(generated.source.find("cpf::detail::parser_symbol_kind::terminal") != std::string::npos);
+      CHECK(generated.source.find("\"==\"") != std::string::npos);
+      CHECK(generated.source.find("grammar_skip_symbols") != std::string::npos);
    }
 
    TEST_CASE("@import location affects default precedence through textual inclusion order") {
@@ -259,7 +306,7 @@ TEST_SUITE("cpflib.code_generator") {
                std::string::npos);
          CHECK(generated.source.find("std::array<cpf::complexity, 2> merged_binary_complexity_cache{};") !=
                std::string::npos);
-         CHECK(generated.source.find("auto child_result = detail::parse_merged_greeting_default(input, options);") !=
+         CHECK(generated.source.find("auto child_result = detail::parse_merged_greeting_default(tokens, options);") !=
                std::string::npos);
          CHECK(generated.source.find("auto opaque = std::static_pointer_cast<const cpf::detail::parse_node>(cpf::detail::opaque_tree_of(tree));") != std::string::npos);
       }

@@ -5,14 +5,21 @@
 
 #include <array>
 #include <memory>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <type_traits>
 
 namespace {
+   const std::regex precedence_word_regex{"[A-Za-z_]+", std::regex_constants::optimize};
+
+   constexpr std::array<cpf::detail::lexer_symbol_spec, 2> recover_token_symbols{{
+         {cpf::detail::lexer_symbol_kind::literal, "a", nullptr, 0},
+         {cpf::detail::lexer_symbol_kind::literal, "b", nullptr, 1}
+   }};
    constexpr std::array<cpf::detail::parser_symbol, 2> recover_ab_symbols{{
-         {cpf::detail::parser_symbol_kind::literal, 0, "a", nullptr},
-         {cpf::detail::parser_symbol_kind::literal, 0, "b", nullptr}
+         {cpf::detail::parser_symbol_kind::terminal, 0, "a"},
+         {cpf::detail::parser_symbol_kind::terminal, 1, "b"}
    }};
    constexpr std::array<cpf::detail::production_spec, 1> recover_grammar_productions{{
          {0, "start", "start -> 'a' 'b'", recover_ab_symbols.data(), recover_ab_symbols.size()}
@@ -26,14 +33,22 @@ namespace {
          1,
          recover_grammar_rule_production_indices.data(),
          recover_grammar_rule_production_offsets.data(),
-         recover_grammar_rule_production_counts.data()};
+         recover_grammar_rule_production_counts.data(),
+         recover_token_symbols.data(),
+         recover_token_symbols.size(),
+         nullptr,
+         0,
+         true};
 
    constexpr std::array<cpf::detail::parser_symbol, 1> optional_start_symbols{{
-         {cpf::detail::parser_symbol_kind::nonterminal, 1, "opt_a", nullptr}
+         {cpf::detail::parser_symbol_kind::nonterminal, 1, "opt_a"}
+   }};
+   constexpr std::array<cpf::detail::lexer_symbol_spec, 1> optional_token_symbols{{
+         {cpf::detail::lexer_symbol_kind::literal, "a", nullptr, 0}
    }};
    constexpr std::array<cpf::detail::parser_symbol, 0> optional_empty_symbols{{}};
    constexpr std::array<cpf::detail::parser_symbol, 1> optional_value_symbols{{
-         {cpf::detail::parser_symbol_kind::literal, 0, "a", nullptr}
+         {cpf::detail::parser_symbol_kind::terminal, 0, "a"}
    }};
    constexpr std::array<cpf::detail::production_spec, 3> optional_grammar_productions{{
          {0, "start", "start -> opt_a", optional_start_symbols.data(), optional_start_symbols.size()},
@@ -49,7 +64,52 @@ namespace {
          2,
          optional_grammar_rule_production_indices.data(),
          optional_grammar_rule_production_offsets.data(),
-         optional_grammar_rule_production_counts.data()};
+         optional_grammar_rule_production_counts.data(),
+         optional_token_symbols.data(),
+         optional_token_symbols.size(),
+         nullptr,
+         0,
+         true};
+
+   constexpr std::array<cpf::detail::lexer_symbol_spec, 4> precedence_token_symbols{{
+         {cpf::detail::lexer_symbol_kind::literal, "if", nullptr, 0},
+         {cpf::detail::lexer_symbol_kind::regex, "[A-Za-z_]+", &precedence_word_regex, 1},
+         {cpf::detail::lexer_symbol_kind::literal, "==", nullptr, 2},
+         {cpf::detail::lexer_symbol_kind::literal, "=", nullptr, 3}
+   }};
+   constexpr std::array<cpf::detail::parser_symbol, 1> precedence_keyword_symbols{{
+         {cpf::detail::parser_symbol_kind::terminal, 0, "if"}
+   }};
+   constexpr std::array<cpf::detail::parser_symbol, 1> precedence_word_symbols{{
+         {cpf::detail::parser_symbol_kind::terminal, 1, "[A-Za-z_]+"}
+   }};
+   constexpr std::array<cpf::detail::parser_symbol, 1> precedence_equals_equals_symbols{{
+         {cpf::detail::parser_symbol_kind::terminal, 2, "=="}
+   }};
+   constexpr std::array<cpf::detail::parser_symbol, 1> precedence_equals_symbols{{
+         {cpf::detail::parser_symbol_kind::terminal, 3, "="}
+   }};
+   constexpr std::array<cpf::detail::production_spec, 4> precedence_grammar_productions{{
+         {0, "chosen_word", "chosen_word -> 'if'", precedence_keyword_symbols.data(), precedence_keyword_symbols.size()},
+         {0, "chosen_word", "chosen_word -> r'[A-Za-z_]+'", precedence_word_symbols.data(), precedence_word_symbols.size()},
+         {1, "comparison_op", "comparison_op -> '=='", precedence_equals_equals_symbols.data(), precedence_equals_equals_symbols.size()},
+         {1, "comparison_op", "comparison_op -> '='", precedence_equals_symbols.data(), precedence_equals_symbols.size()}
+   }};
+   constexpr std::array<std::size_t, 4> precedence_grammar_rule_production_indices{{0, 1, 2, 3}};
+   constexpr std::array<std::size_t, 2> precedence_grammar_rule_production_offsets{{0, 2}};
+   constexpr std::array<std::size_t, 2> precedence_grammar_rule_production_counts{{2, 2}};
+   constexpr cpf::detail::grammar_spec precedence_grammar_spec{
+         precedence_grammar_productions.data(),
+         precedence_grammar_productions.size(),
+         2,
+         precedence_grammar_rule_production_indices.data(),
+         precedence_grammar_rule_production_offsets.data(),
+         precedence_grammar_rule_production_counts.data(),
+         precedence_token_symbols.data(),
+         precedence_token_symbols.size(),
+         nullptr,
+         0,
+         true};
 
    struct fake_node final : cpf::node {
       static constexpr std::size_t RuleId = 7;
@@ -137,6 +197,22 @@ TEST_SUITE("cpflib.runtime") {
       CHECK(match.range.begin.column == 4);
       CHECK(match.range.end.offset == 8);
       CHECK(match.range.end.column == 9);
+   }
+
+   TEST_CASE("token sequences stream as readable multiline debug output") {
+      auto tokens = cpf::token_sequence{};
+      tokens.input = "if!";
+      tokens.tokens.push_back(cpf::lexed_token{0, cpf::matched_string{"if", {{0, 1, 1}, {2, 1, 3}}}, false});
+      tokens.tokens.push_back(cpf::lexed_token{0, cpf::matched_string{"!", {{2, 1, 3}, {3, 1, 4}}}, true});
+
+      auto stream = std::ostringstream{};
+      stream << tokens;
+
+      CHECK(stream.str().find("token_sequence(\n") != std::string::npos);
+      CHECK(stream.str().find("input = \"if!\"") != std::string::npos);
+      CHECK(stream.str().find("[0] { symbol = 0, text = \"if\"") != std::string::npos);
+      CHECK(stream.str().find("[1] { invalid = true, text = \"!\"") != std::string::npos);
+      CHECK(stream.str().find("range = 0..2 (1:1-1:3)") != std::string::npos);
    }
 
    TEST_CASE("error tracker reports furthest failures with context notes") {
@@ -258,5 +334,51 @@ TEST_SUITE("cpflib.runtime") {
       CHECK(inserted.text == "b");
       CHECK(inserted.range.begin.offset == 1);
       CHECK(inserted.range.end.offset == 1);
+   }
+
+   TEST_CASE("earley_parse tokenizes with precedence for equal lengths and longest match for shared prefixes") {
+      auto keyword = cpf::detail::earley_parse("if", precedence_grammar_spec, 0);
+      REQUIRE(keyword.success);
+      REQUIRE(keyword.forest.size() == 1);
+      CHECK(keyword.forest.front()->production == 0);
+      CHECK(std::get<cpf::matched_string>(keyword.forest.front()->children.front()).text == "if");
+
+      auto identifier = cpf::detail::earley_parse("iff", precedence_grammar_spec, 0);
+      REQUIRE(identifier.success);
+      REQUIRE(identifier.forest.size() == 1);
+      CHECK(identifier.forest.front()->production == 1);
+      CHECK(std::get<cpf::matched_string>(identifier.forest.front()->children.front()).text == "iff");
+
+      auto double_equals = cpf::detail::earley_parse("==", precedence_grammar_spec, 1);
+      REQUIRE(double_equals.success);
+      REQUIRE(double_equals.forest.size() == 1);
+      CHECK(double_equals.forest.front()->production == 2);
+
+      auto equals = cpf::detail::earley_parse("=", precedence_grammar_spec, 1);
+      REQUIRE(equals.success);
+      REQUIRE(equals.forest.size() == 1);
+      CHECK(equals.forest.front()->production == 3);
+   }
+
+   TEST_CASE("earley runtime can reuse caller-provided token sequences") {
+      auto tokens = cpf::detail::lex_input("if", precedence_grammar_spec);
+
+      REQUIRE(tokens.size() == 1);
+      CHECK_FALSE(tokens.front().invalid);
+      CHECK(tokens.front().symbol == 0);
+      CHECK(tokens.front().text.text == "if");
+      CHECK(tokens.front().text.range.begin.offset == 0);
+      CHECK(tokens.front().text.range.end.offset == 2);
+
+      CHECK(tokens.input == "if");
+
+      auto parsed = cpf::detail::earley_parse(tokens, precedence_grammar_spec, 0);
+      REQUIRE(parsed.success);
+      REQUIRE(parsed.forest.size() == 1);
+      CHECK(parsed.forest.front()->production == 0);
+
+      auto recognized = cpf::detail::earley_recognize(tokens, precedence_grammar_spec, 0);
+      CHECK(recognized.success);
+      CHECK_FALSE(recognized.error.has_value());
    }
 }

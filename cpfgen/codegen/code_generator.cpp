@@ -104,6 +104,12 @@ namespace cpf {
          std::vector<lowered_symbol> lowered_symbols;
       };
 
+      struct emitted_lexer_symbol_info {
+         symbol_kind kind = symbol_kind::literal;
+         std::string text;
+         std::size_t precedence = 0;
+      };
+
       struct infix_definition_info {
          const production* source_production = nullptr;
          std::string child;
@@ -1273,6 +1279,8 @@ namespace cpf {
 
          auto complexity_samples = generate_rule_complexity_samples(grammar);
          const auto recursive_visitor_helper_name = "invoke_" + base_name + "_recursive_visitor";
+         const auto debug_indent_helper_name = "write_" + base_name + "_debug_indent";
+         const auto debug_block_helper_name = "write_" + base_name + "_debug_block";
 
          std::ostringstream header;
          emit_file_complexity_comment(header, base_name, ordered_public_rule_names.size(),
@@ -1286,6 +1294,7 @@ namespace cpf {
          line(header, 0, "#include <iosfwd>");
          line(header, 0, "#include <memory>");
          line(header, 0, "#include <optional>");
+          line(header, 0, "#include <sstream>");
          line(header, 0, "#include <span>");
          line(header, 0, "#include <stdexcept>");
          line(header, 0, "#include <string>");
@@ -1320,6 +1329,30 @@ namespace cpf {
          line(header, 1, "}");
          line(header, 0, "}");
          line(header, 0);
+         line(header, 0, "inline void " + debug_indent_helper_name + "(std::ostream& os, std::size_t indent) {");
+         line(header, 1, "for (std::size_t i = 0; i < indent; ++i) {");
+         line(header, 2, "os << \"  \";");
+         line(header, 1, "}");
+         line(header, 0, "}");
+         line(header, 0);
+         line(header, 0,
+              "inline void " + debug_block_helper_name + "(std::ostream& os, std::string_view block, std::size_t indent) {");
+         line(header, 1, "auto position = std::size_t{0};");
+         line(header, 1, "while (position <= block.size()) {");
+         line(header, 2, "auto line_end = block.find('\\n', position);");
+         line(header, 2, "if (line_end == std::string_view::npos) {");
+         line(header, 3, "line_end = block.size();");
+         line(header, 2, "}");
+         line(header, 2, debug_indent_helper_name + "(os, indent);");
+         line(header, 2, "os << block.substr(position, line_end - position);");
+         line(header, 2, "if (line_end == block.size()) {");
+         line(header, 3, "break;");
+         line(header, 2, "}");
+         line(header, 2, "os << '\\n';");
+         line(header, 2, "position = line_end + 1;");
+         line(header, 1, "}");
+         line(header, 0, "}");
+         line(header, 0);
          line(header, 0, "} // namespace detail");
          line(header, 0);
 
@@ -1342,9 +1375,14 @@ namespace cpf {
                line(header, 0);
             }
             line(header, 1, "~" + info.name + "_node() override = default;");
+             line(header, 1, "static auto lex(std::string_view input) -> cpf::token_sequence;");
             line(header, 1,
                  "static parse_result parse(std::string_view input, const cpf::parse_options& options = {});");
+             line(header, 1,
+                  "static parse_result parse(const cpf::token_sequence& tokens, const cpf::parse_options& options = {});");
             line(header, 1, "static cpf::recognize_result recognize(std::string_view input);");
+             line(header, 1,
+                  "static cpf::recognize_result recognize(const cpf::token_sequence& tokens);");
             line(header, 1, "static auto complexity(std::size_t production_index) -> const cpf::complexity&;");
             line(header, 1, "static auto complexity_inputs(std::size_t production_index) -> std::span<const std::string_view>;");
             line(header, 1, "static auto recompute_complexity(std::size_t production_index) -> const cpf::complexity&;");
@@ -1591,6 +1629,9 @@ namespace cpf {
 
          line(header, 0, "namespace detail {");
          line(header, 0);
+         line(header, 0,
+              "auto lex_" + base_name + "_generated(std::string_view input) -> cpf::token_sequence;");
+         line(header, 0);
          for (const auto& rule: grammar.rules) {
             if (rule.synthetic) {
                continue;
@@ -1600,7 +1641,11 @@ namespace cpf {
                  "auto parse_" + info.name + "_default(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<" +
                        info.name + ">;");
             line(header, 0,
+                 "auto parse_" + info.name + "_default(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<" + info.name + ">;");
+            line(header, 0,
                  "auto recognize_" + info.name + "_default(std::string_view input) -> cpf::recognize_result;");
+            line(header, 0,
+                 "auto recognize_" + info.name + "_default(const cpf::token_sequence& tokens) -> cpf::recognize_result;");
             line(header, 0,
                  "auto complexity_inputs_" + info.name + "_default(std::size_t production_index) -> std::span<const std::string_view>;");
             line(header, 0,
@@ -1709,6 +1754,12 @@ namespace cpf {
             const auto& info = classes.at(rule.identifier);
             line(header, 0, "template<typename UserData>");
             line(header, 0,
+                 "auto " + templated_rule_type(info.name) + "::lex(std::string_view input) -> cpf::token_sequence {");
+            line(header, 1, "return detail::lex_" + base_name + "_generated(input);");
+            line(header, 0, "}");
+            line(header, 0);
+            line(header, 0, "template<typename UserData>");
+            line(header, 0,
                  "auto " + templated_rule_type(info.name) +
                        "::parse(std::string_view input, const cpf::parse_options& options) -> parse_result {");
             line(header, 1, "if constexpr (std::is_void_v<UserData>) {");
@@ -1737,8 +1788,42 @@ namespace cpf {
             line(header, 0, "template<typename UserData>");
             line(header, 0,
                  "auto " + templated_rule_type(info.name) +
+                       "::parse(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> parse_result {");
+            line(header, 1, "if constexpr (std::is_void_v<UserData>) {");
+            line(header, 2, "return detail::parse_" + info.name + "_default(tokens, options);");
+            line(header, 1, "} else {");
+            line(header, 2, "auto default_result = detail::parse_" + info.name + "_default(tokens, options);");
+            line(header, 2, "parse_result converted;");
+            line(header, 2, "converted.status = default_result.status;");
+            line(header, 2, "converted.success = default_result.success;");
+            line(header, 2, "converted.partial = default_result.partial;");
+            line(header, 2, "converted.error = std::move(default_result.error);");
+            line(header, 2, "if (!options.build_ast) {");
+            line(header, 3, "return converted;");
+            line(header, 2, "}");
+            line(header, 2, "converted.forest.reserve(default_result.forest.size());");
+            line(header, 2, "for (const auto& tree : default_result.forest) {");
+            line(header, 3, "auto materialized = tree.get();");
+            line(header, 3,
+                 "converted.forest.emplace_back(materialized != nullptr ? detail::rebind_" + info.name +
+                       "_node<UserData>(*materialized) : nullptr);");
+            line(header, 2, "}");
+            line(header, 2, "return converted;");
+            line(header, 1, "}");
+            line(header, 0, "}");
+            line(header, 0);
+            line(header, 0, "template<typename UserData>");
+            line(header, 0,
+                 "auto " + templated_rule_type(info.name) +
                        "::recognize(std::string_view input) -> cpf::recognize_result {");
             line(header, 1, "return detail::recognize_" + info.name + "_default(input);");
+            line(header, 0, "}");
+            line(header, 0);
+            line(header, 0, "template<typename UserData>");
+            line(header, 0,
+                 "auto " + templated_rule_type(info.name) +
+                       "::recognize(const cpf::token_sequence& tokens) -> cpf::recognize_result {");
+            line(header, 1, "return detail::recognize_" + info.name + "_default(tokens);");
             line(header, 0, "}");
             line(header, 0);
             line(header, 0, "template<typename UserData>");
@@ -1794,34 +1879,49 @@ namespace cpf {
             } else {
                if (info.fields.empty()) {
                   line(header, 1, "(void)node;");
+                  line(header, 1, "os << \"" + info.name + "()\";");
+                  line(header, 1, "return os;");
+                  line(header, 0, "}");
+                  line(header, 0);
+                  continue;
                }
-               line(header, 1, "os << \"" + info.name + "(\";");
+               line(header, 1, "os << \"" + info.name + "(\\n\";");
                for (std::size_t i = 0; i < info.fields.size(); ++i) {
                   const auto& field = info.fields[i];
-                  if (i != 0) {
-                     line(header, 1, "os << \", \";");
-                  }
-                  line(header, 1, "os << \"" + field.name + "=\";");
+                  line(header, 1, "detail::" + debug_indent_helper_name + "(os, 1);");
+                  line(header, 1, "os << \"" + field.name + " =\";");
                   if (field.shape == field_shape::node_scalar) {
                      line(header, 1, "if (node." + field.name + ") {");
-                     line(header, 2, "os << *node." + field.name + ";");
+                     line(header, 2, "os << '\\n';");
+                     line(header, 2, "auto nested_stream = std::ostringstream{};");
+                     line(header, 2, "nested_stream << *node." + field.name + ";");
+                     line(header, 2, "detail::" + debug_block_helper_name + "(os, nested_stream.str(), 2);");
                      line(header, 1, "} else {");
-                     line(header, 2, "os << \"null\";");
+                     line(header, 2, "os << \" null\";");
                      line(header, 1, "}");
                   } else if (field.shape == field_shape::node_vector) {
-                     line(header, 1, "os << \"[\";");
-                     line(header, 1,
+                     line(header, 1, "if (node." + field.name + ".empty()) {");
+                     line(header, 2, "os << \" []\";");
+                     line(header, 1, "} else {");
+                     line(header, 2, "os << \" [\\n\";");
+                     line(header, 2,
                           "for (std::size_t item_index = 0; item_index < node." + field.name + ".size(); ++item_index) {");
-                     line(header, 2, "if (item_index != 0) {");
-                     line(header, 3, "os << \", \";");
+                     line(header, 3, "if (node." + field.name + "[item_index]) {");
+                     line(header, 4, "auto nested_stream = std::ostringstream{};");
+                     line(header, 4, "nested_stream << *node." + field.name + "[item_index];");
+                     line(header, 4, "detail::" + debug_block_helper_name + "(os, nested_stream.str(), 2);");
+                     line(header, 3, "} else {");
+                     line(header, 4, "detail::" + debug_indent_helper_name + "(os, 2);");
+                     line(header, 4, "os << \"null\";");
+                     line(header, 3, "}");
+                     line(header, 3, "if (item_index + 1 != node." + field.name + ".size()) {");
+                     line(header, 4, "os << ',';");
+                     line(header, 3, "}");
+                     line(header, 3, "os << '\\n';");
                      line(header, 2, "}");
-                     line(header, 2, "if (node." + field.name + "[item_index]) {");
-                     line(header, 3, "os << *node." + field.name + "[item_index];");
-                     line(header, 2, "} else {");
-                     line(header, 3, "os << \"null\";");
-                     line(header, 2, "}");
+                     line(header, 2, "detail::" + debug_indent_helper_name + "(os, 1);");
+                     line(header, 2, "os << ']';");
                      line(header, 1, "}");
-                     line(header, 1, "os << \"]\";");
                   } else if (field.shape == field_shape::capture_variant) {
                      line(header, 1, "std::visit([&](const auto& value) {");
                      line(header, 2, "using value_t = std::decay_t<decltype(value)>;");
@@ -1832,12 +1932,15 @@ namespace cpf {
                                               render_variant_alternative_cpp_type(alternative) + ">) {");
                         if (alternative.node) {
                            line(header, 3, "if (value) {");
-                           line(header, 4, "os << *value;");
+                           line(header, 4, "os << '\\n';");
+                           line(header, 4, "auto nested_stream = std::ostringstream{};");
+                           line(header, 4, "nested_stream << *value;");
+                           line(header, 4, "detail::" + debug_block_helper_name + "(os, nested_stream.str(), 2);");
                            line(header, 3, "} else {");
-                           line(header, 4, "os << \"null\";");
+                           line(header, 4, "os << \" null\";");
                            line(header, 3, "}");
                         } else {
-                           line(header, 3, "os << std::quoted(value.text);");
+                           line(header, 3, "os << \" \" << std::quoted(value.text);");
                         }
                         line(header, 2, "}");
                         first_alternative = false;
@@ -1845,25 +1948,36 @@ namespace cpf {
                      line(header, 1, "}, node." + field.name + ");");
                   } else if (field.shape == field_shape::terminal_optional) {
                      line(header, 1, "if (node." + field.name + ") {");
-                     line(header, 2, "os << std::quoted(node." + field.name + "->text);");
+                     line(header, 2, "os << \" \" << std::quoted(node." + field.name + "->text);");
                      line(header, 1, "} else {");
-                     line(header, 2, "os << \"null\";");
+                     line(header, 2, "os << \" null\";");
                      line(header, 1, "}");
                   } else if (field.shape == field_shape::terminal_vector) {
-                     line(header, 1, "os << \"[\";");
-                     line(header, 1,
+                     line(header, 1, "if (node." + field.name + ".empty()) {");
+                     line(header, 2, "os << \" []\";");
+                     line(header, 1, "} else {");
+                     line(header, 2, "os << \" [\\n\";");
+                     line(header, 2,
                           "for (std::size_t item_index = 0; item_index < node." + field.name + ".size(); ++item_index) {");
-                     line(header, 2, "if (item_index != 0) {");
-                     line(header, 3, "os << \", \";");
+                     line(header, 3, "detail::" + debug_indent_helper_name + "(os, 2);");
+                     line(header, 3, "os << std::quoted(node." + field.name + "[item_index].text);");
+                     line(header, 3, "if (item_index + 1 != node." + field.name + ".size()) {");
+                     line(header, 4, "os << ',';");
+                     line(header, 3, "}");
+                     line(header, 3, "os << '\\n';");
                      line(header, 2, "}");
-                     line(header, 2, "os << std::quoted(node." + field.name + "[item_index].text);");
+                     line(header, 2, "detail::" + debug_indent_helper_name + "(os, 1);");
+                     line(header, 2, "os << ']';");
                      line(header, 1, "}");
-                     line(header, 1, "os << \"]\";");
                   } else {
-                     line(header, 1, "os << std::quoted(node." + field.name + ".text);");
+                     line(header, 1, "os << \" \" << std::quoted(node." + field.name + ".text);");
                   }
+                  if (i + 1 != info.fields.size()) {
+                     line(header, 1, "os << ',';");
+                  }
+                  line(header, 1, "os << '\\n';");
                }
-               line(header, 1, "os << \")\";");
+               line(header, 1, "os << ')';");
                line(header, 1, "return os;");
             }
             line(header, 0, "}");
@@ -2008,19 +2122,45 @@ namespace cpf {
             regex_pattern_indices.emplace(owned_pattern, regex_patterns.size());
             regex_patterns.push_back(std::move(owned_pattern));
          };
+
+         const auto lexer_symbol_key = [](symbol_kind kind, std::string_view text) {
+            return std::to_string(static_cast<int>(kind)) + ":" + std::string{text};
+         };
+
+         std::vector<emitted_lexer_symbol_info> grammar_token_symbols;
+         std::unordered_map<std::string, std::size_t> grammar_token_symbol_indices;
+         std::vector<emitted_lexer_symbol_info> grammar_skip_symbols;
+         std::unordered_map<std::string, std::size_t> grammar_skip_symbol_indices;
+         auto lexer_precedence = std::size_t{0};
+
+         const auto register_lexer_symbol = [&](std::vector<emitted_lexer_symbol_info>& symbols,
+                                                std::unordered_map<std::string, std::size_t>& indices,
+                                                symbol_kind kind, std::string_view text) -> std::size_t {
+            auto key = lexer_symbol_key(kind, text);
+            if (auto existing = indices.find(key); existing != indices.end()) {
+               return existing->second;
+            }
+            if (kind == symbol_kind::regex) {
+               collect_regex_pattern(text);
+            }
+            auto index = symbols.size();
+            indices.emplace(std::move(key), index);
+            symbols.push_back(emitted_lexer_symbol_info{kind, std::string{text}, lexer_precedence++});
+            return index;
+         };
+
          for (const auto& production: emitted_productions) {
             for (const auto& symbol: production.symbols) {
-               if (symbol.kind != symbol_kind::regex) {
+               if (symbol.kind == symbol_kind::reference) {
                   continue;
                }
-               collect_regex_pattern(symbol.text);
+               (void) register_lexer_symbol(grammar_token_symbols, grammar_token_symbol_indices, symbol.kind,
+                                            symbol.text);
             }
          }
          for (const auto& skip_rule: grammar.skip_rules) {
-            if (skip_rule.kind != symbol_kind::regex) {
-                  continue;
-            }
-            collect_regex_pattern(skip_rule.value);
+            (void) register_lexer_symbol(grammar_skip_symbols, grammar_skip_symbol_indices, skip_rule.kind,
+                                         skip_rule.value);
          }
 
          std::vector<std::vector<std::size_t>> productions_by_rule(emitted_rule_names.size());
@@ -2092,14 +2232,16 @@ namespace cpf {
                std::string rendered_symbol;
                if (symbol.kind == symbol_kind::reference) {
                   rendered_symbol = "{cpf::detail::parser_symbol_kind::nonterminal, " + std::to_string(symbol.value) +
-                                    ", " + cpp_string_literal(symbol.text) + ", nullptr}";
-               } else if (symbol.kind == symbol_kind::literal) {
-                  rendered_symbol = "{cpf::detail::parser_symbol_kind::literal, 0, " + cpp_string_literal(symbol.text) +
-                                    ", nullptr}";
+                                    ", " + cpp_string_literal(symbol.text) + "}";
                } else {
-                  rendered_symbol = "{cpf::detail::parser_symbol_kind::regex, 0, " + cpp_string_literal(symbol.text) +
-                                    ", &regex_" + std::to_string(regex_pattern_indices.at(std::string{symbol.text})) +
-                                    "}";
+                  rendered_symbol = "{cpf::detail::parser_symbol_kind::terminal, " +
+                                    std::to_string(grammar_token_symbol_indices.at(lexer_symbol_key(symbol.kind, symbol.text))) +
+                                    ", " + cpp_string_literal(symbol.text) + "}";
+               }
+               if (symbol.kind == symbol_kind::literal) {
+                  rendered_symbol = "{cpf::detail::parser_symbol_kind::terminal, " +
+                                    std::to_string(grammar_token_symbol_indices.at(lexer_symbol_key(symbol.kind, symbol.text))) +
+                                    ", " + cpp_string_literal(symbol.text) + "}";
                }
                if (i + 1 != production.symbols.size()) {
                   rendered_symbol += ",";
@@ -2115,6 +2257,26 @@ namespace cpf {
          const auto production_count = production_index;
 
          line(source, 0, "namespace {");
+         line(source, 1,
+              "constexpr std::array<cpf::detail::lexer_symbol_spec, " + std::to_string(grammar_token_symbols.size()) +
+                    "> grammar_token_symbols{{");
+         for (std::size_t index = 0; index < grammar_token_symbols.size(); ++index) {
+            const auto& symbol = grammar_token_symbols[index];
+            auto rendered_symbol = std::string{"{cpf::detail::lexer_symbol_kind::"} +
+                                  (symbol.kind == symbol_kind::literal ? "literal, " : "regex, ") +
+                                  cpp_string_literal(symbol.text) + ", ";
+            if (symbol.kind == symbol_kind::literal) {
+               rendered_symbol += "nullptr, ";
+            } else {
+               rendered_symbol += "&regex_" + std::to_string(regex_pattern_indices.at(symbol.text)) + ", ";
+            }
+            rendered_symbol += std::to_string(symbol.precedence) + "}";
+            if (index + 1 != grammar_token_symbols.size()) {
+               rendered_symbol += ",";
+            }
+            line(source, 2, rendered_symbol);
+         }
+         line(source, 1, "}};");
          line(source, 1,
               "constexpr std::array<cpf::detail::production_spec, " + std::to_string(production_count) +
                     "> grammar_productions{{");
@@ -2165,20 +2327,20 @@ namespace cpf {
          }
          line(source, 1, "}};");
          line(source, 1,
-              "constexpr std::array<cpf::detail::parser_symbol, " + std::to_string(grammar.skip_rules.size()) +
+              "constexpr std::array<cpf::detail::lexer_symbol_spec, " + std::to_string(grammar_skip_symbols.size()) +
                     "> grammar_skip_symbols{{");
-         for (std::size_t skip_index = 0; skip_index < grammar.skip_rules.size(); ++skip_index) {
-            const auto& skip_rule = grammar.skip_rules[skip_index];
-            auto rendered_symbol = std::string{};
+         for (std::size_t skip_index = 0; skip_index < grammar_skip_symbols.size(); ++skip_index) {
+            const auto& skip_rule = grammar_skip_symbols[skip_index];
+            auto rendered_symbol = std::string{"{cpf::detail::lexer_symbol_kind::"} +
+                                  (skip_rule.kind == symbol_kind::literal ? "literal, " : "regex, ") +
+                                  cpp_string_literal(skip_rule.text) + ", ";
             if (skip_rule.kind == symbol_kind::literal) {
-               rendered_symbol = "{cpf::detail::parser_symbol_kind::literal, 0, " +
-                                 cpp_string_literal(skip_rule.value) + ", nullptr}";
+               rendered_symbol += "nullptr, ";
             } else {
-               rendered_symbol = "{cpf::detail::parser_symbol_kind::regex, 0, " +
-                                 cpp_string_literal(skip_rule.value) + ", &regex_" +
-                                 std::to_string(regex_pattern_indices.at(skip_rule.value)) + "}";
+               rendered_symbol += "&regex_" + std::to_string(regex_pattern_indices.at(skip_rule.text)) + ", ";
             }
-            if (skip_index + 1 != grammar.skip_rules.size()) {
+            rendered_symbol += std::to_string(skip_rule.precedence) + "}";
+            if (skip_index + 1 != grammar_skip_symbols.size()) {
                rendered_symbol += ",";
             }
             line(source, 2, rendered_symbol);
@@ -2189,7 +2351,8 @@ namespace cpf {
               "grammar_productions.size(), " +
                     std::to_string(emitted_rule_names.size()) +
                     ", grammar_rule_production_indices.data(), grammar_rule_production_offsets.data(), "
-                     "grammar_rule_production_counts.data(), grammar_skip_symbols.data(), grammar_skip_symbols.size(), " +
+                     "grammar_rule_production_counts.data(), grammar_token_symbols.data(), grammar_token_symbols.size(), "
+                     "grammar_skip_symbols.data(), grammar_skip_symbols.size(), " +
                      std::string{use_default_whitespace ? "true" : "false"} + "};");
          line(source, 1,
               "constexpr std::array<std::string_view, " + std::to_string(emitted_rule_names.size()) +
@@ -2881,9 +3044,10 @@ namespace cpf {
          line(source, 0);
 
          line(source, 1, "template<typename T>");
-         line(source, 1, "cpf::recognize_result recognize_generated(std::string_view input, std::size_t root_rule) {");
+         line(source, 1,
+              "cpf::recognize_result recognize_generated(const cpf::token_sequence& tokens, std::size_t root_rule) {");
          line(source, 2, "cpf::recognize_result result;");
-         line(source, 2, "auto recognized = cpf::detail::earley_recognize(input, grammar_spec, root_rule);");
+         line(source, 2, "auto recognized = cpf::detail::earley_recognize(tokens, grammar_spec, root_rule);");
          line(source, 2, "result.success = recognized.success;");
          line(source, 2, "if (!recognized.success) {");
          line(source, 3, "result.error = std::move(recognized.error);");
@@ -2893,11 +3057,18 @@ namespace cpf {
          line(source, 0);
 
          line(source, 1, "template<typename T>");
+         line(source, 1, "cpf::recognize_result recognize_generated(std::string_view input, std::size_t root_rule) {");
+         line(source, 2, "auto tokens = cpf::detail::lex_input(input, grammar_spec);");
+         line(source, 2, "return recognize_generated<T>(tokens, root_rule);");
+         line(source, 1, "}");
+         line(source, 0);
+
+         line(source, 1, "template<typename T>");
          line(source, 1,
-              "cpf::parse_result<T> parse_generated(std::string_view input, std::size_t root_rule, const "
+              "cpf::parse_result<T> parse_generated(const cpf::token_sequence& tokens, std::size_t root_rule, const "
               "cpf::parse_options& options) {");
          line(source, 2, "cpf::parse_result<T> result;");
-         line(source, 2, "auto forest = cpf::detail::earley_parse(input, grammar_spec, root_rule, options.allow_partial);");
+         line(source, 2, "auto forest = cpf::detail::earley_parse(tokens, grammar_spec, root_rule, options.allow_partial);");
          line(source, 2, "if (!forest.success) {");
          line(source, 3, "result.error = std::move(forest.error);");
          line(source, 3, "return result;");
@@ -2934,8 +3105,8 @@ namespace cpf {
          line(source, 7, "damaged_nodes.push_back(&current);");
          line(source, 6, "}");
          line(source, 5, "});");
-          line(source, 4,
-               "}, [tree](std::string_view repaired_input) { return cpf::detail::repaired_input_of(tree, repaired_input, grammar_spec); });");
+         line(source, 4,
+              "}, [tree](std::string_view repaired_input) { return cpf::detail::repaired_input_of(tree, repaired_input, grammar_spec); });");
          line(source, 3, "}");
          line(source, 2, "}");
          line(source, 2, "if (result.success) {");
@@ -2952,7 +3123,22 @@ namespace cpf {
          line(source, 2, "result.error = std::move(filtered_error);");
          line(source, 2, "return result;");
          line(source, 1, "}");
+         line(source, 0);
+
+         line(source, 1, "template<typename T>");
+         line(source, 1,
+              "cpf::parse_result<T> parse_generated(std::string_view input, std::size_t root_rule, const "
+              "cpf::parse_options& options) {");
+         line(source, 2, "auto tokens = cpf::detail::lex_input(input, grammar_spec);");
+         line(source, 2, "return parse_generated<T>(tokens, root_rule, options);");
+         line(source, 1, "}");
          line(source, 0, "} // namespace");
+         line(source, 0);
+
+         line(source, 0,
+              "auto detail::lex_" + base_name + "_generated(std::string_view input) -> cpf::token_sequence {");
+         line(source, 1, "return cpf::detail::lex_input(input, grammar_spec);");
+         line(source, 0, "}");
          line(source, 0);
 
          for (const auto& rule: grammar.rules) {
@@ -2964,6 +3150,13 @@ namespace cpf {
             line(source, 0,
                  "auto detail::parse_" + info.name + "_default(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<" +
                        info.name + "> {");
+            line(source, 1, "auto tokens = detail::lex_" + base_name + "_generated(input);");
+            line(source, 1, "return parse_" + info.name + "_default(tokens, options);");
+            line(source, 0, "}");
+            line(source, 0);
+            line(source, 0,
+                 "auto detail::parse_" + info.name + "_default(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<" +
+                       info.name + "> {");
             if (info.base_rule) {
                line(source, 1, "auto result = cpf::parse_result<" + info.name + ">{ };");
                line(source, 1, "cpf::parse_error best_error;");
@@ -2972,7 +3165,7 @@ namespace cpf {
                line(source, 1, "auto have_partial_success = false;");
                for (const auto& child: families.at(info.name).direct_children) {
                   line(source, 1, "{");
-                  line(source, 2, "auto child_result = detail::parse_" + child + "_default(input, options);");
+                  line(source, 2, "auto child_result = detail::parse_" + child + "_default(tokens, options);");
                   line(source, 2, "if (child_result.success) {");
                   line(source, 3, "if (!child_result.partial) {");
                   line(source, 4, "if (have_partial_success) {");
@@ -3064,20 +3257,26 @@ namespace cpf {
                line(source, 1, "return result;");
             } else {
                line(source, 1,
-                    "return parse_generated<" + info.name + ">(input, " + std::to_string(rule_indices.at(info.name)) +
+                     "return parse_generated<" + info.name + ">(tokens, " + std::to_string(rule_indices.at(info.name)) +
                           ", options);");
             }
             line(source, 0, "}");
             line(source, 0);
             line(source, 0,
                  "auto detail::recognize_" + info.name + "_default(std::string_view input) -> cpf::recognize_result {");
+            line(source, 1, "auto tokens = detail::lex_" + base_name + "_generated(input);");
+            line(source, 1, "return recognize_" + info.name + "_default(tokens);");
+            line(source, 0, "}");
+            line(source, 0);
+            line(source, 0,
+                 "auto detail::recognize_" + info.name + "_default(const cpf::token_sequence& tokens) -> cpf::recognize_result {");
             if (info.base_rule) {
                line(source, 1, "cpf::recognize_result result;");
                line(source, 1, "cpf::parse_error best_error;");
                line(source, 1, "auto have_error = false;");
                for (const auto& child: families.at(info.name).direct_children) {
                   line(source, 1, "{");
-                  line(source, 2, "auto child_result = detail::recognize_" + child + "_default(input);");
+                  line(source, 2, "auto child_result = detail::recognize_" + child + "_default(tokens);");
                   line(source, 2, "if (child_result.success) {");
                   line(source, 3, "result.success = true;");
                   line(source, 3, "result.error.reset();");
@@ -3103,7 +3302,7 @@ namespace cpf {
                line(source, 1, "return result;");
             } else {
                line(source, 1,
-                    "return recognize_generated<" + info.name + ">(input, " + std::to_string(rule_indices.at(info.name)) + ");");
+                    "return recognize_generated<" + info.name + ">(tokens, " + std::to_string(rule_indices.at(info.name)) + ");");
             }
             line(source, 0, "}");
             line(source, 0);

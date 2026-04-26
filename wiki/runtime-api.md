@@ -13,8 +13,11 @@ struct expression : cpf::node {
     static constexpr std::size_t RuleId = 0;
     static constexpr std::size_t ProductionCount = 5;
     ~expression() override = default;
+    static cpf::token_sequence lex(std::string_view input);
     static parse_result parse(std::string_view input, const cpf::parse_options& options = {});
+    static parse_result parse(const cpf::token_sequence& tokens, const cpf::parse_options& options = {});
     static cpf::recognize_result recognize(std::string_view input);
+    static cpf::recognize_result recognize(const cpf::token_sequence& tokens);
     static auto complexity(std::size_t production_index) -> const cpf::complexity&;
     static auto complexity_inputs(std::size_t production_index) -> std::span<const std::string_view>;
     static auto recompute_complexity(std::size_t production_index) -> const cpf::complexity&;
@@ -29,7 +32,13 @@ Each generated rule also gets:
 - `visit(...)` for both const dispatch and in-place mutation of the selected concrete node
 - `visit_recursive(...)` for both const traversal and in-place mutation
 
-Generated rules also expose `recognize(...)` for syntax-only validation without building a forest of lazy parse trees.
+Generated rules also expose:
+
+- `lex(...)` to run the generated lexer once and keep the resulting token sequence
+- `recognize(...)` for syntax-only validation without building a forest of lazy parse trees
+- token-sequence overloads of `parse(...)` and `recognize(...)` so callers can reuse one lexed input across multiple parse options
+
+The generated debug `operator<<` now prints ASTs as indented multiline trees for easier inspection.
 
 Every generated node inherits:
 
@@ -51,6 +60,54 @@ struct parse_options {
 - `build_ast = false` validates the input and grammar constraints without materializing the AST forest
 - `error_on_ambiguity = true` turns ambiguous parses into a parse failure before forest expansion
 - `allow_partial = true` lets the runtime recover inside a single tree by ignoring invalid input or inserting virtual literals
+
+## Lexer output and reusable token sequences
+
+CPF's generated lexer is now part of the public API.
+
+```c++
+auto tokens = expression::lex("1 + 2 * 3");
+
+auto recognized = expression::recognize(tokens);
+
+cpf::parse_options options;
+options.build_ast = false;
+auto validated = expression::parse(tokens, options);
+auto parsed = expression::parse(tokens);
+```
+
+The reusable lexer result is `cpf::token_sequence`:
+
+```c++
+struct token_sequence {
+    std::string input;
+    std::vector<cpf::lexed_token> tokens;
+};
+
+struct lexed_token {
+    std::size_t symbol = 0;
+    cpf::matched_string text;
+    bool invalid = false;
+};
+```
+
+Important properties:
+
+- `token_sequence::input` keeps the original source text used to produce the tokens
+- `token_sequence::tokens` holds the token stream consumed by the parser
+- each `cpf::lexed_token` stores its matched text plus exact source range
+- invalid source slices become `invalid = true` tokens so parse and recognize diagnostics still point at the right place
+- `token_sequence` behaves like a small container (`size()`, `operator[]`, `front()`, iterators, ...)
+- `operator<<(std::ostream&, const cpf::token_sequence&)` prints a multiline debug view of the tokenized input
+
+String-based `parse(...)` and `recognize(...)` still work exactly as before. They now just call `lex(...)` internally and then parse
+the resulting `cpf::token_sequence`.
+
+The generated lexer uses these matching rules:
+
+- longest match wins first
+- when two token candidates match the same length, the earlier / higher-priority grammar token wins
+- declared `skip` rules and default whitespace are handled during lexing rather than during parser symbol matching
 
 ## Parse results and lazy forests
 
@@ -123,8 +180,9 @@ struct node_damage {
 - when the tree has no damage, the method returns `input` unchanged inside the optional
 - when the supplied `input` no longer structurally matches the parse tree that was built, the method returns `std::nullopt`
 
-The runtime never caches the original source string. The method reconstructs the repaired text from the caller-provided
-`input` and the stored parse-tree metadata on demand.
+The parse tree itself still does not cache an original source string. `try_repair_input(...)` reconstructs repaired text from the
+caller-provided `input` and the stored parse-tree metadata on demand. When you parse from a `cpf::token_sequence`, the original
+input is available as `tokens.input`, so callers can pass that back directly.
 
 That means code such as this still works:
 
@@ -147,6 +205,9 @@ Captured terminals are stored as `cpf::matched_string`, which includes:
 - the exact source range it matched
 
 Source positions are tracked as one-based line and column values together with a zero-based byte offset.
+
+Both AST terminal captures and `cpf::lexed_token::text` use the same `cpf::matched_string` shape, so source ranges stay
+consistent between lexing, parsing, and later tree inspection.
 
 ## Error handling
 
@@ -217,12 +278,14 @@ struct visitor {
 };
 
 int main() {
-    auto result = expression::parse("1 + 2 * 3");
+    auto tokens = expression::lex("1 + 2 * 3");
+    auto result = expression::parse(tokens);
     if (!result.success || result.forest.empty()) {
         return 1;
     }
 
     auto& tree = result.forest.front();
+    std::cout << tokens << std::endl;
     std::cout << *tree << std::endl;
     std::cout << "Matched columns: " << tree->range.begin.column << "-" << tree->range.end.column << std::endl;
     std::cout << "Result: " << visit(*tree, visitor{}) << std::endl;

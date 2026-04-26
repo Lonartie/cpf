@@ -14,53 +14,6 @@ The suggestions below are based on the currently documented surface in [`wiki/gr
 
 ## Recommended near-term extensions
 
-### 2. Named token declarations with parser/lexer separation
-
-**Problem**
-
-Right now literals and regex terminals are embedded directly into parser productions. That works for small grammars, but large grammars become repetitive and harder to maintain.
-
-**Proposed syntax**
-
-```text
-token identifier -> r'[A-Za-z_][A-Za-z0-9_]*';
-token integer -> r'[0-9]+';
-token kw_if -> 'if';
-```
-
-**Example**
-
-```text
-skip ws -> r'[ \t\r\n]+';
-
-token identifier -> r'[A-Za-z_][A-Za-z0-9_]*';
-token integer -> r'[0-9]+';
-token kw_if -> 'if';
-token kw_else -> 'else';
-
-if_stmt -> kw_if:keyword '(':open expression:condition ')':close statement:then_branch;
-if_stmt -> kw_if:keyword '(':open expression:condition ')':close statement:then_branch
-           kw_else:else_keyword statement:else_branch;
-variable -> identifier:name;
-number -> integer:value;
-```
-
-**Why it helps**
-
-- centralizes lexical definitions
-- gives grammars a clearer high-level shape
-- makes token reuse consistent across imported grammar files
-
-**Notes**
-
-A useful rule would be: tokens can be referenced exactly like rules, but generate terminal captures rather than AST nodes.
-
-**Author Notes**
-
-Even better would be if the parser generator automatically identifies tha a rule is purely lexical (only references 
-tokens and other lexical rules) and treats it as a token, without requiring a separate `token` declaration. This would 
-allow authors to write grammars in a more natural way, without having to switch between parser and lexer modes.
-
 ### 3. Operator precedence blocks and table syntax
 
 **Problem**

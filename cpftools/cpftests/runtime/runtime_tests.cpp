@@ -3,6 +3,7 @@
 #include "error_choice.h"
 #include "grouped.h"
 #include "imported_bundle.h"
+#include "lexer_priority.h"
 #include "merged_definitions.h"
 #include "message.h"
 #include "namespaced_calculator.h"
@@ -138,8 +139,9 @@ TEST_SUITE("generated.runtime") {
 
          std::ostringstream stream;
          stream << *tree;
-         CHECK(stream.str().find("addition(") != std::string::npos);
-         CHECK(stream.str().find("multiplication(") != std::string::npos);
+         CHECK(stream.str().find("addition(\n") != std::string::npos);
+         CHECK(stream.str().find("  left =") != std::string::npos);
+         CHECK(stream.str().find("    multiplication(\n") != std::string::npos);
       }
 
       SUBCASE("left associativity and explicit terminal captures are preserved") {
@@ -187,17 +189,53 @@ TEST_SUITE("generated.runtime") {
          CHECK(failure.error->message.find("expected") != std::string::npos);
       }
 
+      SUBCASE("generated lexers expose reusable token sequences for parse and recognize") {
+         auto input = std::string{"1 + 2 * 3"};
+         auto tokens = expression::lex(input);
+
+         REQUIRE(tokens.size() == 5);
+         CHECK(tokens.input == input);
+         CHECK(tokens[0].text.text == "1");
+         CHECK(tokens[1].text.text == "+");
+         CHECK(tokens[2].text.text == "2");
+         CHECK(tokens[3].text.text == "*");
+         CHECK(tokens[4].text.text == "3");
+
+         std::ostringstream token_stream;
+         token_stream << tokens;
+         CHECK(token_stream.str().find("token_sequence(\n") != std::string::npos);
+         CHECK(token_stream.str().find("input = \"1 + 2 * 3\"") != std::string::npos);
+         CHECK(token_stream.str().find("[3] { symbol = ") != std::string::npos);
+         CHECK(token_stream.str().find("text = \"*\"") != std::string::npos);
+
+         auto recognized = expression::recognize(tokens);
+         CHECK(recognized.success);
+         CHECK_FALSE(recognized.error.has_value());
+
+         cpf::parse_options validate_only;
+         validate_only.build_ast = false;
+         auto validated = expression::parse(tokens, validate_only);
+         REQUIRE(validated.success);
+         CHECK(validated.status == cpf::parse_status::success);
+         CHECK(validated.forest.empty());
+
+         auto parsed = expression::parse(tokens);
+         REQUIRE(parsed.success);
+         REQUIRE(parsed.forest.size() == 1);
+         CHECK(visit(*parsed.forest.front(), calculator_visitor{}) == 7);
+      }
+
       SUBCASE("parse options can reject ambiguity before AST construction") {
          cpf::parse_options options;
          options.error_on_ambiguity = true;
-         auto result = repeated_token::parse("x", options);
+         auto result = ambiguous_expr::parse("x", options);
          CHECK_FALSE(result.success);
          REQUIRE(result.error.has_value());
          CHECK(result.forest.empty());
          CHECK(result.status == cpf::parse_status::failure);
          CHECK(result.error->found.kind == cpf::parse_error_found_kind::ambiguous_parse);
          CHECK(result.error->message.find("unambiguous parse") != std::string::npos);
-         CHECK(result.error->message.find("repeated_token") != std::string::npos);
+          CHECK(result.error->message.find("ambiguous_expr") != std::string::npos);
       }
 
       SUBCASE("allow_partial keeps ignored invalid input inside one recovered tree") {
@@ -557,8 +595,9 @@ TEST_SUITE("generated.runtime") {
 
          std::ostringstream stream;
          stream << *result.forest.front();
-         CHECK(stream.str().find("addition(") != std::string::npos);
-         CHECK(stream.str().find("number(") != std::string::npos);
+         CHECK(stream.str().find("addition(\n") != std::string::npos);
+         CHECK(stream.str().find("  left =") != std::string::npos);
+         CHECK(stream.str().find("    number(\n") != std::string::npos);
       }
 
       SUBCASE("custom whitespace and comment skip rules work inside the generated namespace") {
@@ -666,9 +705,35 @@ TEST_SUITE("generated.runtime") {
 
       std::ostringstream stream;
       stream << *tree;
-      CHECK(stream.str().find("name=\"foo.bar\"") != std::string::npos);
-      CHECK(stream.str().find("type=\"int\"") != std::string::npos);
-      CHECK(stream.str().find("value=\"baz\"") != std::string::npos);
+      CHECK(stream.str().find("name = \"foo.bar\"") != std::string::npos);
+      CHECK(stream.str().find("type = \"int\"") != std::string::npos);
+      CHECK(stream.str().find("value = \"baz\"") != std::string::npos);
+   }
+
+   TEST_CASE("generated lexers prefer earlier equal-length tokens and longer shared-prefix tokens") {
+      auto keyword = chosen_word::parse("if");
+      REQUIRE(keyword.success);
+      REQUIRE(keyword.forest.size() == 1);
+      CHECK(keyword.forest.front()->production_index == 0);
+      CHECK(keyword.forest.front()->text.text == "if");
+
+      auto identifier = chosen_word::parse("iff");
+      REQUIRE(identifier.success);
+      REQUIRE(identifier.forest.size() == 1);
+      CHECK(identifier.forest.front()->production_index == 1);
+      CHECK(identifier.forest.front()->text.text == "iff");
+
+      auto equals_equals = comparison_op::parse("==");
+      REQUIRE(equals_equals.success);
+      REQUIRE(equals_equals.forest.size() == 1);
+      CHECK(equals_equals.forest.front()->production_index == 0);
+      CHECK(equals_equals.forest.front()->text.text == "==");
+
+      auto equals = comparison_op::parse("=");
+      REQUIRE(equals.success);
+      REQUIRE(equals.forest.size() == 1);
+      CHECK(equals.forest.front()->production_index == 1);
+      CHECK(equals.forest.front()->text.text == "=");
    }
 
    TEST_CASE("choice-only inheritance grammars stay visitable and printable") {
@@ -693,7 +758,7 @@ TEST_SUITE("generated.runtime") {
 
          std::ostringstream stream;
          stream << *message_result.forest.front();
-         CHECK(stream.str() == "greeting(text=\"hello\")");
+         CHECK(stream.str() == "greeting(\n  text = \"hello\"\n)");
       }
    }
 
@@ -754,11 +819,11 @@ TEST_SUITE("generated.runtime") {
    }
 
    TEST_CASE("merged concrete rule definitions keep one generated type and mark the matched definition") {
-      SUBCASE("ambiguous same-type parses remain distinguishable through node::production_index") {
+      SUBCASE("overlapping terminal definitions follow lexer precedence and keep the surviving definition index") {
          auto result = repeated_token::parse("x");
 
          REQUIRE(result.success);
-         REQUIRE(result.forest.size() == 2);
+          REQUIRE(result.forest.size() == 1);
 
          std::vector<std::size_t> production_indices;
          for (const auto& tree: result.forest) {
@@ -766,7 +831,7 @@ TEST_SUITE("generated.runtime") {
             CHECK(tree->text.text == "x");
          }
 
-         CHECK(production_indices == std::vector<std::size_t>{0, 1});
+          CHECK(production_indices == std::vector<std::size_t>{0});
       }
 
       SUBCASE("shared labeled references resolve to the nearest common generated base") {

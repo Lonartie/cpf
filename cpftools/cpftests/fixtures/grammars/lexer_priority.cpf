@@ -1,0 +1,8 @@
+token kw_if -> 'if';
+token bare_word -> r'[A-Za-z_]+';
+
+chosen_word -> kw_if:text;
+chosen_word -> bare_word:text;
+comparison_op -> '==':text;
+comparison_op -> '=':text;
+
