@@ -1,24 +1,184 @@
+#include "benchmark_support.h"
+
 #include <benchmark/benchmark.h>
 
 #include <array>
+#include <atomic>
 #include <chrono>
+#include <cstdint>
+#include <cstdlib>
 #include <iomanip>
 #include <iostream>
 #include <map>
+#include <new>
 #include <optional>
 #include <regex>
 #include <set>
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
+#if defined(__APPLE__)
+#include <malloc/malloc.h>
+#elif defined(__linux__)
+#include <malloc.h>
+#endif
+
 namespace {
+   std::atomic<std::size_t> live_heap_allocated_bytes{0};
+   thread_local auto heap_footprint_baseline_bytes = std::size_t{0};
+
+#if !defined(__APPLE__) && !defined(__linux__)
+   struct allocation_header {
+      void* original = nullptr;
+      std::size_t requested_size = 0;
+   };
+#endif
+
+   void record_heap_allocation(std::size_t size) noexcept { live_heap_allocated_bytes.fetch_add(size, std::memory_order_relaxed); }
+
+   void record_heap_release(std::size_t size) noexcept { live_heap_allocated_bytes.fetch_sub(size, std::memory_order_relaxed); }
+
+   [[nodiscard]] auto current_live_heap_bytes() -> std::size_t {
+      return live_heap_allocated_bytes.load(std::memory_order_relaxed);
+   }
+
+   [[nodiscard]] auto size_of_allocation(void* memory) noexcept -> std::size_t {
+      if (memory == nullptr) {
+         return 0;
+      }
+
+#if defined(__APPLE__)
+      return malloc_size(memory);
+#elif defined(__linux__)
+      return malloc_usable_size(memory);
+#else
+      const auto address = reinterpret_cast<std::uintptr_t>(memory);
+      const auto* header = reinterpret_cast<const allocation_header*>(address - sizeof(allocation_header));
+      return header->requested_size;
+#endif
+   }
+
+   [[nodiscard]] auto allocate_bytes(std::size_t size) -> void* {
+      const auto allocation_size = size == 0 ? std::size_t{1} : size;
+
+#if defined(__APPLE__) || defined(__linux__)
+      auto* memory = std::malloc(allocation_size);
+      if (memory == nullptr) {
+         throw std::bad_alloc{};
+      }
+
+      record_heap_allocation(size_of_allocation(memory));
+      return memory;
+#else
+      constexpr auto default_alignment = alignof(std::max_align_t);
+      const auto total_size = allocation_size + default_alignment - 1 + sizeof(allocation_header);
+      auto* original = std::malloc(total_size);
+      if (original == nullptr) {
+         throw std::bad_alloc{};
+      }
+
+      const auto base = reinterpret_cast<std::uintptr_t>(original) + sizeof(allocation_header);
+      const auto aligned_address = (base + default_alignment - 1) & ~(static_cast<std::uintptr_t>(default_alignment) - 1U);
+      auto* header = reinterpret_cast<allocation_header*>(aligned_address - sizeof(allocation_header));
+      header->original = original;
+      header->requested_size = allocation_size;
+      record_heap_allocation(header->requested_size);
+      return reinterpret_cast<void*>(aligned_address);
+#endif
+   }
+
+#if defined(_MSC_VER)
+   [[nodiscard]] auto allocate_aligned_bytes(std::size_t size, std::size_t alignment) -> void* {
+      const auto allocation_size = size == 0 ? std::size_t{1} : size;
+      auto* memory = _aligned_malloc(allocation_size, alignment);
+      if (memory == nullptr) {
+         throw std::bad_alloc{};
+      }
+
+      record_heap_allocation(allocation_size);
+      return memory;
+   }
+
+   void free_bytes(void* memory) noexcept {
+      if (memory == nullptr) {
+         return;
+      }
+
+      record_heap_release(_msize(memory));
+      std::free(memory);
+   }
+
+   void free_aligned_bytes(void* memory) noexcept {
+      if (memory == nullptr) {
+         return;
+      }
+
+      record_heap_release(_aligned_msize(memory, static_cast<std::size_t>(alignof(std::max_align_t)), 0));
+      _aligned_free(memory);
+   }
+#elif defined(__APPLE__) || defined(__linux__)
+   [[nodiscard]] auto allocate_aligned_bytes(std::size_t size, std::size_t alignment) -> void* {
+      const auto allocation_size = size == 0 ? std::size_t{1} : size;
+      void* memory = nullptr;
+      if (posix_memalign(&memory, alignment, allocation_size) != 0) {
+         throw std::bad_alloc{};
+      }
+
+      record_heap_allocation(size_of_allocation(memory));
+      return memory;
+   }
+
+   void free_bytes(void* memory) noexcept {
+      if (memory == nullptr) {
+         return;
+      }
+
+      record_heap_release(size_of_allocation(memory));
+      std::free(memory);
+   }
+
+   void free_aligned_bytes(void* memory) noexcept { free_bytes(memory); }
+#else
+   [[nodiscard]] auto allocate_aligned_bytes(std::size_t size, std::size_t alignment) -> void* {
+      const auto allocation_size = size == 0 ? std::size_t{1} : size;
+      const auto total_size = allocation_size + alignment - 1 + sizeof(allocation_header);
+      auto* original = std::malloc(total_size);
+      if (original == nullptr) {
+         throw std::bad_alloc{};
+      }
+
+      const auto base = reinterpret_cast<std::uintptr_t>(original) + sizeof(allocation_header);
+      const auto aligned_address = (base + alignment - 1) & ~(static_cast<std::uintptr_t>(alignment) - 1U);
+      auto* header = reinterpret_cast<allocation_header*>(aligned_address - sizeof(allocation_header));
+      header->original = original;
+      header->requested_size = allocation_size;
+      record_heap_allocation(header->requested_size);
+      return reinterpret_cast<void*>(aligned_address);
+   }
+
+   void free_bytes(void* memory) noexcept {
+      if (memory == nullptr) {
+         return;
+      }
+
+      const auto address = reinterpret_cast<std::uintptr_t>(memory);
+      auto* header = reinterpret_cast<allocation_header*>(address - sizeof(allocation_header));
+      record_heap_release(header->requested_size);
+      std::free(header->original);
+   }
+
+   void free_aligned_bytes(void* memory) noexcept { free_bytes(memory); }
+#endif
+
    struct size_summary {
       std::optional<double> mean_cpu_time;
       std::optional<double> min_cpu_time;
       std::optional<double> max_cpu_time;
       std::optional<double> items_per_second;
+      std::optional<double> heap_footprint_bytes;
    };
 
    struct benchmark_summary {
@@ -116,6 +276,15 @@ namespace {
       return iterator->second.value;
    }
 
+   [[nodiscard]] auto find_heap_footprint_bytes(const benchmark::UserCounters& counters) -> std::optional<double> {
+      auto iterator = counters.find(cpfbench::detail::heap_counter_name);
+      if (iterator == counters.end()) {
+         return std::nullopt;
+      }
+
+      return iterator->second.value;
+   }
+
    [[nodiscard]] auto parse_size_from_args(std::string_view args) -> std::optional<benchmark::ComplexityN> {
       auto separator = args.find_last_of(':');
       if (separator == std::string_view::npos || separator + 1 >= args.size()) {
@@ -153,6 +322,23 @@ namespace {
       }
       stream << std::setw(2) << minutes << ':' << std::setw(2) << seconds_part;
       return stream.str();
+   }
+
+   [[nodiscard]] auto format_heap_usage(std::optional<double> heap_footprint_bytes) -> std::string {
+      if (!heap_footprint_bytes.has_value()) {
+         return "n/a";
+      }
+
+      static constexpr auto units = std::array<std::string_view, 5>{"B", "KiB", "MiB", "GiB", "TiB"};
+
+      auto heap_amount = *heap_footprint_bytes;
+      auto unit_index = std::size_t{0};
+      while (heap_amount >= 1024.0 && unit_index + 1 < units.size()) {
+         heap_amount /= 1024.0;
+         ++unit_index;
+      }
+
+      return format_number(heap_amount, units[unit_index]);
    }
 
    [[nodiscard]] auto milestone_key_for(const benchmark::BenchmarkReporter::Run& report) -> std::optional<std::string> {
@@ -273,6 +459,10 @@ namespace {
                if (auto items_per_second = find_items_per_second(report.counters); items_per_second.has_value()) {
                   size_metrics.items_per_second = *items_per_second;
                }
+               if (auto heap_footprint_bytes = find_heap_footprint_bytes(report.counters);
+                   heap_footprint_bytes.has_value()) {
+                  size_metrics.heap_footprint_bytes = *heap_footprint_bytes;
+               }
             }
 
             auto milestone = milestone_key_for(report);
@@ -292,22 +482,27 @@ namespace {
          static constexpr auto benchmark_width = 28;
          static constexpr auto metric_width = 12;
          static constexpr auto throughput_width = 14;
+         static constexpr auto heap_width = 12;
          static constexpr auto complexity_width = 22;
 
          auto& output = GetOutputStream();
          output << std::left << std::setw(benchmark_width) << "Benchmark" << std::right << std::setw(metric_width)
                 << "Min" << std::setw(metric_width) << "Avg" << std::setw(metric_width) << "Max"
-                << std::setw(throughput_width) << "Iter/s" << std::setw(complexity_width) << "Complexity" << '\n';
+                << std::setw(throughput_width) << "Iter/s" << std::setw(heap_width) << "Heap"
+                << std::setw(complexity_width) << "Complexity" << '\n';
 
-         output << std::string(benchmark_width + (metric_width * 3) + throughput_width + complexity_width, '-') << '\n';
+         output << std::string(benchmark_width + (metric_width * 3) + throughput_width + heap_width + complexity_width,
+                               '-')
+                << '\n';
 
          for (auto family_name: family_order) {
-            auto iterator = m_summaries.find(std::string{family_name});
+            auto iterator = m_summaries.find(family_name);
             std::string benchmark_name = display_name_for(family_name);
             std::string minimum = "n/a";
             std::string average_cpu = "n/a";
             std::string maximum = "n/a";
             std::string iterations_per_second = "n/a";
+            std::string heap_usage = "n/a";
             std::string complexity = "n/a";
 
             if (iterator == m_summaries.end()) {
@@ -325,6 +520,7 @@ namespace {
                      average_cpu = format_optional(smallest_size.mean_cpu_time, "us");
                      maximum = format_optional(smallest_size.max_cpu_time, "us");
                      iterations_per_second = format_optional(smallest_size.items_per_second);
+                     heap_usage = format_heap_usage(smallest_size.heap_footprint_bytes);
                   }
 
                   if (summary.complexity_cpu_time.has_value()) {
@@ -336,8 +532,8 @@ namespace {
 
             output << std::left << std::setw(benchmark_width) << benchmark_name << std::right << std::setw(metric_width)
                    << minimum << std::setw(metric_width) << average_cpu << std::setw(metric_width) << maximum
-                   << std::setw(throughput_width) << iterations_per_second << std::setw(complexity_width) << complexity
-                   << '\n';
+                   << std::setw(throughput_width) << iterations_per_second << std::setw(heap_width) << heap_usage
+                   << std::setw(complexity_width) << complexity << '\n';
          }
 
          if (!m_expected_milestones.empty()) {
@@ -395,6 +591,83 @@ namespace {
       std::chrono::steady_clock::time_point m_started_at{};
    };
 } // namespace
+
+namespace cpfbench::detail {
+   void reset_heap_footprint_baseline() { heap_footprint_baseline_bytes = current_live_heap_bytes(); }
+
+   auto current_heap_footprint_bytes() -> std::size_t {
+      const auto live_bytes = current_live_heap_bytes();
+      if (live_bytes < heap_footprint_baseline_bytes) {
+         return 0;
+      }
+
+      return live_bytes - heap_footprint_baseline_bytes;
+   }
+} // namespace cpfbench::detail
+
+void* operator new(std::size_t size) { return allocate_bytes(size); }
+
+void* operator new[](std::size_t size) { return allocate_bytes(size); }
+
+void* operator new(std::size_t size, const std::nothrow_t&) noexcept {
+   try {
+      return allocate_bytes(size);
+   } catch (...) {
+      return nullptr;
+   }
+}
+
+void* operator new[](std::size_t size, const std::nothrow_t&) noexcept {
+   try {
+      return allocate_bytes(size);
+   } catch (...) {
+      return nullptr;
+   }
+}
+
+void operator delete(void* memory) noexcept { free_bytes(memory); }
+
+void operator delete[](void* memory) noexcept { free_bytes(memory); }
+
+void operator delete(void* memory, std::size_t) noexcept { free_bytes(memory); }
+
+void operator delete[](void* memory, std::size_t) noexcept { free_bytes(memory); }
+
+void operator delete(void* memory, const std::nothrow_t&) noexcept { free_bytes(memory); }
+
+void operator delete[](void* memory, const std::nothrow_t&) noexcept { free_bytes(memory); }
+
+void* operator new(std::size_t size, std::align_val_t alignment) {
+   return allocate_aligned_bytes(size, static_cast<std::size_t>(alignment));
+}
+
+void* operator new[](std::size_t size, std::align_val_t alignment) {
+   return allocate_aligned_bytes(size, static_cast<std::size_t>(alignment));
+}
+
+void* operator new(std::size_t size, std::align_val_t alignment, const std::nothrow_t&) noexcept {
+   try {
+      return allocate_aligned_bytes(size, static_cast<std::size_t>(alignment));
+   } catch (...) {
+      return nullptr;
+   }
+}
+
+void* operator new[](std::size_t size, std::align_val_t alignment, const std::nothrow_t&) noexcept {
+   try {
+      return allocate_aligned_bytes(size, static_cast<std::size_t>(alignment));
+   } catch (...) {
+      return nullptr;
+   }
+}
+
+void operator delete(void* memory, std::align_val_t) noexcept { free_aligned_bytes(memory); }
+
+void operator delete[](void* memory, std::align_val_t) noexcept { free_aligned_bytes(memory); }
+
+void operator delete(void* memory, std::size_t, std::align_val_t) noexcept { free_aligned_bytes(memory); }
+
+void operator delete[](void* memory, std::size_t, std::align_val_t) noexcept { free_aligned_bytes(memory); }
 
 int main(int argc, char** argv) {
    benchmark::MaybeReenterWithoutASLR(argc, argv);

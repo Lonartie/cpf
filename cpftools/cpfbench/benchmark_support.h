@@ -5,13 +5,17 @@
 #include <cpflib>
 
 #include <algorithm>
-#include <cstdint>
+#include <cstddef>
+#include <limits>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace cpfbench {
    namespace detail {
+      inline constexpr auto heap_counter_name = "heap_bytes";
+
       inline auto parse_error_message(const auto& result) -> std::string {
          if (result.error.has_value()) {
             return result.error->message;
@@ -20,10 +24,16 @@ namespace cpfbench {
       }
 
       inline auto minimum(const std::vector<double>& samples) -> double {
+         if (samples.empty()) {
+            return std::numeric_limits<double>::quiet_NaN();
+         }
          return *std::min_element(samples.begin(), samples.end());
       }
 
       inline auto maximum(const std::vector<double>& samples) -> double {
+         if (samples.empty()) {
+            return std::numeric_limits<double>::quiet_NaN();
+         }
          return *std::max_element(samples.begin(), samples.end());
       }
 
@@ -40,12 +50,37 @@ namespace cpfbench {
          state.SkipWithError(error);
       }
 
+      void reset_heap_footprint_baseline();
+      [[nodiscard]] auto current_heap_footprint_bytes() -> std::size_t;
+
+      inline void begin_heap_footprint_measurement() { reset_heap_footprint_baseline(); }
+
+      inline auto end_heap_footprint_measurement() -> double {
+         return static_cast<double>(current_heap_footprint_bytes());
+      }
+
+      inline void set_heap_footprint_bytes(benchmark::State& state, double heap_footprint_bytes) {
+         state.counters[heap_counter_name] = heap_footprint_bytes;
+      }
+
       inline void set_items_processed(benchmark::State& state) { state.SetItemsProcessed(state.iterations()); }
    } // namespace detail
 
    template<typename Root>
    void benchmark_parse(benchmark::State& state, std::string_view input, std::string_view benchmark_name) {
       state.SetComplexityN(static_cast<benchmark::ComplexityN>(input.size()));
+
+      detail::begin_heap_footprint_measurement();
+      {
+         auto result = Root::parse(input);
+         if (!result.success || result.forest.empty()) {
+            detail::report_parse_failure(state, benchmark_name, detail::parse_error_message(result));
+            return;
+         }
+
+         detail::set_heap_footprint_bytes(state, detail::end_heap_footprint_measurement());
+         benchmark::DoNotOptimize(result.forest.size());
+      }
 
       for (auto _: state) {
          auto result = Root::parse(input);
@@ -63,6 +98,19 @@ namespace cpfbench {
    template<typename Root>
    void benchmark_parse_to_forest(benchmark::State& state, std::string_view input, std::string_view benchmark_name) {
       state.SetComplexityN(static_cast<benchmark::ComplexityN>(input.size()));
+
+      detail::begin_heap_footprint_measurement();
+      {
+         auto result = Root::parse(input);
+         if (!result.success || result.forest.empty()) {
+            detail::report_parse_failure(state, benchmark_name, detail::parse_error_message(result));
+            return;
+         }
+
+         detail::set_heap_footprint_bytes(state, detail::end_heap_footprint_measurement());
+         benchmark::DoNotOptimize(result.forest.size());
+         benchmark::DoNotOptimize(result.forest.front().production_index());
+      }
 
       for (auto _: state) {
          auto result = Root::parse(input);
@@ -82,6 +130,25 @@ namespace cpfbench {
    void benchmark_materialize_ast(benchmark::State& state, std::string_view input, std::string_view benchmark_name) {
       state.SetComplexityN(static_cast<benchmark::ComplexityN>(input.size()));
 
+      detail::begin_heap_footprint_measurement();
+      {
+         auto footprint_result = Root::parse(input);
+         if (!footprint_result.success || footprint_result.forest.empty()) {
+            detail::report_parse_failure(state, benchmark_name, detail::parse_error_message(footprint_result));
+            return;
+         }
+
+         auto& footprint_tree = footprint_result.forest.front();
+         auto* footprint_materialized = footprint_tree.get();
+         if (footprint_materialized == nullptr) {
+            detail::report_materialization_failure(state, benchmark_name, "materializer returned null");
+            return;
+         }
+
+         detail::set_heap_footprint_bytes(state, detail::end_heap_footprint_measurement());
+         benchmark::DoNotOptimize(footprint_materialized);
+      }
+
       auto result = Root::parse(input);
       if (!result.success || result.forest.empty()) {
          detail::report_parse_failure(state, benchmark_name, detail::parse_error_message(result));
@@ -96,7 +163,7 @@ namespace cpfbench {
       }
 
       for (auto _: state) {
-         auto tree = tree_template;
+         auto tree = tree_template.clone();
          if (tree.has_materialized()) {
             detail::report_materialization_failure(state, benchmark_name, "forest handle was already materialized");
             return;
@@ -118,6 +185,19 @@ namespace cpfbench {
    void benchmark_parse_and_consume(benchmark::State& state, std::string_view input, std::string_view benchmark_name,
                                     Consumer&& consume) {
       state.SetComplexityN(static_cast<benchmark::ComplexityN>(input.size()));
+
+      detail::begin_heap_footprint_measurement();
+      {
+         auto result = Root::parse(input);
+         if (!result.success || result.forest.empty()) {
+            detail::report_parse_failure(state, benchmark_name, detail::parse_error_message(result));
+            return;
+         }
+
+         auto consumed = consume(*result.forest.front());
+         detail::set_heap_footprint_bytes(state, detail::end_heap_footprint_measurement());
+         benchmark::DoNotOptimize(consumed);
+      }
 
       for (auto _: state) {
          auto result = Root::parse(input);

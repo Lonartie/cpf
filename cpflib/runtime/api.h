@@ -281,6 +281,18 @@ namespace cpf {
 
       [[nodiscard]] auto is_partial() const -> bool { return m_state->partial; }
 
+      /// @brief Returns a logically equivalent handle with independent lazy materialization state when possible.
+      [[nodiscard]] auto clone() const -> parse_tree {
+         parse_tree copy;
+         copy.m_state = std::make_shared<state>(*m_state);
+         if (copy.m_state->materialize) {
+            copy.m_state->materialized.reset();
+            copy.m_state->damaged_nodes.clear();
+            copy.m_state->damage_indexed = false;
+         }
+         return copy;
+      }
+
       [[nodiscard]] auto try_repair_input(std::string_view input) const -> std::optional<std::string> {
          if (!m_state->partial || !m_state->repair_input) {
             return std::string{input};

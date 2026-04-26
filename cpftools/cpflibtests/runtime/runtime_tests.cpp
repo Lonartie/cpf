@@ -181,6 +181,32 @@ TEST_SUITE("cpflib.runtime") {
       CHECK(original.get() == materialized);
    }
 
+   TEST_CASE("cloned parse-tree handles rematerialize lazily without mutating the original handle") {
+      auto materialize_count = std::size_t{0};
+      cpf::parse_tree<fake_node> original{{}, 3, {}, [&]() {
+                                           ++materialize_count;
+                                           return std::make_unique<fake_node>("lazy");
+                                        }};
+      auto clone = original.clone();
+
+      CHECK_FALSE(original.has_materialized());
+      CHECK_FALSE(clone.has_materialized());
+
+      auto* clone_materialized = clone.get();
+
+      REQUIRE(clone_materialized != nullptr);
+      CHECK(materialize_count == 1);
+      CHECK_FALSE(original.has_materialized());
+      CHECK(clone.has_materialized());
+
+      auto* original_materialized = original.get();
+
+      REQUIRE(original_materialized != nullptr);
+      CHECK(materialize_count == 2);
+      CHECK(original.has_materialized());
+      CHECK(original_materialized != clone_materialized);
+   }
+
    TEST_CASE("matched strings keep both text and source ranges") {
       cpf::matched_string match;
       match.text = "hello";
