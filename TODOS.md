@@ -2,7 +2,7 @@
 
 This file is an ordered roadmap rather than a flat checklist. Items at the top are the most practical near-term investments.
 
-## 2. Grammar diagnostics and linting
+## 1. Grammar diagnostics and linting
 
 **Idea** Add static analysis for grammars before or during generation.
 
@@ -16,7 +16,7 @@ This file is an ordered roadmap rather than a flat checklist. Items at the top a
 
 **Value** This makes grammar authoring much easier and helps users fix structural issues before runtime.
 
-## 3. Ambiguity diagnostics and inspection tools
+## 2. Ambiguity diagnostics and inspection tools
 
 **Idea** Go beyond ambiguity failure and provide useful diagnostics for ambiguous parses.
 
@@ -30,7 +30,7 @@ This file is an ordered roadmap rather than a flat checklist. Items at the top a
 
 **Value** This would be one of the most useful differentiators of CPF because ambiguous grammars are otherwise very hard to debug.
 
-## 7. Golden tests for generated code
+## 3. Golden tests for generated code
 
 **Idea** Add snapshot-style tests for representative generated outputs.
 
@@ -44,7 +44,7 @@ This file is an ordered roadmap rather than a flat checklist. Items at the top a
 
 **Value** This gives strong regression protection for a code generator, where small changes can have wide effects.
 
-## 13. Generated CST mode in addition to AST mode
+## 4. Generated CST mode in addition to AST mode
 
 **Idea** Support concrete syntax tree generation alongside the existing AST-oriented mode.
 
@@ -56,3 +56,23 @@ This file is an ordered roadmap rather than a flat checklist. Items at the top a
 **Impact** High strategic impact, high implementation effort.
 
 **Value** This opens the door to formatters, refactoring tools, and editor workflows that need lossless syntax preservation.
+
+## 5. Provide extensive tracking/debugging/logging/tracing APIs
+
+**Idea** Expose rich APIs for tracking and debugging the parsing process for both grammar-code-gen and generated parsers.
+
+**Considerations**
+
+* Provide hooks for logging parser events
+* Allow inspection of intermediate parse states
+* Support configurable verbosity levels
+* Make the APIs intentionally external to the model classes, they should live in a separate diagnostics namespace in the
+  public API in `cpflib`
+* GOAL: Every step of the parsing process should be inspectable and traceable, from tokenization to final AST construction.
+  That includes the grammar generation process as well, so that users can understand how their grammar is being transformed into code
+  and where potential issues may arise.
+
+**Impact** High impact for users building tools on top of CPF, medium implementation effort.
+
+**Value** This would make it much easier to understand, debug, and optimize parsing behavior, especially for complex grammars.
+
