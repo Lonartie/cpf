@@ -483,10 +483,15 @@ TEST_SUITE("cpflib.code_generator") {
    TEST_CASE("template invocations generate hidden helper nodes with substituted captures") {
       auto grammar = cpf::parse_grammar(R"(
          template surrounded<Open, Inner, Close> -> Open:open Inner:value Close:close;
+         template keyword_value<Keyword, Value> -> Keyword:keyword Value:value;
+         template specialized_surrounded<Open, InnerTempl, Close> -> Open:open InnerTempl<'spec'>:value Close:close;
+         template prepend<Prep> -> Prep:prep '_value':suffix;
          token identifier_head -> r'[A-Za-z_]';
          token identifier_tail -> r'[A-Za-z0-9_]';
          token identifier -> identifier_head identifier_tail*;
          paren_identifier -> surrounded<'(', identifier, ')'>:body;
+         paren_returned_identifier -> surrounded<'(', keyword_value<'return', identifier>, ')'>:body;
+         paren_specialized_identifier -> specialized_surrounded<'(', prepend, ')'>:body;
       )");
 
       auto generated = cpf::generate_code(grammar, "templates_codegen");
@@ -497,6 +502,15 @@ TEST_SUITE("cpflib.code_generator") {
       CHECK(generated.header.find("cpf::matched_string value;") != std::string::npos);
       CHECK(generated.header.find("cpf::matched_string close;") != std::string::npos);
       CHECK(generated.source.find("paren_identifier -> cpf_template_surrounded_") != std::string::npos);
+      CHECK(generated.source.find("paren_returned_identifier -> cpf_template_surrounded_") != std::string::npos);
+      CHECK(generated.source.find("paren_specialized_identifier -> cpf_template_specialized_surrounded_") != std::string::npos);
+      CHECK(generated.header.find("std::unique_ptr<cpf_template_keyword_value_") != std::string::npos);
+      CHECK(generated.header.find("cpf::matched_string keyword;") != std::string::npos);
+      CHECK(generated.source.find("cpf_template_keyword_value_") != std::string::npos);
+      CHECK(generated.header.find("std::unique_ptr<cpf_template_prepend_") != std::string::npos);
+      CHECK(generated.header.find("cpf::matched_string prep;") != std::string::npos);
+      CHECK(generated.header.find("cpf::matched_string suffix;") != std::string::npos);
+      CHECK(generated.source.find("cpf_template_prepend_") != std::string::npos);
    }
 
    TEST_CASE("generated code can be wrapped in an explicit C++ namespace") {

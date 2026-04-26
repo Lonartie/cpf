@@ -1,5 +1,7 @@
 template template_surrounded<Open, Inner, Close> -> Open:open Inner:value Close:close;
 template template_keyword_value<Keyword, Value> -> Keyword:keyword Value:value;
+template template_specialized_surrounded<Open, InnerTempl, Close> -> Open:open InnerTempl<'@spec'>:value Close:close;
+template template_prepend<Prep> -> Prep:prep '::value':suffix;
 
 token template_return_kw -> 'return';
 token template_identifier -> r'[A-Za-z_][A-Za-z0-9_]*';
@@ -7,6 +9,8 @@ token template_identifier -> r'[A-Za-z_][A-Za-z0-9_]*';
 template_paren_identifier -> template_surrounded<'(', template_identifier, ')'>:body;
 template_brace_identifiers -> template_surrounded<'{', template_identifier+, '}'>:body;
 template_returned_identifier -> template_keyword_value<template_return_kw, template_identifier>:payload;
+template_nested_returned_identifier -> template_surrounded<'(', template_keyword_value<template_return_kw, template_identifier>, ')'>:body;
+template_specialized_identifier -> template_specialized_surrounded<'(', template_prepend, ')'>:body;
 
 
 

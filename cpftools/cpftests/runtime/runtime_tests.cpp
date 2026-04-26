@@ -838,6 +838,30 @@ TEST_SUITE("generated.runtime") {
          CHECK(result.forest.front()->payload->keyword.text == "return");
          CHECK(result.forest.front()->payload->value.text == "value");
       }
+
+      SUBCASE("template arguments may themselves be template invocations") {
+         auto result = template_nested_returned_identifier::parse("(return value)");
+         REQUIRE(result.success);
+         REQUIRE(result.forest.size() == 1);
+         REQUIRE(result.forest.front()->body != nullptr);
+         CHECK(result.forest.front()->body->open.text == "(");
+         CHECK(result.forest.front()->body->close.text == ")");
+         REQUIRE(result.forest.front()->body->value != nullptr);
+         CHECK(result.forest.front()->body->value->keyword.text == "return");
+         CHECK(result.forest.front()->body->value->value.text == "value");
+      }
+
+      SUBCASE("template parameters may themselves name template families that are specialized in place") {
+         auto result = template_specialized_identifier::parse("(@spec::value)");
+         REQUIRE(result.success);
+         REQUIRE(result.forest.size() == 1);
+         REQUIRE(result.forest.front()->body != nullptr);
+         CHECK(result.forest.front()->body->open.text == "(");
+         CHECK(result.forest.front()->body->close.text == ")");
+         REQUIRE(result.forest.front()->body->value != nullptr);
+         CHECK(result.forest.front()->body->value->prep.text == "@spec");
+         CHECK(result.forest.front()->body->value->suffix.text == "::value");
+      }
    }
 
    TEST_CASE("choice-only inheritance grammars stay visitable and printable") {

@@ -560,10 +560,15 @@ TEST_SUITE("cpflib.grammar_parser") {
    TEST_CASE("template declarations instantiate into synthetic helper rules") {
       auto grammar = cpf::parse_grammar(R"(
          template surrounded<Open, Inner, Close> -> Open:open Inner:value Close:close;
+         template keyword_value<Keyword, Value> -> Keyword:keyword Value:value;
+         template specialized_surrounded<Open, InnerTempl, Close> -> Open:open InnerTempl<'spec'>:value Close:close;
+         template prepend<Prep> -> Prep:prep '_value':suffix;
          token identifier_head -> r'[A-Za-z_]';
          token identifier_tail -> r'[A-Za-z0-9_]';
          token identifier -> identifier_head identifier_tail*;
          paren_identifier -> surrounded<'(', identifier, ')'>:body;
+         paren_returned_identifier -> surrounded<'(', keyword_value<'return', identifier>, ')'>:body;
+         paren_specialized_identifier -> specialized_surrounded<'(', prepend, ')'>:body;
       )");
 
       CHECK(grammar.find_rule("surrounded") == nullptr);
@@ -578,9 +583,81 @@ TEST_SUITE("cpflib.grammar_parser") {
       CHECK(invocation.label == "body");
       CHECK(invocation.value.find("cpf_template_surrounded_") == 0);
 
+      auto* paren_returned_identifier = grammar.find_rule("paren_returned_identifier");
+      REQUIRE(paren_returned_identifier != nullptr);
+      REQUIRE(paren_returned_identifier->productions.size() == 1);
+      REQUIRE(paren_returned_identifier->productions.front().symbols.size() == 1);
+      const auto& nested_invocation = paren_returned_identifier->productions.front().symbols.front();
+      CHECK(nested_invocation.kind == cpf::symbol_kind::reference);
+      CHECK(nested_invocation.label == "body");
+      CHECK(nested_invocation.value.find("cpf_template_surrounded_") == 0);
+
+      auto* paren_specialized_identifier = grammar.find_rule("paren_specialized_identifier");
+      REQUIRE(paren_specialized_identifier != nullptr);
+      REQUIRE(paren_specialized_identifier->productions.size() == 1);
+      REQUIRE(paren_specialized_identifier->productions.front().symbols.size() == 1);
+      const auto& higher_order_invocation = paren_specialized_identifier->productions.front().symbols.front();
+      CHECK(higher_order_invocation.kind == cpf::symbol_kind::reference);
+      CHECK(higher_order_invocation.label == "body");
+      CHECK(higher_order_invocation.value.find("cpf_template_specialized_surrounded_") == 0);
+
       auto instantiated = false;
+      auto nested_instantiated = false;
+      auto nested_payload_instantiated = false;
+      auto higher_order_instantiated = false;
+      auto higher_order_payload_instantiated = false;
       for (const auto& rule: grammar.rules) {
          if (!rule.synthetic || rule.identifier != invocation.value) {
+            if (rule.synthetic && rule.identifier == nested_invocation.value) {
+               nested_instantiated = true;
+               REQUIRE(rule.productions.size() == 1);
+               REQUIRE(rule.productions.front().symbols.size() == 3);
+               CHECK(rule.productions.front().symbols[0].kind == cpf::symbol_kind::literal);
+               CHECK(rule.productions.front().symbols[0].value == "(");
+               CHECK(rule.productions.front().symbols[1].kind == cpf::symbol_kind::reference);
+               CHECK(rule.productions.front().symbols[1].value.find("cpf_template_keyword_value_") == 0);
+               CHECK(rule.productions.front().symbols[1].label == "value");
+               CHECK(rule.productions.front().symbols[2].kind == cpf::symbol_kind::literal);
+               CHECK(rule.productions.front().symbols[2].value == ")");
+               continue;
+            }
+            if (rule.synthetic && rule.identifier == higher_order_invocation.value) {
+               higher_order_instantiated = true;
+               REQUIRE(rule.productions.size() == 1);
+               REQUIRE(rule.productions.front().symbols.size() == 3);
+               CHECK(rule.productions.front().symbols[0].kind == cpf::symbol_kind::literal);
+               CHECK(rule.productions.front().symbols[0].value == "(");
+               CHECK(rule.productions.front().symbols[1].kind == cpf::symbol_kind::reference);
+               CHECK(rule.productions.front().symbols[1].value.find("cpf_template_prepend_") == 0);
+               CHECK(rule.productions.front().symbols[1].label == "value");
+               CHECK(rule.productions.front().symbols[2].kind == cpf::symbol_kind::literal);
+               CHECK(rule.productions.front().symbols[2].value == ")");
+               continue;
+            }
+            if (rule.synthetic && !rule.identifier.empty() && rule.identifier.find("cpf_template_keyword_value_") == 0) {
+               nested_payload_instantiated = true;
+               REQUIRE(rule.productions.size() == 1);
+               REQUIRE(rule.productions.front().symbols.size() == 2);
+               CHECK(rule.productions.front().symbols[0].kind == cpf::symbol_kind::literal);
+               CHECK(rule.productions.front().symbols[0].value == "return");
+               CHECK(rule.productions.front().symbols[0].label == "keyword");
+               CHECK(rule.productions.front().symbols[1].kind == cpf::symbol_kind::reference);
+               CHECK(rule.productions.front().symbols[1].value == "identifier");
+               CHECK(rule.productions.front().symbols[1].label == "value");
+               continue;
+            }
+            if (rule.synthetic && !rule.identifier.empty() && rule.identifier.find("cpf_template_prepend_") == 0) {
+               higher_order_payload_instantiated = true;
+               REQUIRE(rule.productions.size() == 1);
+               REQUIRE(rule.productions.front().symbols.size() == 2);
+               CHECK(rule.productions.front().symbols[0].kind == cpf::symbol_kind::literal);
+               CHECK(rule.productions.front().symbols[0].value == "spec");
+               CHECK(rule.productions.front().symbols[0].label == "prep");
+               CHECK(rule.productions.front().symbols[1].kind == cpf::symbol_kind::literal);
+               CHECK(rule.productions.front().symbols[1].value == "_value");
+               CHECK(rule.productions.front().symbols[1].label == "suffix");
+               continue;
+            }
             continue;
          }
          instantiated = true;
@@ -597,6 +674,10 @@ TEST_SUITE("cpflib.grammar_parser") {
          CHECK(rule.productions.front().symbols[2].label == "close");
       }
       CHECK(instantiated);
+      CHECK(nested_instantiated);
+      CHECK(nested_payload_instantiated);
+      CHECK(higher_order_instantiated);
+      CHECK(higher_order_payload_instantiated);
    }
 
    TEST_CASE("unsupported unlabeled quantified group captures report expressive parser errors") {

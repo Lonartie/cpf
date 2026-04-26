@@ -688,6 +688,35 @@ namespace cpf {
             return item;
          }
 
+         [[nodiscard]] std::string resolve_template_name(std::string_view identifier,
+                                                         const parameter_bindings* bindings) {
+            auto template_name = std::string{identifier};
+            if (bindings == nullptr) {
+               return template_name;
+            }
+
+            auto binding = bindings->find(template_name);
+            if (binding == bindings->end()) {
+               return template_name;
+            }
+
+            const auto& item = *binding->second;
+            if (item.cut) {
+               throw error("Template parameters cannot expand to cut markers");
+            }
+            if (item.lookahead != lookahead_kind::none || item.group != nullptr || !item.parsed_symbol.has_value()) {
+               throw error("Template parameter '" + template_name + "' must bind to a template identifier");
+            }
+
+            const auto& symbol = *item.parsed_symbol;
+            if (symbol.kind != parsed_symbol_kind::reference || parsed_symbol_has_label(symbol) ||
+                !parsed_symbol_is_single(symbol)) {
+               throw error("Template parameter '" + template_name + "' must bind to a template identifier");
+            }
+
+            return symbol.value;
+         }
+
          std::vector<std::vector<symbol>> lower_item(const grouped_sequence_item& item, std::size_t line,
                                                      bool capture_allowed, std::vector<rule>& synthetic_rules,
                                                      const parameter_bindings* bindings) {
@@ -830,14 +859,15 @@ namespace cpf {
 
          std::string instantiate_template(const parsed_symbol& invocation, std::size_t line,
                                           std::vector<rule>& synthetic_rules, const parameter_bindings* bindings) {
-            auto template_it = templates_.find(invocation.value);
+            const auto template_name = resolve_template_name(invocation.value, bindings);
+            auto template_it = templates_.find(template_name);
             if (template_it == templates_.end()) {
-               throw error("Unknown template '" + invocation.value + "'");
+               throw error("Unknown template '" + template_name + "'");
             }
 
             const auto& declaration = *template_it->second;
             if (invocation.template_arguments.size() != declaration.parameters.size()) {
-               throw error("Template '" + invocation.value + "' expects " +
+               throw error("Template '" + template_name + "' expects " +
                            std::to_string(declaration.parameters.size()) + " argument(s)");
             }
 
@@ -862,7 +892,7 @@ namespace cpf {
             }
 
             rule synthetic_rule;
-            synthetic_rule.identifier = make_template_rule_name(invocation.value);
+            synthetic_rule.identifier = make_template_rule_name(template_name);
             synthetic_rule.synthetic = true;
 
             const auto lowered_alternatives =

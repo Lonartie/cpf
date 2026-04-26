@@ -190,10 +190,13 @@ CPF templates capture reusable single-production or multi-production grammar sha
 ```text
 template template_surrounded<Open, Inner, Close> -> Open:open Inner:value Close:close;
 template template_keyword_value<Keyword, Value> -> Keyword:keyword Value:value;
+template template_specialized_surrounded<Open, InnerTempl, Close> -> Open:open InnerTempl<'spec'>:value Close:close;
+template template_prepend<Prep> -> Prep:prep '_value':suffix;
 
 template_paren_identifier -> template_surrounded<'(', template_identifier, ')'>:body;
 template_brace_identifiers -> template_surrounded<'{', template_identifier+, '}'>:body;
 template_returned_identifier -> template_keyword_value<'return', template_identifier>:payload;
+template_specialized_identifier -> template_specialized_surrounded<'(', template_prepend, ')'>:body;
 ```
 
 Rules:
@@ -203,6 +206,18 @@ Rules:
 - arguments can be literals, regex terminals, rule references, grouped expressions, and quantified items
 - template declarations are compile-time only and do not become public generated entry points
 - each invocation lowers to a hidden synthetic helper rule, so labeled invocations can still materialize helper-node payloads
+
+Template parameters may also stand in for template families. For example, an outer template can specialize a nested
+template parameter in place:
+
+```text
+template template_specialized_surrounded<Open, InnerTempl, Close> -> Open:open InnerTempl<'spec'>:value Close:close;
+template template_prepend<Prep> -> Prep:prep '_value':suffix;
+
+template_specialized_identifier -> template_specialized_surrounded<'(', template_prepend, ')'>:body;
+```
+
+This matches `(`, then `spec`, then `_value`, then `)` and still materializes the nested helper node under `value`.
 
 Template arguments inherit labels and quantifiers from the argument expression itself unless the template placeholder
 adds its own suffix. This makes list-style utilities such as `template_surrounded<'{', item+, '}'>` preserve repeated
