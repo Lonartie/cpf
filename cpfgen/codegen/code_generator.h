@@ -12,6 +12,7 @@ namespace cpf {
       std::string source;
    };
 
+
    /// @brief Generates C++ source code for a parsed grammar.
    /// @param grammar Parsed grammar description.
    /// @param base_name Base file name to embed into generated includes and parser names.

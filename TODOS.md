@@ -232,3 +232,16 @@ This file is an ordered roadmap rather than a flat checklist. Items at the top a
 **Impact** Medium impact, medium implementation effort.
 
 **Value** This would make complexity analysis more stable and actionable, especially for small inputs where noise can dominate.
+
+## 19. visit_recursive shall optionally pass down the parent node to the visitor
+
+**Idea** Allow `visit_recursive` to pass down the parent node to the visitor for more context-aware traversals.
+
+**Considerations**
+
+* Add an optional parameter to `visit_recursive` for the parent node
+* Update visitor signatures to accept the parent node when needed
+
+**Impact** Medium impact, medium implementation effort.
+
+**Value** This would enable more powerful visitor patterns that can make decisions based on the parent context, improving the expressiveness of tree traversals.

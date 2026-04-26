@@ -20,6 +20,22 @@ TEST_SUITE("cpflib.complexity") {
       CHECK(result.estimate(32.0) > result.estimate(16.0));
    }
 
+   TEST_CASE("two-pass analysis selects the dominant family before refining lower-order coefficients") {
+      std::vector<double> sizes{2.0, 4.0, 8.0, 16.0, 32.0, 64.0, 128.0};
+      std::vector<double> samples;
+      samples.reserve(sizes.size());
+      for (const auto size: sizes) {
+         samples.push_back((7.5e-7 * size * std::log(size)) + (3.5e-7 * size) + (6.0e-8 * std::sqrt(size)) + 9.0e-8);
+      }
+
+      auto result = cpf::detail::analyze_complexity_samples(sizes, samples);
+
+      CHECK(result.big_o == "O(N log N)");
+      CHECK(result.expression.find("N*log(N)") != std::string::npos);
+      CHECK(result.coefficients.size() >= 2);
+      CHECK(result.relative_root_mean_square_error < 0.02);
+   }
+
    TEST_CASE("synthetic linearithmic samples fit an O(N log N) model") {
       std::vector<double> sizes{2.0, 4.0, 8.0, 16.0, 32.0, 64.0};
       std::vector<double> samples;
@@ -73,6 +89,7 @@ TEST_SUITE("cpflib.complexity") {
 
       CHECK(result.big_o == "O(N^2 log N)");
       CHECK(result.expression.find("N^2*log(N)") != std::string::npos);
+      CHECK(result.coefficients.size() >= 2);
       CHECK(result.estimate(20.0) > result.estimate(16.0));
    }
 

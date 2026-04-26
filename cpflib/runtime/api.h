@@ -167,6 +167,17 @@ namespace cpf {
       std::vector<node_damage> m_damage;
    };
 
+   /// @brief Base class for generated nodes that carry caller-defined user data.
+   /// @tparam UserData User-defined payload type stored on each generated AST node.
+   template<typename UserData> struct node_with_user_data : node {
+      using user_data_type = UserData;
+      UserData user_data{};
+   };
+
+   template<> struct node_with_user_data<void> : node {
+      using user_data_type = void;
+   };
+
 
    /// @brief Lazy handle for one parse tree in a returned forest.
    /// @tparam T Root node type materialized from the opaque runtime tree.

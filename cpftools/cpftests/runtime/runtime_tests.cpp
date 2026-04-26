@@ -20,6 +20,9 @@
 namespace {
    namespace namespaced = generated::fixtures;
 
+   template<typename T>
+   concept has_user_data_member = requires(T value) { value.user_data; };
+
    struct calculator_visitor {
       auto visit(auto& node) const { return ::visit(node, *this); }
       int operator()(const addition& node) const { return visit(*node.left) + visit(*node.right); }
@@ -504,6 +507,41 @@ TEST_SUITE("generated.runtime") {
 
          CHECK(visited == std::vector<std::string>{"addition", "number", "number"});
       }
+   }
+
+   TEST_CASE("generated node templates default to no user data and can opt into caller payloads") {
+      CHECK((std::is_same_v<expression::user_data_type, void>));
+      CHECK_FALSE(has_user_data_member<expression>);
+      CHECK((std::is_same_v<expression_node<std::string>::user_data_type, std::string>));
+      CHECK(has_user_data_member<expression_node<std::string>>);
+
+      auto default_result = expression::parse("42");
+      REQUIRE(default_result.success);
+      REQUIRE(default_result.forest.size() == 1);
+
+      auto custom_result = expression_node<std::string>::parse("42");
+      REQUIRE(custom_result.success);
+      REQUIRE(custom_result.forest.size() == 1);
+
+      auto& tree = custom_result.forest.front();
+      CHECK(tree->user_data.empty());
+
+      auto stored = visit(*tree, [](auto& node) {
+         using node_t = std::decay_t<decltype(node)>;
+         if constexpr (std::is_same_v<node_t, number_node<std::string>>) {
+            node.user_data = std::string{"token:"} + node.value.text;
+         } else {
+            node.user_data = "non-leaf";
+         }
+         return node.user_data;
+      });
+
+      CHECK(stored == "token:42");
+      CHECK(tree->user_data == "token:42");
+
+      auto cloned = tree->clone();
+      REQUIRE(cloned != nullptr);
+      CHECK(cloned->user_data == "token:42");
    }
 
    TEST_CASE("choice-only inheritance grammars stay visitable and printable") {

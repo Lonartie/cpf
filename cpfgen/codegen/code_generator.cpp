@@ -296,13 +296,54 @@ namespace cpf {
          return result;
       }
 
-      [[nodiscard]] std::string render_field_declaration(const field_info& field) {
-         return field.type + " " + field.name + ";";
+      [[nodiscard]] std::string templated_rule_type(std::string_view rule_name, std::string_view user_data = "UserData") {
+         return std::string{rule_name} + "_node<" + std::string{user_data} + ">";
       }
 
-      [[nodiscard]] std::string render_child_clone_expression(const field_info& field) {
-         return "copy->" + field.name + " = " + field.name + " ? " + field.name + "->clone() : nullptr;";
+      [[nodiscard]] std::string render_variant_cpp_type(const std::vector<variant_alternative_info>& alternatives,
+                                                        std::string_view user_data = "UserData") {
+         std::string rendered = "std::variant<";
+         for (std::size_t i = 0; i < alternatives.size(); ++i) {
+            if (i != 0) {
+               rendered += ", ";
+            }
+            rendered += alternatives[i].node ? "std::unique_ptr<" + templated_rule_type(alternatives[i].resolved_rule, user_data) + ">"
+                                             : alternatives[i].type;
+         }
+         rendered += ">";
+         return rendered;
       }
+
+      [[nodiscard]] std::string render_variant_alternative_cpp_type(const variant_alternative_info& alternative,
+                                                                    std::string_view user_data = "UserData") {
+         if (alternative.node) {
+            return "std::unique_ptr<" + templated_rule_type(alternative.resolved_rule, user_data) + ">";
+         }
+         return alternative.type;
+      }
+
+      [[nodiscard]] std::string render_field_cpp_type(const field_info& field, std::string_view user_data = "UserData") {
+         switch (field.shape) {
+            case field_shape::terminal_scalar:
+               return "cpf::matched_string";
+            case field_shape::terminal_optional:
+               return "std::optional<cpf::matched_string>";
+            case field_shape::terminal_vector:
+               return "std::vector<cpf::matched_string>";
+            case field_shape::node_scalar:
+               return "std::unique_ptr<" + templated_rule_type(field.resolved_rule, user_data) + ">";
+            case field_shape::node_vector:
+               return "std::vector<std::unique_ptr<" + templated_rule_type(field.resolved_rule, user_data) + ">>";
+            case field_shape::capture_variant:
+               return render_variant_cpp_type(field.variant_alternatives, user_data);
+         }
+         return {};
+      }
+
+      [[nodiscard]] std::string render_field_declaration(const field_info& field, std::string_view user_data = "UserData") {
+         return render_field_cpp_type(field, user_data) + " " + field.name + ";";
+      }
+
 
       [[nodiscard]] bool is_node_field(const field_info& field) {
          return field.shape == field_shape::node_scalar || field.shape == field_shape::node_vector;
@@ -685,6 +726,13 @@ namespace cpf {
          return text;
       }
 
+      [[nodiscard]] auto user_data_base_for(const class_info& info) -> std::string {
+         if (!info.base.empty()) {
+            return templated_rule_type(info.base);
+         }
+         return "cpf::node_with_user_data<UserData>";
+      }
+
       generated_code generate_code_impl(const grammar& grammar, const std::string& base_name,
                                         std::string_view code_namespace) {
          validate_cpp_namespace(code_namespace);
@@ -852,6 +900,10 @@ namespace cpf {
                                                  "' more than once in definition " +
                                                  std::to_string(production.definition)};
                      }
+                     if (symbol.label == "user_data") {
+                        throw std::runtime_error{"Rule '" + rule.identifier +
+                                                 "' cannot expose label 'user_data' because generated node templates reserve that member name"};
+                     }
 
                      auto field = field_from_symbol(symbol, synthetic_capture_fields);
                      merge_field(std::move(field));
@@ -861,6 +913,7 @@ namespace cpf {
                for (const auto& field_name: field_order) {
                   info.fields.push_back(resolved_fields.at(field_name));
                }
+
             }
             classes.emplace(info.name, std::move(info));
          }
@@ -1105,6 +1158,7 @@ namespace cpf {
          line(header, 0);
          line(header, 0, "#include <array>");
          line(header, 0, "#include <cpflib>");
+         line(header, 0, "#include <iomanip>");
          line(header, 0, "#include <iosfwd>");
          line(header, 0, "#include <memory>");
          line(header, 0, "#include <optional>");
@@ -1127,18 +1181,20 @@ namespace cpf {
             if (rule.synthetic) {
                continue;
             }
-            line(header, 0, "struct " + rule.identifier + ";");
+            line(header, 0, "template<typename UserData = void> struct " + rule.identifier + "_node;");
+            line(header, 0, "using " + rule.identifier + " = " + rule.identifier + "_node<>;");
          }
          line(header, 0);
 
          for (const auto& rule_name: ordered_public_rule_names) {
             const auto& info = classes.at(rule_name);
             const auto definition_count = rules_by_name.at(info.name)->productions.size();
-            auto base = info.base.empty() ? "cpf::node" : info.base;
+            auto base = user_data_base_for(info);
             emit_rule_complexity_comment(header, info, analyze_class_complexity(info),
                                          recursive_public_rule_set.contains(info.name));
-            line(header, 0, "struct " + info.name + " : " + base + " {");
-            line(header, 1, "using parse_result = cpf::parse_result<" + info.name + ">;");
+            line(header, 0, "template<typename UserData>");
+            line(header, 0, "struct " + info.name + "_node : " + base + " {");
+            line(header, 1, "using parse_result = cpf::parse_result<" + templated_rule_type(info.name) + ">;");
             line(header, 1,
                  "static constexpr std::size_t RuleId = " + std::to_string(rule_indices.at(info.name)) + ";");
             line(header, 1, "static constexpr std::size_t ProductionCount = " + std::to_string(definition_count) + ";");
@@ -1148,35 +1204,37 @@ namespace cpf {
             if (!info.fields.empty()) {
                line(header, 0);
             }
-            line(header, 1, "~" + info.name + "() override = default;");
+            line(header, 1, "~" + info.name + "_node() override = default;");
             line(header, 1,
                  "static parse_result parse(std::string_view input, const cpf::parse_options& options = {});");
             line(header, 1, "static cpf::recognize_result recognize(std::string_view input);");
             line(header, 1, "static auto complexity(std::size_t production_index) -> const cpf::complexity&;");
             line(header, 1, "static auto complexity_inputs(std::size_t production_index) -> std::span<const std::string_view>;");
             line(header, 1, "static auto recompute_complexity(std::size_t production_index) -> const cpf::complexity&;");
-            line(header, 1, "std::size_t rule_id() const override;");
-            line(header, 1, "std::unique_ptr<" + info.name + "> clone() const;");
+            line(header, 1, "std::size_t rule_id() const override { return RuleId; }");
+            line(header, 1, "std::unique_ptr<" + templated_rule_type(info.name) + "> clone() const;");
             if (!info.base_rule) {
                line(header, 0);
                line(header, 1, "protected:");
                line(header, 1, "   std::unique_ptr<cpf::node> clone_node() const override;");
             }
             line(header, 0, "};");
-            line(header, 0, "std::ostream& operator<<(std::ostream& os, const " + info.name + "& node);");
+            line(header, 0, "template<typename UserData>");
+            line(header, 0, "std::ostream& operator<<(std::ostream& os, const " + templated_rule_type(info.name) + "& node);");
             for (const auto& field: info.fields) {
                if (field.shape != field_shape::capture_variant) {
                   continue;
                }
                line(header, 0);
-               line(header, 0, "template<typename Visitor>");
-               line(header, 0, "auto visit_" + field.name + "(const " + info.name + "& node, Visitor&& visitor) {");
+               line(header, 0, "template<typename UserData, typename Visitor>");
+               line(header, 0,
+                    "auto visit_" + field.name + "(const " + templated_rule_type(info.name) + "& node, Visitor&& visitor) {");
                line(header, 1, "return std::visit([&](const auto& value) -> decltype(auto) {");
                line(header, 2, "using value_t = std::decay_t<decltype(value)>;");
                auto first_alternative = true;
                for (const auto& alternative: field.variant_alternatives) {
                   line(header, 2, std::string{first_alternative ? "if constexpr" : "else if constexpr"} +
-                                        " (std::is_same_v<value_t, " + alternative.type + ">) {");
+                                        " (std::is_same_v<value_t, " + render_variant_alternative_cpp_type(alternative) + ">) {");
                   if (alternative.node) {
                      line(header, 3, "if (!value) {");
                      line(header, 4, "throw std::runtime_error{\"Generated variant field '" + field.name + "' is null\"};");
@@ -1194,14 +1252,15 @@ namespace cpf {
                line(header, 1, "}, node." + field.name + ");");
                line(header, 0, "}");
                line(header, 0);
-               line(header, 0, "template<typename Visitor>");
-               line(header, 0, "auto visit_" + field.name + "(" + info.name + "& node, Visitor&& visitor) {");
+               line(header, 0, "template<typename UserData, typename Visitor>");
+               line(header, 0,
+                    "auto visit_" + field.name + "(" + templated_rule_type(info.name) + "& node, Visitor&& visitor) {");
                line(header, 1, "return std::visit([&](auto& value) -> decltype(auto) {");
                line(header, 2, "using value_t = std::decay_t<decltype(value)>;");
                first_alternative = true;
                for (const auto& alternative: field.variant_alternatives) {
                   line(header, 2, std::string{first_alternative ? "if constexpr" : "else if constexpr"} +
-                                        " (std::is_same_v<value_t, " + alternative.type + ">) {");
+                                        " (std::is_same_v<value_t, " + render_variant_alternative_cpp_type(alternative) + ">) {");
                   if (alternative.node) {
                      line(header, 3, "if (!value) {");
                      line(header, 4, "throw std::runtime_error{\"Generated variant field '" + field.name + "' is null\"};");
@@ -1229,24 +1288,26 @@ namespace cpf {
             const auto& info = classes.at(rule.identifier);
             if (info.base_rule) {
                auto concrete_descendants = collect_concrete_descendants(info.name, children, classes);
-               line(header, 0, "template<typename Visitor>");
-               line(header, 0, "auto visit(const " + info.name + "& node, Visitor&& visitor) {");
+               line(header, 0, "template<typename UserData, typename Visitor>");
+               line(header, 0,
+                    "auto visit(const " + templated_rule_type(info.name) + "& node, Visitor&& visitor) {");
                line(header, 1, "switch (node.rule_id()) {");
                for (const auto& descendant: concrete_descendants) {
-                  line(header, 2, "case " + descendant + "::RuleId:");
-                  line(header, 3, "return visit(static_cast<const " + descendant + "&>(node), visitor);");
+                  line(header, 2, "case " + descendant + "_node<UserData>::RuleId:");
+                  line(header, 3,
+                       "return visit(static_cast<const " + templated_rule_type(descendant) + "&>(node), visitor);");
                }
                line(header, 2, "default:");
                line(header, 3, "throw std::bad_cast{};");
                line(header, 1, "}");
                line(header, 0, "}");
                line(header, 0);
-               line(header, 0, "template<typename Visitor>");
-               line(header, 0, "auto visit(" + info.name + "& node, Visitor&& visitor) {");
+               line(header, 0, "template<typename UserData, typename Visitor>");
+               line(header, 0, "auto visit(" + templated_rule_type(info.name) + "& node, Visitor&& visitor) {");
                line(header, 1, "switch (node.rule_id()) {");
                for (const auto& descendant: concrete_descendants) {
-                  line(header, 2, "case " + descendant + "::RuleId:");
-                  line(header, 3, "return visit(static_cast<" + descendant + "&>(node), visitor);");
+                  line(header, 2, "case " + descendant + "_node<UserData>::RuleId:");
+                  line(header, 3, "return visit(static_cast<" + templated_rule_type(descendant) + "&>(node), visitor);");
                }
                line(header, 2, "default:");
                line(header, 3, "throw std::bad_cast{};");
@@ -1254,12 +1315,14 @@ namespace cpf {
                line(header, 0, "}");
                line(header, 0);
 
-               line(header, 0, "template<typename Visitor>");
-               line(header, 0, "void visit_recursive(const " + info.name + "& node, Visitor&& visitor) {");
+               line(header, 0, "template<typename UserData, typename Visitor>");
+               line(header, 0,
+                    "void visit_recursive(const " + templated_rule_type(info.name) + "& node, Visitor&& visitor) {");
                line(header, 1, "switch (node.rule_id()) {");
                for (const auto& descendant: concrete_descendants) {
-                  line(header, 2, "case " + descendant + "::RuleId:");
-                  line(header, 3, "visit_recursive(static_cast<const " + descendant + "&>(node), visitor);");
+                  line(header, 2, "case " + descendant + "_node<UserData>::RuleId:");
+                  line(header, 3,
+                       "visit_recursive(static_cast<const " + templated_rule_type(descendant) + "&>(node), visitor);");
                   line(header, 3, "return;");
                }
                line(header, 2, "default:");
@@ -1267,12 +1330,14 @@ namespace cpf {
                line(header, 1, "}");
                line(header, 0, "}");
                line(header, 0);
-               line(header, 0, "template<typename Visitor>");
-               line(header, 0, "void visit_recursive(" + info.name + "& node, Visitor&& visitor) {");
+               line(header, 0, "template<typename UserData, typename Visitor>");
+               line(header, 0,
+                    "void visit_recursive(" + templated_rule_type(info.name) + "& node, Visitor&& visitor) {");
                line(header, 1, "switch (node.rule_id()) {");
                for (const auto& descendant: concrete_descendants) {
-                  line(header, 2, "case " + descendant + "::RuleId:");
-                  line(header, 3, "visit_recursive(static_cast<" + descendant + "&>(node), visitor);");
+                  line(header, 2, "case " + descendant + "_node<UserData>::RuleId:");
+                  line(header, 3,
+                       "visit_recursive(static_cast<" + templated_rule_type(descendant) + "&>(node), visitor);");
                   line(header, 3, "return;");
                }
                line(header, 2, "default:");
@@ -1283,18 +1348,19 @@ namespace cpf {
                continue;
             }
 
-            line(header, 0, "template<typename Visitor>");
-            line(header, 0, "auto visit(const " + info.name + "& node, Visitor&& visitor) {");
+            line(header, 0, "template<typename UserData, typename Visitor>");
+            line(header, 0, "auto visit(const " + templated_rule_type(info.name) + "& node, Visitor&& visitor) {");
             line(header, 1, "return std::forward<Visitor>(visitor)(node);");
             line(header, 0, "}");
             line(header, 0);
-            line(header, 0, "template<typename Visitor>");
-            line(header, 0, "auto visit(" + info.name + "& node, Visitor&& visitor) {");
+            line(header, 0, "template<typename UserData, typename Visitor>");
+            line(header, 0, "auto visit(" + templated_rule_type(info.name) + "& node, Visitor&& visitor) {");
             line(header, 1, "return std::forward<Visitor>(visitor)(node);");
             line(header, 0, "}");
             line(header, 0);
-            line(header, 0, "template<typename Visitor>");
-            line(header, 0, "void visit_recursive(const " + info.name + "& node, Visitor&& visitor) {");
+            line(header, 0, "template<typename UserData, typename Visitor>");
+            line(header, 0,
+                 "void visit_recursive(const " + templated_rule_type(info.name) + "& node, Visitor&& visitor) {");
             line(header, 1, "std::forward<Visitor>(visitor)(node);");
             for (const auto& field: info.fields) {
                if (field.shape == field_shape::node_scalar) {
@@ -1314,7 +1380,7 @@ namespace cpf {
                      if (!alternative.node) {
                         continue;
                      }
-                     line(header, 2, "if constexpr (std::is_same_v<value_t, " + alternative.type + ">) {");
+                     line(header, 2, "if constexpr (std::is_same_v<value_t, " + render_variant_alternative_cpp_type(alternative) + ">) {");
                      line(header, 3, "if (value) {");
                      line(header, 4, "visit_recursive(*value, visitor);");
                      line(header, 3, "}");
@@ -1325,8 +1391,9 @@ namespace cpf {
             }
             line(header, 0, "}");
             line(header, 0);
-            line(header, 0, "template<typename Visitor>");
-            line(header, 0, "void visit_recursive(" + info.name + "& node, Visitor&& visitor) {");
+            line(header, 0, "template<typename UserData, typename Visitor>");
+            line(header, 0,
+                 "void visit_recursive(" + templated_rule_type(info.name) + "& node, Visitor&& visitor) {");
             line(header, 1, "std::forward<Visitor>(visitor)(node);");
             for (const auto& field: info.fields) {
                if (field.shape == field_shape::node_scalar) {
@@ -1346,7 +1413,7 @@ namespace cpf {
                      if (!alternative.node) {
                         continue;
                      }
-                     line(header, 2, "if constexpr (std::is_same_v<value_t, " + alternative.type + ">) {");
+                     line(header, 2, "if constexpr (std::is_same_v<value_t, " + render_variant_alternative_cpp_type(alternative) + ">) {");
                      line(header, 3, "if (value) {");
                      line(header, 4, "visit_recursive(*value, visitor);");
                      line(header, 3, "}");
@@ -1354,6 +1421,286 @@ namespace cpf {
                   }
                   line(header, 1, "}, node." + field.name + ");");
                }
+            }
+            line(header, 0, "}");
+            line(header, 0);
+         }
+
+         line(header, 0, "namespace detail {");
+         line(header, 0);
+         for (const auto& rule: grammar.rules) {
+            if (rule.synthetic) {
+               continue;
+            }
+            const auto& info = classes.at(rule.identifier);
+            line(header, 0,
+                 "auto parse_" + info.name + "_default(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<" +
+                       info.name + ">;");
+            line(header, 0,
+                 "auto recognize_" + info.name + "_default(std::string_view input) -> cpf::recognize_result;");
+            line(header, 0,
+                 "auto complexity_inputs_" + info.name + "_default(std::size_t production_index) -> std::span<const std::string_view>;");
+            line(header, 0,
+                 "auto complexity_" + info.name + "_default(std::size_t production_index) -> const cpf::complexity&;");
+            line(header, 0,
+                 "auto recompute_complexity_" + info.name + "_default(std::size_t production_index) -> const cpf::complexity&;");
+            line(header, 0, "template<typename TargetUserData, typename SourceUserData>");
+            line(header, 0,
+                 "auto rebind_" + info.name + "_node(const " + info.name + "_node<SourceUserData>& node) -> std::unique_ptr<" +
+                       templated_rule_type(info.name, "TargetUserData") + ">;");
+            line(header, 0);
+         }
+
+         for (const auto& rule: grammar.rules) {
+            if (rule.synthetic) {
+               continue;
+            }
+            const auto& info = classes.at(rule.identifier);
+            line(header, 0, "template<typename TargetUserData, typename SourceUserData>");
+            line(header, 0,
+                 "auto rebind_" + info.name + "_node(const " + info.name + "_node<SourceUserData>& node) -> std::unique_ptr<" +
+                       templated_rule_type(info.name, "TargetUserData") + "> {");
+            if (info.base_rule) {
+               auto concrete_descendants = collect_concrete_descendants(info.name, children, classes);
+               line(header, 1, "switch (node.rule_id()) {");
+               for (const auto& descendant: concrete_descendants) {
+                  line(header, 2, "case " + descendant + "_node<SourceUserData>::RuleId:");
+                  line(header, 3,
+                       "return rebind_" + descendant + "_node<TargetUserData>(static_cast<const " +
+                             templated_rule_type(descendant, "SourceUserData") + "&>(node));");
+               }
+               line(header, 2, "default:");
+               line(header, 3, "throw std::bad_cast{};");
+               line(header, 1, "}");
+            } else {
+               line(header, 1, "auto copy = std::make_unique<" + templated_rule_type(info.name, "TargetUserData") + ">();");
+               line(header, 1, "copy->production_index = node.production_index;");
+               line(header, 1, "copy->range = node.range;");
+               line(header, 1, "for (const auto& damage : node.damage()) {");
+               line(header, 2, "cpf::detail::add_damage(*copy, damage);");
+               line(header, 1, "}");
+               line(header, 1,
+                    "if constexpr (!std::is_void_v<TargetUserData> && !std::is_void_v<SourceUserData>) {");
+               line(header, 2, "copy->user_data = node.user_data;");
+               line(header, 1, "}");
+               for (const auto& field: info.fields) {
+                  if (field.shape == field_shape::node_scalar) {
+                     line(header, 1,
+                          "copy->" + field.name + " = node." + field.name + " ? detail::rebind_" + field.resolved_rule +
+                                "_node<TargetUserData>(*node." + field.name + ") : nullptr;");
+                  } else if (field.shape == field_shape::node_vector) {
+                     line(header, 1, "for (const auto& child : node." + field.name + ") {");
+                     line(header, 2,
+                          "copy->" + field.name + ".push_back(child ? detail::rebind_" + field.resolved_rule +
+                                "_node<TargetUserData>(*child) : nullptr);");
+                     line(header, 1, "}");
+                  } else if (field.shape == field_shape::capture_variant) {
+                     line(header, 1,
+                          "copy->" + field.name + " = std::visit([](const auto& value) -> " +
+                                render_field_cpp_type(field, "TargetUserData") + " {");
+                     line(header, 2, "using value_t = std::decay_t<decltype(value)>;");
+                     auto first_alternative = true;
+                     for (const auto& alternative: field.variant_alternatives) {
+                        line(header, 2, std::string{first_alternative ? "if constexpr" : "else if constexpr"} +
+                                              " (std::is_same_v<value_t, " +
+                                              render_variant_alternative_cpp_type(alternative, "SourceUserData") + ">) {");
+                        if (alternative.node) {
+                           line(header, 3,
+                                "auto rebound_value = value ? detail::rebind_" + alternative.resolved_rule +
+                                      "_node<TargetUserData>(*value) : nullptr;");
+                           line(header, 3,
+                                "return " + render_field_cpp_type(field, "TargetUserData") + "{std::in_place_type<" +
+                                      render_variant_alternative_cpp_type(alternative, "TargetUserData") + ">, std::move(rebound_value)};");
+                        } else {
+                           line(header, 3,
+                                "return " + render_field_cpp_type(field, "TargetUserData") + "{std::in_place_type<" +
+                                      render_variant_alternative_cpp_type(alternative, "TargetUserData") + ">, value};");
+                        }
+                        line(header, 2, "}");
+                        first_alternative = false;
+                     }
+                     if (first_alternative) {
+                        line(header, 2, "throw std::runtime_error{\"Unknown labeled group variant alternative\"};");
+                     } else {
+                        line(header, 2, "else {");
+                        line(header, 3, "throw std::runtime_error{\"Unknown labeled group variant alternative\"};");
+                        line(header, 2, "}");
+                     }
+                     line(header, 1, "}, node." + field.name + ");");
+                  } else {
+                     line(header, 1, "copy->" + field.name + " = node." + field.name + ";");
+                  }
+               }
+               line(header, 1, "return copy;");
+            }
+            line(header, 0, "}");
+            line(header, 0);
+         }
+         line(header, 0, "} // namespace detail");
+         line(header, 0);
+
+         for (const auto& rule: grammar.rules) {
+            if (rule.synthetic) {
+               continue;
+            }
+            const auto& info = classes.at(rule.identifier);
+            line(header, 0, "template<typename UserData>");
+            line(header, 0,
+                 "auto " + templated_rule_type(info.name) +
+                       "::parse(std::string_view input, const cpf::parse_options& options) -> parse_result {");
+            line(header, 1, "if constexpr (std::is_void_v<UserData>) {");
+            line(header, 2, "return detail::parse_" + info.name + "_default(input, options);");
+            line(header, 1, "}");
+            line(header, 1, "auto default_result = detail::parse_" + info.name + "_default(input, options);");
+            line(header, 1, "parse_result converted;");
+            line(header, 1, "converted.status = default_result.status;");
+            line(header, 1, "converted.success = default_result.success;");
+            line(header, 1, "converted.partial = default_result.partial;");
+            line(header, 1, "converted.error = std::move(default_result.error);");
+            line(header, 1, "if (!options.build_ast) {");
+            line(header, 2, "return converted;");
+            line(header, 1, "}");
+            line(header, 1, "converted.forest.reserve(default_result.forest.size());");
+            line(header, 1, "for (const auto& tree : default_result.forest) {");
+            line(header, 2, "auto materialized = tree.get();");
+            line(header, 2,
+                 "converted.forest.emplace_back(materialized != nullptr ? detail::rebind_" + info.name +
+                       "_node<UserData>(*materialized) : nullptr);");
+            line(header, 1, "}");
+            line(header, 1, "return converted;");
+            line(header, 0, "}");
+            line(header, 0);
+            line(header, 0, "template<typename UserData>");
+            line(header, 0,
+                 "auto " + templated_rule_type(info.name) +
+                       "::recognize(std::string_view input) -> cpf::recognize_result {");
+            line(header, 1, "return detail::recognize_" + info.name + "_default(input);");
+            line(header, 0, "}");
+            line(header, 0);
+            line(header, 0, "template<typename UserData>");
+            line(header, 0,
+                 "auto " + templated_rule_type(info.name) +
+                       "::complexity(std::size_t production_index) -> const cpf::complexity& {");
+            line(header, 1, "return detail::complexity_" + info.name + "_default(production_index);");
+            line(header, 0, "}");
+            line(header, 0);
+            line(header, 0, "template<typename UserData>");
+            line(header, 0,
+                 "auto " + templated_rule_type(info.name) +
+                       "::complexity_inputs(std::size_t production_index) -> std::span<const std::string_view> {");
+            line(header, 1, "return detail::complexity_inputs_" + info.name + "_default(production_index);");
+            line(header, 0, "}");
+            line(header, 0);
+            line(header, 0, "template<typename UserData>");
+            line(header, 0,
+                 "auto " + templated_rule_type(info.name) +
+                       "::recompute_complexity(std::size_t production_index) -> const cpf::complexity& {");
+            line(header, 1, "return detail::recompute_complexity_" + info.name + "_default(production_index);");
+            line(header, 0, "}");
+            line(header, 0);
+            line(header, 0, "template<typename UserData>");
+            line(header, 0,
+                 "auto " + templated_rule_type(info.name) + "::clone() const -> std::unique_ptr<" +
+                       templated_rule_type(info.name) + "> {");
+            line(header, 1, "return detail::rebind_" + info.name + "_node<UserData>(*this);");
+            line(header, 0, "}");
+            line(header, 0);
+            if (!info.base_rule) {
+               line(header, 0, "template<typename UserData>");
+               line(header, 0,
+                    "std::unique_ptr<cpf::node> " + templated_rule_type(info.name) + "::clone_node() const {");
+               line(header, 1, "return detail::rebind_" + info.name + "_node<UserData>(*this);");
+               line(header, 0, "}");
+               line(header, 0);
+            }
+            line(header, 0, "template<typename UserData>");
+            line(header, 0,
+                 "std::ostream& operator<<(std::ostream& os, const " + templated_rule_type(info.name) + "& node) {");
+            if (info.base_rule) {
+               auto concrete_descendants = collect_concrete_descendants(info.name, children, classes);
+               line(header, 1, "switch (node.rule_id()) {");
+               for (const auto& descendant: concrete_descendants) {
+                  line(header, 2, "case " + descendant + "_node<UserData>::RuleId:");
+                  line(header, 3,
+                       "return os << static_cast<const " + templated_rule_type(descendant) + "&>(node);");
+               }
+               line(header, 2, "default:");
+               line(header, 3, "return os << \"" + info.name + "()\";");
+               line(header, 1, "}");
+            } else {
+               if (info.fields.empty()) {
+                  line(header, 1, "(void)node;");
+               }
+               line(header, 1, "os << \"" + info.name + "(\";");
+               for (std::size_t i = 0; i < info.fields.size(); ++i) {
+                  const auto& field = info.fields[i];
+                  if (i != 0) {
+                     line(header, 1, "os << \", \";");
+                  }
+                  line(header, 1, "os << \"" + field.name + "=\";");
+                  if (field.shape == field_shape::node_scalar) {
+                     line(header, 1, "if (node." + field.name + ") {");
+                     line(header, 2, "os << *node." + field.name + ";");
+                     line(header, 1, "} else {");
+                     line(header, 2, "os << \"null\";");
+                     line(header, 1, "}");
+                  } else if (field.shape == field_shape::node_vector) {
+                     line(header, 1, "os << \"[\";");
+                     line(header, 1,
+                          "for (std::size_t item_index = 0; item_index < node." + field.name + ".size(); ++item_index) {");
+                     line(header, 2, "if (item_index != 0) {");
+                     line(header, 3, "os << \", \";");
+                     line(header, 2, "}");
+                     line(header, 2, "if (node." + field.name + "[item_index]) {");
+                     line(header, 3, "os << *node." + field.name + "[item_index];");
+                     line(header, 2, "} else {");
+                     line(header, 3, "os << \"null\";");
+                     line(header, 2, "}");
+                     line(header, 1, "}");
+                     line(header, 1, "os << \"]\";");
+                  } else if (field.shape == field_shape::capture_variant) {
+                     line(header, 1, "std::visit([&](const auto& value) {");
+                     line(header, 2, "using value_t = std::decay_t<decltype(value)>;");
+                     auto first_alternative = true;
+                     for (const auto& alternative: field.variant_alternatives) {
+                        line(header, 2, std::string{first_alternative ? "if constexpr" : "else if constexpr"} +
+                                              " (std::is_same_v<value_t, " +
+                                              render_variant_alternative_cpp_type(alternative) + ">) {");
+                        if (alternative.node) {
+                           line(header, 3, "if (value) {");
+                           line(header, 4, "os << *value;");
+                           line(header, 3, "} else {");
+                           line(header, 4, "os << \"null\";");
+                           line(header, 3, "}");
+                        } else {
+                           line(header, 3, "os << std::quoted(value.text);");
+                        }
+                        line(header, 2, "}");
+                        first_alternative = false;
+                     }
+                     line(header, 1, "}, node." + field.name + ");");
+                  } else if (field.shape == field_shape::terminal_optional) {
+                     line(header, 1, "if (node." + field.name + ") {");
+                     line(header, 2, "os << std::quoted(node." + field.name + "->text);");
+                     line(header, 1, "} else {");
+                     line(header, 2, "os << \"null\";");
+                     line(header, 1, "}");
+                  } else if (field.shape == field_shape::terminal_vector) {
+                     line(header, 1, "os << \"[\";");
+                     line(header, 1,
+                          "for (std::size_t item_index = 0; item_index < node." + field.name + ".size(); ++item_index) {");
+                     line(header, 2, "if (item_index != 0) {");
+                     line(header, 3, "os << \", \";");
+                     line(header, 2, "}");
+                     line(header, 2, "os << std::quoted(node." + field.name + "[item_index].text);");
+                     line(header, 1, "}");
+                     line(header, 1, "os << \"]\";");
+                  } else {
+                     line(header, 1, "os << std::quoted(node." + field.name + ".text);");
+                  }
+               }
+               line(header, 1, "os << \")\";");
+               line(header, 1, "return os;");
             }
             line(header, 0, "}");
             line(header, 0);
@@ -2332,17 +2679,17 @@ namespace cpf {
             const auto& info = classes.at(rule.identifier);
             const auto definition_count = rule.productions.size();
             line(source, 0,
-                 info.name + "::parse_result " + info.name +
-                       "::parse(std::string_view input, const cpf::parse_options& options) {");
+                 "auto detail::parse_" + info.name + "_default(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<" +
+                       info.name + "> {");
             if (info.base_rule) {
-               line(source, 1, "parse_result result;");
+               line(source, 1, "auto result = cpf::parse_result<" + info.name + ">{ };");
                line(source, 1, "cpf::parse_error best_error;");
                line(source, 1, "auto have_error = false;");
                line(source, 1, "auto successful_children = std::size_t{0};");
                line(source, 1, "auto have_partial_success = false;");
                for (const auto& child: families.at(info.name).direct_children) {
                   line(source, 1, "{");
-                  line(source, 2, "auto child_result = " + child + "::parse(input, options);");
+                  line(source, 2, "auto child_result = detail::parse_" + child + "_default(input, options);");
                   line(source, 2, "if (child_result.success) {");
                   line(source, 3, "if (!child_result.partial) {");
                   line(source, 4, "if (have_partial_success) {");
@@ -2439,14 +2786,15 @@ namespace cpf {
             }
             line(source, 0, "}");
             line(source, 0);
-            line(source, 0, "cpf::recognize_result " + info.name + "::recognize(std::string_view input) {");
+            line(source, 0,
+                 "auto detail::recognize_" + info.name + "_default(std::string_view input) -> cpf::recognize_result {");
             if (info.base_rule) {
                line(source, 1, "cpf::recognize_result result;");
                line(source, 1, "cpf::parse_error best_error;");
                line(source, 1, "auto have_error = false;");
                for (const auto& child: families.at(info.name).direct_children) {
                   line(source, 1, "{");
-                  line(source, 2, "auto child_result = " + child + "::recognize(input);");
+                  line(source, 2, "auto child_result = detail::recognize_" + child + "_default(input);");
                   line(source, 2, "if (child_result.success) {");
                   line(source, 3, "result.success = true;");
                   line(source, 3, "result.error.reset();");
@@ -2482,8 +2830,8 @@ namespace cpf {
             line(source, 0, "} // namespace");
             line(source, 0);
             line(source, 0,
-                 "auto " + info.name +
-                       "::complexity_inputs(std::size_t production_index) -> std::span<const std::string_view> {");
+                 "auto detail::complexity_inputs_" + info.name +
+                       "_default(std::size_t production_index) -> std::span<const std::string_view> {");
             line(source, 1, "switch (production_index) {");
             for (std::size_t definition = 0; definition < definition_count; ++definition) {
                line(source, 2, "case " + std::to_string(definition) + ":");
@@ -2500,7 +2848,8 @@ namespace cpf {
             line(source, 0, "}");
             line(source, 0);
             line(source, 0,
-                 "auto " + info.name + "::complexity(std::size_t production_index) -> const cpf::complexity& {");
+                 "auto detail::complexity_" + info.name +
+                       "_default(std::size_t production_index) -> const cpf::complexity& {");
             line(source, 1, "switch (production_index) {");
             for (std::size_t definition = 0; definition < definition_count; ++definition) {
                line(source, 2, "case " + std::to_string(definition) + ":");
@@ -2514,7 +2863,8 @@ namespace cpf {
             line(source, 0, "}");
             line(source, 0);
             line(source, 0,
-                 "auto " + info.name + "::recompute_complexity(std::size_t production_index) -> const cpf::complexity& {");
+                 "auto detail::recompute_complexity_" + info.name +
+                       "_default(std::size_t production_index) -> const cpf::complexity& {");
             line(source, 1, "switch (production_index) {");
             for (std::size_t definition = 0; definition < definition_count; ++definition) {
                line(source, 2, "case " + std::to_string(definition) + ":");
@@ -2532,159 +2882,6 @@ namespace cpf {
             line(source, 1, "}");
             line(source, 0, "}");
             line(source, 0);
-            line(source, 0, "std::size_t " + info.name + "::rule_id() const {");
-            line(source, 1, "return RuleId;");
-            line(source, 0, "}");
-            line(source, 0);
-            line(source, 0, "std::unique_ptr<" + info.name + "> " + info.name + "::clone() const {");
-            line(source, 1, "auto cloned = this->clone_node();");
-            line(source, 1,
-                 "return release_built_node_as<" + info.name + ">(std::move(cloned));");
-            line(source, 0, "}");
-            line(source, 0);
-
-            if (!info.base_rule) {
-               line(source, 0, "std::unique_ptr<cpf::node> " + info.name + "::clone_node() const {");
-               line(source, 1, "auto copy = std::make_unique<" + info.name + ">();");
-               line(source, 1, "copy->production_index = production_index;");
-               line(source, 1, "copy->range = range;");
-               line(source, 1, "copy_damage_to(*copy);");
-               for (const auto& field: info.fields) {
-                  if (field.shape == field_shape::node_scalar) {
-                     line(source, 1, render_child_clone_expression(field));
-                  } else if (field.shape == field_shape::node_vector) {
-                     line(source, 1, "for (const auto& child : " + field.name + ") {");
-                     line(source, 2, "copy->" + field.name + ".push_back(child ? child->clone() : nullptr);");
-                     line(source, 1, "}");
-                  } else if (field.shape == field_shape::capture_variant) {
-                     line(source, 1,
-                          "copy->" + field.name + " = std::visit([](const auto& value) -> " + field.type + " {");
-                     line(source, 2, "using value_t = std::decay_t<decltype(value)>;");
-                     auto first_alternative = true;
-                     for (const auto& alternative: field.variant_alternatives) {
-                        line(source, 2, std::string{first_alternative ? "if constexpr" : "else if constexpr"} +
-                                              " (std::is_same_v<value_t, " + alternative.type + ">) {");
-                        if (alternative.node) {
-                           line(source, 3, "auto cloned_value = value ? value->clone() : " + alternative.type + "{};");
-                           line(source, 3,
-                                "return " + field.type + "{std::in_place_type<" + alternative.type +
-                                      ">, std::move(cloned_value)};");
-                        } else {
-                           line(source, 3,
-                                "return " + field.type + "{std::in_place_type<" + alternative.type + ">, value};");
-                        }
-                        line(source, 2, "}");
-                        first_alternative = false;
-                     }
-                     if (first_alternative) {
-                        line(source, 2, "throw std::runtime_error{\"Unknown labeled group variant alternative\"};");
-                     } else {
-                        line(source, 2, "else {");
-                        line(source, 3, "throw std::runtime_error{\"Unknown labeled group variant alternative\"};");
-                        line(source, 2, "}");
-                     }
-                     line(source, 1, "}, " + field.name + ");");
-                  } else {
-                     line(source, 1, "copy->" + field.name + " = " + field.name + ";");
-                  }
-               }
-               line(source, 1, "return copy;");
-               line(source, 0, "}");
-               line(source, 0);
-            }
-         }
-
-         for (const auto& rule: grammar.rules) {
-            if (rule.synthetic) {
-               continue;
-            }
-            const auto& info = classes.at(rule.identifier);
-            line(source, 0, "std::ostream& operator<<(std::ostream& os, const " + info.name + "& node) {");
-            if (info.base_rule) {
-               auto concrete_descendants = collect_concrete_descendants(info.name, children, classes);
-               line(source, 1, "switch (node.rule_id()) {");
-               for (const auto& descendant: concrete_descendants) {
-                  line(source, 2, "case " + descendant + "::RuleId:");
-                  line(source, 3, "return os << static_cast<const " + descendant + "&>(node);");
-               }
-               line(source, 2, "default:");
-               line(source, 3, "return os << \"" + info.name + "()\";");
-               line(source, 1, "}");
-            } else {
-               if (info.fields.empty()) {
-                  line(source, 1, "(void)node;");
-               }
-               line(source, 1, "os << \"" + info.name + "(\";");
-               for (std::size_t i = 0; i < info.fields.size(); ++i) {
-                  const auto& field = info.fields[i];
-                  if (i != 0) {
-                     line(source, 1, "os << \", \";");
-                  }
-                  line(source, 1, "os << \"" + field.name + "=\";");
-                  if (field.shape == field_shape::node_scalar) {
-                     line(source, 1, "if (node." + field.name + ") {");
-                     line(source, 2, "os << *node." + field.name + ";");
-                     line(source, 1, "} else {");
-                     line(source, 2, "os << \"null\";");
-                     line(source, 1, "}");
-                  } else if (field.shape == field_shape::node_vector) {
-                     line(source, 1, "os << \"[\";");
-                     line(source, 1,
-                          "for (std::size_t item_index = 0; item_index < node." + field.name +
-                                ".size(); ++item_index) {");
-                     line(source, 2, "if (item_index != 0) {");
-                     line(source, 3, "os << \", \";");
-                     line(source, 2, "}");
-                     line(source, 2, "if (node." + field.name + "[item_index]) {");
-                     line(source, 3, "os << *node." + field.name + "[item_index];");
-                     line(source, 2, "} else {");
-                     line(source, 3, "os << \"null\";");
-                     line(source, 2, "}");
-                     line(source, 1, "}");
-                     line(source, 1, "os << \"]\";");
-                  } else if (field.shape == field_shape::capture_variant) {
-                     line(source, 1, "std::visit([&](const auto& value) {");
-                     line(source, 2, "using value_t = std::decay_t<decltype(value)>;");
-                     for (const auto& alternative: field.variant_alternatives) {
-                        line(source, 2, "if constexpr (std::is_same_v<value_t, " + alternative.type + ">) {");
-                        if (alternative.node) {
-                           line(source, 3, "if (value) {");
-                           line(source, 4, "os << *value;");
-                           line(source, 3, "} else {");
-                           line(source, 4, "os << \"null\";");
-                           line(source, 3, "}");
-                        } else {
-                           line(source, 3, "os << cpf::detail::quoted(value.text);");
-                        }
-                        line(source, 2, "}");
-                     }
-                     line(source, 1, "}, node." + field.name + ");");
-                  } else if (field.shape == field_shape::terminal_optional) {
-                     line(source, 1, "if (node." + field.name + ") {");
-                     line(source, 2, "os << cpf::detail::quoted(node." + field.name + "->text);");
-                     line(source, 1, "} else {");
-                     line(source, 2, "os << \"null\";");
-                     line(source, 1, "}");
-                  } else if (field.shape == field_shape::terminal_vector) {
-                     line(source, 1, "os << \"[\";");
-                     line(source, 1,
-                          "for (std::size_t item_index = 0; item_index < node." + field.name +
-                                ".size(); ++item_index) {");
-                     line(source, 2, "if (item_index != 0) {");
-                     line(source, 3, "os << \", \";");
-                     line(source, 2, "}");
-                     line(source, 2, "os << cpf::detail::quoted(node." + field.name + "[item_index].text);");
-                     line(source, 1, "}");
-                     line(source, 1, "os << \"]\";");
-                  } else {
-                     line(source, 1, "os << cpf::detail::quoted(node." + field.name + ".text);");
-                  }
-               }
-               line(source, 1, "os << \")\";");
-               line(source, 1, "return os;");
-            }
-            line(source, 0, "}");
-            line(source, 0);
          }
 
          if (!code_namespace.empty()) {
@@ -2697,7 +2894,6 @@ namespace cpf {
    } // namespace
 
    generated_code generate_code(const grammar& grammar, const std::string& base_name, std::string_view code_namespace) {
-      auto code = generate_code_impl(grammar, base_name, code_namespace);
-      return code;
+      return generate_code_impl(grammar, base_name, code_namespace);
    }
 } // namespace cpf

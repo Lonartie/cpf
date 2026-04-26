@@ -175,18 +175,12 @@ namespace cpf {
          }
       }
 
-      auto complexity_models() -> const std::vector<complexity_model>& {
-         static const auto models = [] {
-            std::vector<complexity_model> generated_models;
-            generated_models.reserve(512);
-            for (const auto& family: dominant_complexity_families()) {
-               std::vector<std::size_t> selected_lower_ranks;
-               append_complexity_model(generated_models, family, selected_lower_ranks);
-               append_complexity_model_combinations(generated_models, family, 0, selected_lower_ranks,
-                                                    detail::complexity_max_terms_per_model - 1);
-            }
-            return generated_models;
-         }();
+      auto refined_complexity_models(const dominant_complexity_family& family) -> std::vector<complexity_model> {
+         std::vector<complexity_model> models;
+         std::vector<std::size_t> selected_lower_ranks;
+         append_complexity_model(models, family, selected_lower_ranks);
+         append_complexity_model_combinations(models, family, 0, selected_lower_ranks,
+                                              detail::complexity_max_terms_per_model - 1);
          return models;
       }
 
@@ -411,6 +405,51 @@ namespace cpf {
          fit.score = score;
          return fit;
       }
+
+      auto select_best_fit(const std::vector<complexity_model>& models, const std::vector<double>& arg_sizes,
+                           const std::vector<double>& sample_times_s) -> std::optional<complexity_fit> {
+         std::optional<complexity_fit> best_fit;
+         for (const auto& model: models) {
+            auto fit = fit_complexity_model(model, arg_sizes, sample_times_s);
+            if (!fit.has_value()) {
+               continue;
+            }
+
+            if (!best_fit.has_value() || fit->score < best_fit->score ||
+                (std::abs(fit->score - best_fit->score) <= 1e-9 &&
+                 fit->coefficients.size() < best_fit->coefficients.size())) {
+               best_fit = std::move(fit);
+            }
+         }
+
+         return best_fit;
+      }
+
+      auto select_dominant_family(const std::vector<double>& arg_sizes, const std::vector<double>& sample_times_s)
+            -> const dominant_complexity_family& {
+         const dominant_complexity_family* best_family = nullptr;
+         std::optional<complexity_fit> best_fit;
+         for (const auto& family: dominant_complexity_families()) {
+            auto family_models = refined_complexity_models(family);
+            auto family_fit = select_best_fit(family_models, arg_sizes, sample_times_s);
+            if (!family_fit.has_value()) {
+               continue;
+            }
+
+            if (!best_fit.has_value() || family_fit->score < best_fit->score ||
+                (std::abs(family_fit->score - best_fit->score) <= 1e-9 &&
+                 family_fit->coefficients.size() < best_fit->coefficients.size())) {
+               best_family = &family;
+               best_fit = std::move(family_fit);
+            }
+         }
+
+         if (best_family == nullptr) {
+            throw std::runtime_error{"cpf::complexity_of failed to classify the dominant complexity family"};
+         }
+
+         return *best_family;
+      }
    } // namespace
 
    auto complexity::estimate(double input_size) const -> double { return estimator ? estimator(input_size) : 0.0; }
@@ -425,35 +464,26 @@ namespace cpf {
             -> complexity {
          validate_complexity_inputs(arg_sizes, sample_times_s);
 
-         std::optional<complexity_fit> best_fit;
-         for (const auto& model: complexity_models()) {
-            auto fit = fit_complexity_model(model, arg_sizes, sample_times_s);
-            if (!fit.has_value()) {
-               continue;
-            }
-
-            if (!best_fit.has_value() || fit->score < best_fit->score ||
-                (std::abs(fit->score - best_fit->score) <= 1e-9 &&
-                 fit->coefficients.size() < best_fit->coefficients.size())) {
-               best_fit = std::move(fit);
-            }
+         const auto& family = select_dominant_family(arg_sizes, sample_times_s);
+         auto refined_models = refined_complexity_models(family);
+         auto second_pass_fit = select_best_fit(refined_models, arg_sizes, sample_times_s);
+         if (!second_pass_fit.has_value() || second_pass_fit->model == nullptr) {
+            throw std::runtime_error{"cpf::complexity_of failed to fit the selected complexity family"};
          }
 
-         if (!best_fit.has_value() || best_fit->model == nullptr) {
-            throw std::runtime_error{"cpf::complexity_of failed to fit any supported complexity model"};
-         }
+         auto selected_model = *second_pass_fit->model;
 
          complexity result;
-         result.big_o = std::string{best_fit->model->big_o};
-         result.expression = render_expression(*best_fit->model, best_fit->coefficients);
+         result.big_o = std::string{selected_model.big_o};
+         result.expression = render_expression(selected_model, second_pass_fit->coefficients);
          result.summary = result.big_o + ": time(s) ~= " + result.expression + " (relative RMSE " +
-                          format_percentage(best_fit->relative_root_mean_square_error) + "%)";
-         result.relative_root_mean_square_error = best_fit->relative_root_mean_square_error;
-         result.coefficients = best_fit->coefficients;
+                          format_percentage(second_pass_fit->relative_root_mean_square_error) + "%)";
+         result.relative_root_mean_square_error = second_pass_fit->relative_root_mean_square_error;
+         result.coefficients = second_pass_fit->coefficients;
          result.arg_sizes = std::move(arg_sizes);
          result.sample_times_s = std::move(sample_times_s);
 
-         auto model = *best_fit->model;
+         auto model = std::move(selected_model);
          auto coefficients = result.coefficients;
          result.estimator = [model = std::move(model), coefficients = std::move(coefficients)](double input_size) {
             return evaluate_model(model, coefficients, input_size);
