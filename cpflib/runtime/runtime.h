@@ -15,9 +15,11 @@
 namespace cpf {
    namespace detail {
       struct parse_node;
+      struct grammar_spec;
       using parse_node_ptr = std::shared_ptr<const parse_node>;
 
-      [[nodiscard]] auto repaired_input_of(const parse_node_ptr& tree, std::string_view input)
+      [[nodiscard]] auto repaired_input_of(const parse_node_ptr& tree, std::string_view input,
+                                           const grammar_spec& grammar)
             -> std::optional<std::string>;
 
       template<typename T> [[nodiscard]] auto opaque_tree_of(const parse_tree<T>& tree) -> std::shared_ptr<const void> {
@@ -71,6 +73,9 @@ namespace cpf {
          const std::size_t* rule_production_indices = nullptr;
          const std::size_t* rule_production_offsets = nullptr;
          const std::size_t* rule_production_counts = nullptr;
+         const parser_symbol* skip_symbols = nullptr;
+         std::size_t skip_symbol_count = 0;
+         bool use_default_whitespace = true;
       };
 
       using parse_value = std::variant<matched_string, parse_node_ptr>;

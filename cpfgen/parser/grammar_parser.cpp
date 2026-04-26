@@ -34,23 +34,34 @@ namespace cpf {
             grammar result;
             skip_ignored();
             while (!eof()) {
-               auto parsed_rules = parse_rule();
-               auto& parsed_rule = parsed_rules.main_rule;
-               if (auto* existing = result.find_rule(parsed_rule.identifier); existing != nullptr) {
-                  const auto definition_offset = existing->productions.size();
-                  for (auto& production: parsed_rule.productions) {
-                     production.definition += definition_offset;
+               if (take("@")) {
+                  parse_directive(result);
+               } else if (starts_with_keyword("skip")) {
+                  auto parsed_skip_rule = parse_skip_rule();
+                  if (result.find_skip_rule(parsed_skip_rule.identifier) != nullptr) {
+                     throw error("Duplicate skip rule '" + parsed_skip_rule.identifier + "'");
                   }
-                  existing->productions.insert(existing->productions.end(), parsed_rule.productions.begin(),
-                                               parsed_rule.productions.end());
+                  result.skip_rules.push_back(std::move(parsed_skip_rule));
                } else {
-                  result.rules.push_back(std::move(parsed_rule));
-               }
-               for (auto& synthetic_rule: parsed_rules.synthetic_rules) {
-                  result.rules.push_back(std::move(synthetic_rule));
+                  auto parsed_rules = parse_rule();
+                  auto& parsed_rule = parsed_rules.main_rule;
+                  if (auto* existing = result.find_rule(parsed_rule.identifier); existing != nullptr) {
+                     const auto definition_offset = existing->productions.size();
+                     for (auto& production: parsed_rule.productions) {
+                        production.definition += definition_offset;
+                     }
+                     existing->productions.insert(existing->productions.end(), parsed_rule.productions.begin(),
+                                                  parsed_rule.productions.end());
+                  } else {
+                     result.rules.push_back(std::move(parsed_rule));
+                  }
+                  for (auto& synthetic_rule: parsed_rules.synthetic_rules) {
+                     result.rules.push_back(std::move(synthetic_rule));
+                  }
                }
                skip_ignored();
             }
+            validate_trivia(result);
             return result;
          }
 
@@ -120,6 +131,28 @@ namespace cpf {
                advance();
             }
             return true;
+         }
+
+         [[nodiscard]] bool starts_with_keyword(std::string_view keyword) {
+            skip_ignored();
+            if (text_.substr(position_, keyword.size()) != keyword) {
+               return false;
+            }
+            const auto end = position_ + keyword.size();
+            if (end >= text_.size()) {
+               return true;
+            }
+            const auto next = static_cast<unsigned char>(text_[end]);
+            return std::isalnum(next) == 0 && text_[end] != '_';
+         }
+
+         void expect_keyword(std::string_view keyword) {
+            if (!starts_with_keyword(keyword)) {
+               throw error("Expected keyword '" + std::string{keyword} + "'");
+            }
+            for (std::size_t index = 0; index < keyword.size(); ++index) {
+               advance();
+            }
          }
 
          void expect(std::string_view token) {
@@ -514,6 +547,62 @@ namespace cpf {
             expect(";");
             current_rule_.clear();
             return parsed_rules;
+         }
+
+         skip_rule parse_skip_rule() {
+            expect_keyword("skip");
+            skip_rule parsed_rule;
+            parsed_rule.line = line_;
+            parsed_rule.identifier = parse_identifier();
+            current_rule_ = parsed_rule.identifier;
+            expect("->");
+            auto parsed_symbol = parse_symbol();
+            if (parsed_symbol.kind == symbol_kind::reference) {
+               throw error("Skip rules must lower directly to a literal or regex terminal");
+            }
+            if (parsed_symbol.has_label()) {
+               throw error("Skip rules cannot expose labeled captures");
+            }
+            if (!parsed_symbol.is_single()) {
+               throw error("Skip rules cannot be quantified");
+            }
+            parsed_rule.kind = parsed_symbol.kind;
+            parsed_rule.value = parsed_symbol.value;
+            expect(";");
+            current_rule_.clear();
+            return parsed_rule;
+         }
+
+         void parse_directive(grammar& result) {
+            auto directive = parse_identifier();
+            if (directive == "whitespace") {
+               auto line = line_;
+               auto identifier = parse_identifier();
+               if (result.whitespace_rule.has_value()) {
+                  throw error("Duplicate @whitespace directive");
+               }
+               result.whitespace_rule = std::move(identifier);
+               result.whitespace_rule_line = line;
+               expect(";");
+               return;
+            }
+            if (directive == "namespace") {
+               throw error("Grammar directive '@namespace' is not supported; use the existing code-generation namespace options");
+            }
+            throw error("Unknown grammar directive '@" + directive + "'");
+         }
+
+         void validate_trivia(const grammar& parsed_grammar) const {
+            if (!parsed_grammar.whitespace_rule.has_value()) {
+               return;
+            }
+            if (parsed_grammar.find_skip_rule(*parsed_grammar.whitespace_rule) != nullptr) {
+               return;
+            }
+            throw std::runtime_error{"Grammar parse error at line " +
+                                     std::to_string(parsed_grammar.whitespace_rule_line) +
+                                     ", column 1: @whitespace references unknown skip rule '" +
+                                     *parsed_grammar.whitespace_rule + "'"};
          }
 
          std::string_view text_;

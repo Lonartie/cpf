@@ -560,6 +560,15 @@ TEST_SUITE("generated.runtime") {
          CHECK(stream.str().find("number(") != std::string::npos);
       }
 
+      SUBCASE("custom whitespace and comment skip rules work inside the generated namespace") {
+         auto result = namespaced::expression::parse("\n 7 // keep skipping trivia\n + 8 \n");
+
+         REQUIRE(result.success);
+         REQUIRE(result.forest.size() == 1);
+         CHECK(namespaced::visit(*result.forest.front(), namespaced_calculator_visitor{}) == 15);
+         CHECK(evaluate_namespaced("\t4 // comment\n + 5") == 9);
+      }
+
       SUBCASE("recursive visiting stays reachable through the generated namespace") {
          auto result = namespaced::expression::parse("7 + 8");
 

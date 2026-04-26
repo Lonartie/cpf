@@ -14,43 +14,6 @@ The suggestions below are based on the currently documented surface in [`wiki/gr
 
 ## Recommended near-term extensions
 
-### 1. Skip rules and trivia declarations
-
-**Problem**
-
-The current grammar surface has no first-class way to describe whitespace or comments that should be ignored globally. That makes realistic grammars noisy and forces authors to model spacing manually or bake it into every regex.
-
-**Proposed syntax**
-
-```text
-@namespace my_language::model
-@whitespace -> r'[ \t\r\n]+';
-skip line_comment -> r'//[^\n]*';
-skip block_comment -> r'/\*([^*]|\*+[^*/])*\*/';
-```
-
-**Example**
-
-```text
-@whitespace -> r'[ \t\r\n]+';
-skip comment -> r'//[^\n]*';
-
-expression -> addition | multiplication | number;
-addition -> expression:left '+':op expression:right;
-multiplication -> expression:left '*':op expression:right;
-number -> r'[0-9]+':value;
-```
-
-**Why it helps**
-
-- removes a large amount of grammar noise
-- makes grammars feel usable for programming languages instead of only tightly packed formats
-- aligns with the roadmap item about lexer-like conveniences
-
-**Notes**
-
-A later refinement could distinguish `skip` trivia from `preserve` trivia for a future CST mode.
-
 ### 2. Named token declarations with parser/lexer separation
 
 **Problem**
@@ -91,6 +54,12 @@ number -> integer:value;
 **Notes**
 
 A useful rule would be: tokens can be referenced exactly like rules, but generate terminal captures rather than AST nodes.
+
+**Author Notes**
+
+Even better would be if the parser generator automatically identifies tha a rule is purely lexical (only references 
+tokens and other lexical rules) and treats it as a token, without requiring a separate `token` declaration. This would 
+allow authors to write grammars in a more natural way, without having to switch between parser and lexer modes.
 
 ### 3. Operator precedence blocks and table syntax
 

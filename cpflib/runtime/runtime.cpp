@@ -113,10 +113,80 @@ namespace cpf {
             return stream.str();
          }
 
-         void skip_space(std::string_view input, std::size_t& position) {
+         void skip_default_space(std::string_view input, std::size_t& position) {
             while (position < input.size() && std::isspace(static_cast<unsigned char>(input[position])) != 0) {
                ++position;
             }
+         }
+
+         auto try_literal_at(std::string_view input, std::size_t& position, std::string_view literal,
+                             std::string* capture = nullptr) -> bool {
+            if (input.substr(position, literal.size()) != literal) {
+               return false;
+            }
+            position += literal.size();
+            if (capture != nullptr) {
+               *capture = std::string{literal};
+            }
+            return true;
+         }
+
+         auto try_regex_at(std::string_view input, std::size_t& position, const std::regex& regex,
+                           std::string* capture = nullptr) -> bool {
+            auto begin = input.data() + position;
+            auto end = input.data() + input.size();
+            std::match_results<const char*> match;
+            if (!std::regex_search(begin, end, match, regex, std::regex_constants::match_continuous) ||
+                match.length() == 0) {
+               return false;
+            }
+            position += static_cast<std::size_t>(match.length());
+            if (capture != nullptr) {
+               *capture = match.str();
+            }
+            return true;
+         }
+
+         auto try_skip_symbol(std::string_view input, std::size_t& position, const parser_symbol& symbol) -> bool {
+            if (symbol.kind == parser_symbol_kind::literal) {
+               return try_literal_at(input, position, symbol.text);
+            }
+            if (symbol.kind == parser_symbol_kind::regex) {
+               if (symbol.compiled_regex != nullptr) {
+                  return try_regex_at(input, position, *symbol.compiled_regex);
+               }
+               const auto regex = std::regex{std::string{symbol.text}};
+               return try_regex_at(input, position, regex);
+            }
+            return false;
+         }
+
+         void skip_trivia(std::string_view input, std::size_t& position, const grammar_spec& grammar) {
+            while (position < input.size()) {
+               auto original = position;
+               if (grammar.use_default_whitespace) {
+                  skip_default_space(input, position);
+               }
+               auto matched_skip = false;
+               for (std::size_t index = 0; index < grammar.skip_symbol_count; ++index) {
+                  auto next = position;
+                  if (!try_skip_symbol(input, next, grammar.skip_symbols[index]) || next == position) {
+                     continue;
+                  }
+                  position = next;
+                  matched_skip = true;
+                  break;
+               }
+               if (!matched_skip && position == original) {
+                  break;
+               }
+            }
+         }
+
+         auto skip_trivia_position(std::string_view input, std::size_t position, const grammar_spec& grammar)
+               -> std::size_t {
+            skip_trivia(input, position, grammar);
+            return position;
          }
 
          auto make_node_damage(std::string_view input, std::size_t begin_offset, std::size_t end_offset,
@@ -142,40 +212,6 @@ namespace cpf {
                                     std::move(detail), std::move(message));
          }
 
-         auto starts_with(std::string_view input, std::size_t position, std::string_view literal) -> bool {
-            return input.substr(position, literal.size()) == literal;
-         }
-
-         auto try_literal(std::string_view input, std::size_t& position, std::string_view literal,
-                          std::string* capture = nullptr) -> bool {
-            auto checkpoint = position;
-            skip_space(input, checkpoint);
-            if (!starts_with(input, checkpoint, literal)) {
-               return false;
-            }
-            position = checkpoint + literal.size();
-            if (capture != nullptr) {
-               *capture = std::string{literal};
-            }
-            return true;
-         }
-
-         auto try_regex(std::string_view input, std::size_t& position, const std::regex& regex,
-                        std::string* capture = nullptr) -> bool {
-            auto checkpoint = position;
-            skip_space(input, checkpoint);
-            auto begin = input.data() + checkpoint;
-            auto end = input.data() + input.size();
-            std::match_results<const char*> match;
-            if (!std::regex_search(begin, end, match, regex, std::regex_constants::match_continuous)) {
-               return false;
-            }
-            position = checkpoint + static_cast<std::size_t>(match.length());
-            if (capture != nullptr) {
-               *capture = match.str();
-            }
-            return true;
-         }
 
          struct chart_item_key {
             std::size_t production = 0;
@@ -291,11 +327,6 @@ namespace cpf {
             }
          }
 
-         auto skip_space_position(std::string_view input, std::size_t position) -> std::size_t {
-            skip_space(input, position);
-            return position;
-         }
-
          auto describe_expected_symbol(const parser_symbol& symbol) -> std::string {
             if (symbol.kind == parser_symbol_kind::literal) {
                return quoted(symbol.text);
@@ -312,15 +343,15 @@ namespace cpf {
                    std::to_string(production.symbol_count) + ")";
          }
 
-         auto match_terminal(std::string_view input, std::size_t position, const parser_symbol& symbol)
+         auto match_terminal(std::string_view input, std::size_t position, const parser_symbol& symbol,
+                             const grammar_spec& grammar)
                -> std::optional<terminal_match> {
             terminal_match match;
-            auto token_start = position;
-            skip_space(input, token_start);
-            auto current = position;
+            auto token_start = skip_trivia_position(input, position, grammar);
+            auto current = token_start;
             if (symbol.kind == parser_symbol_kind::literal) {
                std::string matched_text;
-               if (!try_literal(input, current, symbol.text, &matched_text)) {
+               if (!try_literal_at(input, current, symbol.text, &matched_text)) {
                   return std::nullopt;
                }
                match.end = current;
@@ -331,12 +362,12 @@ namespace cpf {
             if (symbol.kind == parser_symbol_kind::regex) {
                std::string matched_text;
                if (symbol.compiled_regex != nullptr) {
-                  if (!try_regex(input, current, *symbol.compiled_regex, &matched_text)) {
+                  if (!try_regex_at(input, current, *symbol.compiled_regex, &matched_text)) {
                      return std::nullopt;
                   }
                } else {
                   const std::regex regex{std::string{symbol.text}};
-                  if (!try_regex(input, current, regex, &matched_text)) {
+                  if (!try_regex_at(input, current, regex, &matched_text)) {
                      return std::nullopt;
                   }
                }
@@ -348,32 +379,33 @@ namespace cpf {
             return std::nullopt;
          }
 
-         auto virtual_terminal(std::string_view input, std::size_t position, std::string_view text) -> matched_string {
+         auto virtual_terminal(std::string_view input, std::size_t position, std::string_view text,
+                               const grammar_spec& grammar) -> matched_string {
             matched_string match;
             match.text = std::string{text};
-            auto token_start = skip_space_position(input, position);
+            auto token_start = skip_trivia_position(input, position, grammar);
             match.range = make_source_range(input, token_start, token_start);
             return match;
          }
 
-         auto ignored_symbol_end(std::string_view input, std::size_t position, std::size_t limit) -> std::size_t {
-            auto current = skip_space_position(input, position);
+         auto ignored_symbol_end(std::string_view input, std::size_t position, std::size_t limit,
+                                 const grammar_spec& grammar) -> std::size_t {
+            auto current = skip_trivia_position(input, position, grammar);
             if (current >= limit) {
                return current;
             }
             return std::min(limit, current + 1);
          }
 
-         auto whitespace_only(std::string_view input, std::size_t begin, std::size_t end) -> bool {
+         auto trivia_only(std::string_view input, std::size_t begin, std::size_t end, const grammar_spec& grammar)
+               -> bool {
             if (begin > end || end > input.size()) {
                return false;
             }
-            for (auto index = begin; index < end; ++index) {
-               if (std::isspace(static_cast<unsigned char>(input[index])) == 0) {
-                  return false;
-               }
-            }
-            return true;
+            auto prefix = input.substr(0, end);
+            auto current = begin;
+            skip_trivia(prefix, current, grammar);
+            return current == end;
          }
 
          auto append_consumed_interval(repaired_input_plan& plan, std::size_t begin, std::size_t end,
@@ -443,7 +475,8 @@ namespace cpf {
             return true;
          }
 
-         auto validate_repaired_input_plan(std::string_view input, const repaired_input_plan& plan) -> bool {
+         auto validate_repaired_input_plan(std::string_view input, const repaired_input_plan& plan,
+                                           const grammar_spec& grammar) -> bool {
             auto consumed = plan.consumed;
             std::sort(consumed.begin(), consumed.end(), [](const auto& lhs, const auto& rhs) {
                if (lhs.begin != rhs.begin) {
@@ -454,12 +487,12 @@ namespace cpf {
 
             auto cursor = std::size_t{0};
             for (const auto& interval: consumed) {
-               if (interval.begin < cursor || !whitespace_only(input, cursor, interval.begin)) {
+               if (interval.begin < cursor || !trivia_only(input, cursor, interval.begin, grammar)) {
                   return false;
                }
                cursor = interval.end;
             }
-            if (!whitespace_only(input, cursor, input.size())) {
+            if (!trivia_only(input, cursor, input.size(), grammar)) {
                return false;
             }
 
@@ -594,9 +627,9 @@ namespace cpf {
                      continue;
                   }
 
-                  auto match = match_terminal(input, position, next);
+                  auto match = match_terminal(input, position, next, grammar);
                   if (!match.has_value()) {
-                     tracker.record(skip_space_position(input, position), describe_expected_symbol(next),
+                     tracker.record(skip_trivia_position(input, position, grammar), describe_expected_symbol(next),
                                     describe_progress(production, dot));
                      continue;
                   }
@@ -625,7 +658,7 @@ namespace cpf {
 
             auto success = false;
             for (std::size_t end = 0; end < prepared.chart.size(); ++end) {
-               if (skip_space_position(input, end) != input.size()) {
+               if (skip_trivia_position(input, end, grammar) != input.size()) {
                   continue;
                }
                if (prepared.completed_rules.contains(span_key{root_rule, 0, end})) {
@@ -638,7 +671,7 @@ namespace cpf {
                for (std::size_t end = 0; end < prepared.chart.size(); ++end) {
                   auto completed = prepared.completed_rules.find(span_key{root_rule, 0, end});
                   if (completed != prepared.completed_rules.end()) {
-                     auto failure_position = skip_space_position(input, end);
+                     auto failure_position = skip_trivia_position(input, end, grammar);
                      tracker.record(failure_position, "<end of input>",
                                     "after completing rule '" +
                                           std::string{grammar.productions[completed->second.front()].lhs_name} + "'");
@@ -650,11 +683,11 @@ namespace cpf {
             return prepared;
          }
 
-         auto collect_root_ends(std::string_view input, const prepared_parse& prepared, std::size_t root_rule,
-                                bool require_full_input) -> std::vector<std::size_t> {
+         auto collect_root_ends(std::string_view input, const prepared_parse& prepared, const grammar_spec& grammar,
+                                std::size_t root_rule, bool require_full_input) -> std::vector<std::size_t> {
             auto ends = std::vector<std::size_t>{};
             for (std::size_t end = 0; end < prepared.chart.size(); ++end) {
-               if (require_full_input && skip_space_position(input, end) != input.size()) {
+                if (require_full_input && skip_trivia_position(input, end, grammar) != input.size()) {
                   continue;
                }
                if (prepared.completed_rules.contains(span_key{root_rule, 0, end})) {
@@ -750,7 +783,7 @@ namespace cpf {
                      return;
                   }
 
-                  auto match = match_terminal(input, position, symbol);
+                   auto match = match_terminal(input, position, symbol, grammar);
                   if (!match.has_value() || match->end > end) {
                      return;
                   }
@@ -883,13 +916,13 @@ namespace cpf {
                auto candidates = std::vector<recovered_suffix_candidate>{};
 
                if (symbol_index == production.symbol_count) {
-                  auto trailing = skip_space_position(input, position);
+                   auto trailing = skip_trivia_position(input, position, grammar);
                   if (trailing == end) {
                      keep_recovered_suffix_candidate(candidates,
                                                      recovered_suffix_candidate{{}, {}, 0, "", false});
                   }
                   if (trailing < end) {
-                     const auto ignored_end = ignored_symbol_end(input, position, end);
+                      const auto ignored_end = ignored_symbol_end(input, position, end, grammar);
                      if (ignored_end > trailing) {
                         const auto& suffixes = build_step(production_index, symbol_index, ignored_end, end);
                         for (const auto& suffix: suffixes) {
@@ -909,9 +942,9 @@ namespace cpf {
                   return step_cache.emplace(key, std::move(candidates)).first->second;
                }
 
-               auto skipped = skip_space_position(input, position);
+               auto skipped = skip_trivia_position(input, position, grammar);
                if (skipped < end) {
-                  const auto ignored_end = ignored_symbol_end(input, position, end);
+                  const auto ignored_end = ignored_symbol_end(input, position, end, grammar);
                   if (ignored_end > skipped) {
                      const auto& suffixes = build_step(production_index, symbol_index, ignored_end, end);
                      for (const auto& suffix: suffixes) {
@@ -952,7 +985,7 @@ namespace cpf {
                      }
                   }
                } else {
-                  if (auto match = match_terminal(input, position, symbol); match.has_value() && match->end <= end) {
+                  if (auto match = match_terminal(input, position, symbol, grammar); match.has_value() && match->end <= end) {
                      const auto& suffixes = build_step(production_index, symbol_index + 1, match->end, end);
                      for (const auto& suffix: suffixes) {
                         auto candidate = recovered_suffix_candidate{suffix.children,
@@ -969,7 +1002,7 @@ namespace cpf {
                   if (symbol.kind == parser_symbol_kind::literal) {
                      const auto& suffixes = build_step(production_index, symbol_index + 1, position, end);
                      for (const auto& suffix: suffixes) {
-                        auto inserted = virtual_terminal(input, position, symbol.text);
+                        auto inserted = virtual_terminal(input, position, symbol.text, grammar);
                         auto damage = make_inserted_damage(input, inserted.range.begin.offset, quoted(symbol.text));
                         auto candidate = recovered_suffix_candidate{suffix.children,
                                                                     suffix.damage,
@@ -1125,12 +1158,13 @@ namespace cpf {
          return error;
       }
 
-      auto repaired_input_of(const parse_node_ptr& tree, std::string_view input) -> std::optional<std::string> {
+      auto repaired_input_of(const parse_node_ptr& tree, std::string_view input, const grammar_spec& grammar)
+            -> std::optional<std::string> {
          auto plan = repaired_input_plan{};
          if (!collect_repaired_input_plan(tree, input, plan) || !plan.saw_damage) {
             return std::nullopt;
          }
-         if (!validate_repaired_input_plan(input, plan)) {
+          if (!validate_repaired_input_plan(input, plan, grammar)) {
             return std::nullopt;
          }
          return apply_repaired_input_plan(input, std::move(plan));
@@ -1145,7 +1179,7 @@ namespace cpf {
             return result;
          }
 
-         auto full_ends = collect_root_ends(input, prepared, root_rule, true);
+         auto full_ends = collect_root_ends(input, prepared, grammar, root_rule, true);
          if (!full_ends.empty()) {
             parse_forest result;
             result.success = true;
@@ -1174,7 +1208,7 @@ namespace cpf {
          }
 
          for (std::size_t end = 0; end < prepared.chart.size(); ++end) {
-            if (skip_space_position(input, end) != input.size()) {
+            if (skip_trivia_position(input, end, grammar) != input.size()) {
                continue;
             }
 
@@ -1199,7 +1233,7 @@ namespace cpf {
 
          std::size_t accepted_end = input.size() + 1;
          for (std::size_t end = 0; end < prepared.chart.size(); ++end) {
-            if (skip_space_position(input, end) != input.size()) {
+            if (skip_trivia_position(input, end, grammar) != input.size()) {
                continue;
             }
             if (prepared.completed_rules.contains(span_key{root_rule, 0, end})) {
@@ -1288,7 +1322,7 @@ namespace cpf {
                   return total;
                }
 
-               auto match = match_terminal(input, position, symbol);
+               auto match = match_terminal(input, position, symbol, grammar);
                if (!match.has_value() || match->end > end) {
                   return 0;
                }

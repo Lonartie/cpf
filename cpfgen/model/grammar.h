@@ -78,9 +78,30 @@ namespace cpf {
       [[nodiscard]] bool is_choice_rule() const;
    };
 
+   /// @brief Parsed skip-rule declaration used for ignorable input trivia.
+   struct skip_rule {
+      std::string identifier;
+      symbol_kind kind = symbol_kind::regex;
+      std::string value;
+      std::size_t line = 1;
+   };
+
    /// @brief Parsed grammar document.
    struct grammar {
+      std::optional<std::string> whitespace_rule;
+      std::size_t whitespace_rule_line = 1;
+      std::vector<skip_rule> skip_rules;
       std::vector<rule> rules;
+
+      /// @brief Looks up a skip rule by identifier.
+      /// @param identifier Skip-rule name to search for.
+      /// @return Pointer to the matching skip rule or nullptr when absent.
+      [[nodiscard]] const skip_rule* find_skip_rule(std::string_view identifier) const;
+
+      /// @brief Looks up a mutable skip rule by identifier.
+      /// @param identifier Skip-rule name to search for.
+      /// @return Pointer to the matching skip rule or nullptr when absent.
+      [[nodiscard]] skip_rule* find_skip_rule(std::string_view identifier);
 
       /// @brief Looks up a rule by identifier.
       /// @param identifier Rule name to search for.

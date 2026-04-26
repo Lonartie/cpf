@@ -66,6 +66,28 @@ namespace cpf {
             target.rules.push_back(std::move(incoming_rule));
          }
 
+         static void merge_skip_rule(grammar& target, skip_rule incoming_rule) {
+            if (target.find_skip_rule(incoming_rule.identifier) != nullptr) {
+               throw std::runtime_error{"Duplicate skip rule '" + incoming_rule.identifier + "' across loaded grammars"};
+            }
+            target.skip_rules.push_back(std::move(incoming_rule));
+         }
+
+         static void merge_whitespace_rule(grammar& target, const grammar& incoming_grammar) {
+            if (!incoming_grammar.whitespace_rule.has_value()) {
+               return;
+            }
+            if (!target.whitespace_rule.has_value()) {
+               target.whitespace_rule = incoming_grammar.whitespace_rule;
+               target.whitespace_rule_line = incoming_grammar.whitespace_rule_line;
+               return;
+            }
+            if (*target.whitespace_rule != *incoming_grammar.whitespace_rule) {
+               throw std::runtime_error{"Conflicting @whitespace directives across loaded grammars ('" +
+                                        *target.whitespace_rule + "' vs '" + *incoming_grammar.whitespace_rule + "')"};
+            }
+         }
+
          static void rename_synthetic_rules(grammar& parsed_grammar, std::string_view prefix) {
             std::unordered_map<std::string, std::string> renamed_rules;
             for (auto& rule: parsed_grammar.rules) {
@@ -109,6 +131,8 @@ namespace cpf {
             auto text = read_text_file(path);
             auto position = std::size_t{0};
             auto line = std::size_t{1};
+            auto parse_buffer = std::string{};
+            auto parse_buffer_line = std::size_t{1};
             while (true) {
                skip_ignored(text, position, line);
                if (position >= text.size()) {
@@ -123,10 +147,22 @@ namespace cpf {
 
                auto rule_line = line;
                auto rule_text = extract_rule(text, position, line, path);
-               auto prefixed_text = std::string(rule_line > 0 ? rule_line - 1 : 0, '\n') + rule_text;
+               while (parse_buffer_line < rule_line) {
+                  parse_buffer += '\n';
+                  ++parse_buffer_line;
+               }
+               parse_buffer += rule_text;
+               parse_buffer_line += static_cast<std::size_t>(std::count(rule_text.begin(), rule_text.end(), '\n'));
+            }
+
+            if (!parse_buffer.empty()) {
                try {
-                  auto parsed = parse_grammar(prefixed_text);
+                  auto parsed = parse_grammar(parse_buffer);
                   rename_synthetic_rules(parsed, "$cpf_import_" + std::to_string(synthetic_prefix_counter_++) + "_");
+                  merge_whitespace_rule(result.parsed_grammar, parsed);
+                  for (auto& skip_rule: parsed.skip_rules) {
+                     merge_skip_rule(result.parsed_grammar, std::move(skip_rule));
+                  }
                   for (auto& rule: parsed.rules) {
                      merge_rule(result.parsed_grammar, std::move(rule));
                   }

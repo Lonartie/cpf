@@ -1,3 +1,7 @@
+@whitespace ws;
+skip ws -> r'[ \t\r\n]+';
+skip line_comment -> r'//[^\n]*';
+
 expression -> addition | number;
 addition -> expression:left '+':op expression:right;
 number -> r'[0-9]+':value;

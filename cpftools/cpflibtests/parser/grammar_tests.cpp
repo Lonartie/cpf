@@ -228,6 +228,33 @@ TEST_SUITE("cpflib.grammar_parser") {
       CHECK(fixed.exact_repetition == 3);
    }
 
+   TEST_CASE("skip declarations and @whitespace are preserved separately from grammar rules") {
+      auto grammar = cpf::parse_grammar(R"(
+         @whitespace ws;
+         skip ws -> r'[ \t\r\n]+';
+         skip line_comment -> r'//[^\n]*';
+
+         expr -> number;
+         number -> r'[0-9]+':value;
+      )");
+
+      REQUIRE(grammar.whitespace_rule.has_value());
+      CHECK(*grammar.whitespace_rule == "ws");
+      REQUIRE(grammar.skip_rules.size() == 2);
+      REQUIRE(grammar.rules.size() == 2);
+
+      auto* whitespace = grammar.find_skip_rule("ws");
+      auto* comment = grammar.find_skip_rule("line_comment");
+      REQUIRE(whitespace != nullptr);
+      REQUIRE(comment != nullptr);
+      CHECK(whitespace->kind == cpf::symbol_kind::regex);
+      CHECK(whitespace->value == "[ \t\r\n]+");
+      CHECK(comment->kind == cpf::symbol_kind::regex);
+      CHECK(comment->value == "//[^\n]*");
+      CHECK(grammar.find_rule("expr") != nullptr);
+      CHECK(grammar.find_rule("number") != nullptr);
+   }
+
    TEST_CASE("malformed repetition suffixes report expressive parser errors") {
       auto capture_error = [](std::string_view source) -> std::string {
          try {
@@ -254,6 +281,36 @@ TEST_SUITE("cpflib.grammar_parser") {
 
          REQUIRE_FALSE(message.empty());
          CHECK(message.find("only have one repetition suffix") != std::string::npos);
+      }
+
+      SUBCASE("@whitespace must reference an existing skip rule") {
+         auto message = capture_error(R"(
+            @whitespace ws;
+            expr -> 'x':value;
+         )");
+
+         REQUIRE_FALSE(message.empty());
+         CHECK(message.find("@whitespace references unknown skip rule 'ws'") != std::string::npos);
+      }
+
+      SUBCASE("skip rules must lower directly to terminals") {
+         auto message = capture_error(R"(
+            token -> 'x';
+            skip ws -> token;
+         )");
+
+         REQUIRE_FALSE(message.empty());
+         CHECK(message.find("Skip rules must lower directly to a literal or regex terminal") != std::string::npos);
+      }
+
+      SUBCASE("@namespace remains a generation-time concern") {
+         auto message = capture_error(R"(
+            @namespace generated::fixtures;
+            expr -> 'x':value;
+         )");
+
+         REQUIRE_FALSE(message.empty());
+         CHECK(message.find("Grammar directive '@namespace' is not supported") != std::string::npos);
       }
    }
 

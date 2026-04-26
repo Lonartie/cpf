@@ -39,6 +39,18 @@ namespace cpf {
       });
    }
 
+   const skip_rule* grammar::find_skip_rule(std::string_view identifier) const {
+      auto it = std::find_if(skip_rules.begin(), skip_rules.end(),
+                             [&](const auto& rule) { return rule.identifier == identifier; });
+      return it == skip_rules.end() ? nullptr : &*it;
+   }
+
+   skip_rule* grammar::find_skip_rule(std::string_view identifier) {
+      auto it = std::find_if(skip_rules.begin(), skip_rules.end(),
+                             [&](const auto& rule) { return rule.identifier == identifier; });
+      return it == skip_rules.end() ? nullptr : &*it;
+   }
+
    const rule* grammar::find_rule(std::string_view identifier) const {
       auto it =
             std::find_if(rules.begin(), rules.end(), [&](const auto& rule) { return rule.identifier == identifier; });

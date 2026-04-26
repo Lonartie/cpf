@@ -1877,18 +1877,27 @@ namespace cpf {
 
          std::vector<std::string> regex_patterns;
          std::unordered_map<std::string, std::size_t> regex_pattern_indices;
+         const auto collect_regex_pattern = [&](std::string_view pattern) {
+            auto owned_pattern = std::string{pattern};
+            if (regex_pattern_indices.contains(owned_pattern)) {
+               return;
+            }
+            regex_pattern_indices.emplace(owned_pattern, regex_patterns.size());
+            regex_patterns.push_back(std::move(owned_pattern));
+         };
          for (const auto& production: emitted_productions) {
             for (const auto& symbol: production.symbols) {
                if (symbol.kind != symbol_kind::regex) {
                   continue;
                }
-               auto pattern = std::string{symbol.text};
-               if (regex_pattern_indices.contains(pattern)) {
-                  continue;
-               }
-               regex_pattern_indices.emplace(pattern, regex_patterns.size());
-               regex_patterns.push_back(std::move(pattern));
+               collect_regex_pattern(symbol.text);
             }
+         }
+         for (const auto& skip_rule: grammar.skip_rules) {
+            if (skip_rule.kind != symbol_kind::regex) {
+                  continue;
+            }
+            collect_regex_pattern(skip_rule.value);
          }
 
          std::vector<std::vector<std::size_t>> productions_by_rule(emitted_rule_names.size());
@@ -1899,6 +1908,7 @@ namespace cpf {
          std::vector<std::size_t> grammar_rule_production_indices;
          std::vector<std::size_t> grammar_rule_production_offsets(emitted_rule_names.size());
          std::vector<std::size_t> grammar_rule_production_counts(emitted_rule_names.size());
+         const auto use_default_whitespace = !grammar.whitespace_rule.has_value();
          for (std::size_t rule_index = 0; rule_index < productions_by_rule.size(); ++rule_index) {
             grammar_rule_production_offsets[rule_index] = grammar_rule_production_indices.size();
             grammar_rule_production_counts[rule_index] = productions_by_rule[rule_index].size();
@@ -2032,11 +2042,32 @@ namespace cpf {
          }
          line(source, 1, "}};");
          line(source, 1,
+              "constexpr std::array<cpf::detail::parser_symbol, " + std::to_string(grammar.skip_rules.size()) +
+                    "> grammar_skip_symbols{{");
+         for (std::size_t skip_index = 0; skip_index < grammar.skip_rules.size(); ++skip_index) {
+            const auto& skip_rule = grammar.skip_rules[skip_index];
+            auto rendered_symbol = std::string{};
+            if (skip_rule.kind == symbol_kind::literal) {
+               rendered_symbol = "{cpf::detail::parser_symbol_kind::literal, 0, " +
+                                 cpp_string_literal(skip_rule.value) + ", nullptr}";
+            } else {
+               rendered_symbol = "{cpf::detail::parser_symbol_kind::regex, 0, " +
+                                 cpp_string_literal(skip_rule.value) + ", &regex_" +
+                                 std::to_string(regex_pattern_indices.at(skip_rule.value)) + "}";
+            }
+            if (skip_index + 1 != grammar.skip_rules.size()) {
+               rendered_symbol += ",";
+            }
+            line(source, 2, rendered_symbol);
+         }
+         line(source, 1, "}};");
+         line(source, 1,
               "constexpr cpf::detail::grammar_spec grammar_spec{grammar_productions.data(), "
               "grammar_productions.size(), " +
                     std::to_string(emitted_rule_names.size()) +
                     ", grammar_rule_production_indices.data(), grammar_rule_production_offsets.data(), "
-                    "grammar_rule_production_counts.data()};");
+                     "grammar_rule_production_counts.data(), grammar_skip_symbols.data(), grammar_skip_symbols.size(), " +
+                     std::string{use_default_whitespace ? "true" : "false"} + "};");
          line(source, 1,
               "constexpr std::array<std::string_view, " + std::to_string(emitted_rule_names.size()) +
                     "> grammar_rule_names{{");
@@ -2693,7 +2724,7 @@ namespace cpf {
          line(source, 6, "}");
          line(source, 5, "});");
           line(source, 4,
-               "}, [tree](std::string_view repaired_input) { return cpf::detail::repaired_input_of(tree, repaired_input); });");
+               "}, [tree](std::string_view repaired_input) { return cpf::detail::repaired_input_of(tree, repaired_input, grammar_spec); });");
          line(source, 3, "}");
          line(source, 2, "}");
          line(source, 2, "if (result.success) {");
@@ -2770,7 +2801,7 @@ namespace cpf {
                   line(source, 8, "}");
                   line(source, 7, "});");
                   line(source, 6,
-                       "}, [opaque](std::string_view repaired_input) { return cpf::detail::repaired_input_of(opaque, repaired_input); });");
+                       "}, [opaque](std::string_view repaired_input) { return cpf::detail::repaired_input_of(opaque, repaired_input, grammar_spec); });");
                   line(source, 5, "}");
                   line(source, 4, "}");
                   line(source, 3, "} else if (!result.success && !have_partial_success) {");
@@ -2797,7 +2828,7 @@ namespace cpf {
                   line(source, 8, "}");
                   line(source, 7, "});");
                   line(source, 6,
-                       "}, [opaque](std::string_view repaired_input) { return cpf::detail::repaired_input_of(opaque, repaired_input); });");
+                       "}, [opaque](std::string_view repaired_input) { return cpf::detail::repaired_input_of(opaque, repaired_input, grammar_spec); });");
                   line(source, 5, "}");
                   line(source, 4, "}");
                   line(source, 3, "}");

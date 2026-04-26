@@ -6,6 +6,7 @@ CPF reads `.cpf` grammar files and emits matching C++20 parser code.
 
 CPF currently supports:
 
+- grammar-level trivia via `skip` declarations and `@whitespace`
 - literals and regex terminals
 - labeled captures
 - choice-style base rules
@@ -111,4 +112,28 @@ Double-quoted imports such as `import "imports/imported_expr.cpf";` work the sam
 Imports are resolved relative to the importing file, expanded transitively, and cycle-checked.
 
 See [`generation-and-integration.md`](./generation-and-integration.md) for the corresponding loader and generator APIs.
+
+## Trivia and skipped input
+
+CPF grammars can declare ignorable trivia with top-level `skip` declarations.
+
+```text
+@whitespace ws;
+skip ws -> r'[ \t\r\n]+';
+skip line_comment -> r'//[^\n]*';
+
+expression -> addition | number;
+addition -> expression:left '+':op expression:right;
+number -> r'[0-9]+':value;
+```
+
+Rules:
+
+- `skip <identifier> -> <terminal>;` declares one ignorable literal or regex terminal
+- `@whitespace <identifier>;` optionally selects which declared skip rule is the canonical whitespace rule
+- skip rules are not exposed as generated AST nodes or parse entry points
+- when no `@whitespace` directive is present, CPF keeps its existing default behavior of skipping ordinary C/C++ whitespace between tokens
+
+`@namespace` is not part of the grammar language. Generated C++ namespaces are still configured through
+`cpf::generate_code(..., code_namespace)`, `cpfgen --namespace ...`, or `cpf_link_grammars(... NAMESPACE ...)`.
 

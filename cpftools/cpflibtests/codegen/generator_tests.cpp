@@ -354,6 +354,10 @@ TEST_SUITE("cpflib.code_generator") {
 
    TEST_CASE("generated code can be wrapped in an explicit C++ namespace") {
       auto grammar = cpf::parse_grammar(R"(
+         @whitespace ws;
+         skip ws -> r'[ \t\r\n]+';
+         skip line_comment -> r'//[^\n]*';
+
          expression -> addition | number;
          addition -> expression:left '+':op expression:right;
          number -> r'[0-9]+':value;
@@ -370,6 +374,7 @@ TEST_SUITE("cpflib.code_generator") {
       CHECK(generated.header.find("} // namespace generated::fixtures") != std::string::npos);
 
       CHECK(generated.source.find("namespace generated::fixtures {") != std::string::npos);
+       CHECK(generated.source.find("grammar_skip_symbols") != std::string::npos);
       CHECK(generated.source.find("auto detail::parse_expression_default(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<expression>") !=
             std::string::npos);
       CHECK(generated.source.find("} // namespace generated::fixtures") != std::string::npos);
