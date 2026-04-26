@@ -85,6 +85,7 @@ struct imported_bundle_word_node : cpf::node_with_user_data<UserData> {
    static constexpr std::size_t RuleId = 0;
    static constexpr std::size_t ProductionCount = 2;
    using parse_result = cpf::parse_result<imported_bundle_word_node<UserData>>;
+   using cst_parse_result = cpf::parse_result<cpf::cst_node>;
    cpf::matched_string value;
 
    imported_bundle_word_node() = default;
@@ -96,6 +97,8 @@ struct imported_bundle_word_node : cpf::node_with_user_data<UserData> {
    static auto lex(std::string_view input) -> cpf::token_sequence;
    static parse_result parse(std::string_view input, const cpf::parse_options& options = {});
    static parse_result parse(const cpf::token_sequence& tokens, const cpf::parse_options& options = {});
+   static cst_parse_result parse_cst(std::string_view input, const cpf::parse_options& options = {});
+   static cst_parse_result parse_cst(const cpf::token_sequence& tokens, const cpf::parse_options& options = {});
    static cpf::recognize_result recognize(std::string_view input);
    static cpf::recognize_result recognize(const cpf::token_sequence& tokens);
    static auto complexity(std::size_t production_index) -> const cpf::complexity&;
@@ -122,6 +125,7 @@ struct imported_bundle_suffix_node : cpf::node_with_user_data<UserData> {
    static constexpr std::size_t RuleId = 1;
    static constexpr std::size_t ProductionCount = 1;
    using parse_result = cpf::parse_result<imported_bundle_suffix_node<UserData>>;
+   using cst_parse_result = cpf::parse_result<cpf::cst_node>;
    cpf::matched_string value;
 
    imported_bundle_suffix_node() = default;
@@ -133,6 +137,8 @@ struct imported_bundle_suffix_node : cpf::node_with_user_data<UserData> {
    static auto lex(std::string_view input) -> cpf::token_sequence;
    static parse_result parse(std::string_view input, const cpf::parse_options& options = {});
    static parse_result parse(const cpf::token_sequence& tokens, const cpf::parse_options& options = {});
+   static cst_parse_result parse_cst(std::string_view input, const cpf::parse_options& options = {});
+   static cst_parse_result parse_cst(const cpf::token_sequence& tokens, const cpf::parse_options& options = {});
    static cpf::recognize_result recognize(std::string_view input);
    static cpf::recognize_result recognize(const cpf::token_sequence& tokens);
    static auto complexity(std::size_t production_index) -> const cpf::complexity&;
@@ -159,6 +165,7 @@ struct imported_bundle_greeting_node : imported_bundle_message_node<UserData> {
    static constexpr std::size_t RuleId = 2;
    static constexpr std::size_t ProductionCount = 1;
    using parse_result = cpf::parse_result<imported_bundle_greeting_node<UserData>>;
+   using cst_parse_result = cpf::parse_result<cpf::cst_node>;
    std::unique_ptr<imported_bundle_word_node<UserData>> text;
    std::unique_ptr<imported_bundle_suffix_node<UserData>> suffix;
 
@@ -171,6 +178,8 @@ struct imported_bundle_greeting_node : imported_bundle_message_node<UserData> {
    static auto lex(std::string_view input) -> cpf::token_sequence;
    static parse_result parse(std::string_view input, const cpf::parse_options& options = {});
    static parse_result parse(const cpf::token_sequence& tokens, const cpf::parse_options& options = {});
+   static cst_parse_result parse_cst(std::string_view input, const cpf::parse_options& options = {});
+   static cst_parse_result parse_cst(const cpf::token_sequence& tokens, const cpf::parse_options& options = {});
    static cpf::recognize_result recognize(std::string_view input);
    static cpf::recognize_result recognize(const cpf::token_sequence& tokens);
    static auto complexity(std::size_t production_index) -> const cpf::complexity&;
@@ -197,6 +206,7 @@ struct imported_bundle_parting_node : imported_bundle_message_node<UserData> {
    static constexpr std::size_t RuleId = 3;
    static constexpr std::size_t ProductionCount = 1;
    using parse_result = cpf::parse_result<imported_bundle_parting_node<UserData>>;
+   using cst_parse_result = cpf::parse_result<cpf::cst_node>;
    cpf::matched_string text;
 
    imported_bundle_parting_node() = default;
@@ -208,6 +218,8 @@ struct imported_bundle_parting_node : imported_bundle_message_node<UserData> {
    static auto lex(std::string_view input) -> cpf::token_sequence;
    static parse_result parse(std::string_view input, const cpf::parse_options& options = {});
    static parse_result parse(const cpf::token_sequence& tokens, const cpf::parse_options& options = {});
+   static cst_parse_result parse_cst(std::string_view input, const cpf::parse_options& options = {});
+   static cst_parse_result parse_cst(const cpf::token_sequence& tokens, const cpf::parse_options& options = {});
    static cpf::recognize_result recognize(std::string_view input);
    static cpf::recognize_result recognize(const cpf::token_sequence& tokens);
    static auto complexity(std::size_t production_index) -> const cpf::complexity&;
@@ -234,6 +246,7 @@ struct imported_bundle_message_node : cpf::node_with_user_data<UserData> {
    static constexpr std::size_t RuleId = 4;
    static constexpr std::size_t ProductionCount = 2;
    using parse_result = cpf::parse_result<imported_bundle_message_node<UserData>>;
+   using cst_parse_result = cpf::parse_result<cpf::cst_node>;
    imported_bundle_message_node() = default;
    imported_bundle_message_node(imported_bundle_message_node&&) = default;
    auto operator=(imported_bundle_message_node&&) -> imported_bundle_message_node& = default;
@@ -243,6 +256,8 @@ struct imported_bundle_message_node : cpf::node_with_user_data<UserData> {
    static auto lex(std::string_view input) -> cpf::token_sequence;
    static parse_result parse(std::string_view input, const cpf::parse_options& options = {});
    static parse_result parse(const cpf::token_sequence& tokens, const cpf::parse_options& options = {});
+   static cst_parse_result parse_cst(std::string_view input, const cpf::parse_options& options = {});
+   static cst_parse_result parse_cst(const cpf::token_sequence& tokens, const cpf::parse_options& options = {});
    static cpf::recognize_result recognize(std::string_view input);
    static cpf::recognize_result recognize(const cpf::token_sequence& tokens);
    static auto complexity(std::size_t production_index) -> const cpf::complexity&;
@@ -457,6 +472,8 @@ auto lex_imported_bundle_generated(std::string_view input) -> cpf::token_sequenc
 
 auto parse_imported_bundle_word_default(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<imported_bundle_word>;
 auto parse_imported_bundle_word_default(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<imported_bundle_word>;
+auto parse_imported_bundle_word_cst(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<cpf::cst_node>;
+auto parse_imported_bundle_word_cst(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<cpf::cst_node>;
 auto recognize_imported_bundle_word_default(std::string_view input) -> cpf::recognize_result;
 auto recognize_imported_bundle_word_default(const cpf::token_sequence& tokens) -> cpf::recognize_result;
 auto complexity_inputs_imported_bundle_word_default(std::size_t production_index) -> std::span<const std::string_view>;
@@ -464,6 +481,8 @@ auto complexity_imported_bundle_word_default(std::size_t production_index) -> co
 auto recompute_complexity_imported_bundle_word_default(std::size_t production_index) -> const cpf::complexity&;
 auto parse_imported_bundle_suffix_default(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<imported_bundle_suffix>;
 auto parse_imported_bundle_suffix_default(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<imported_bundle_suffix>;
+auto parse_imported_bundle_suffix_cst(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<cpf::cst_node>;
+auto parse_imported_bundle_suffix_cst(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<cpf::cst_node>;
 auto recognize_imported_bundle_suffix_default(std::string_view input) -> cpf::recognize_result;
 auto recognize_imported_bundle_suffix_default(const cpf::token_sequence& tokens) -> cpf::recognize_result;
 auto complexity_inputs_imported_bundle_suffix_default(std::size_t production_index) -> std::span<const std::string_view>;
@@ -471,6 +490,8 @@ auto complexity_imported_bundle_suffix_default(std::size_t production_index) -> 
 auto recompute_complexity_imported_bundle_suffix_default(std::size_t production_index) -> const cpf::complexity&;
 auto parse_imported_bundle_message_default(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<imported_bundle_message>;
 auto parse_imported_bundle_message_default(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<imported_bundle_message>;
+auto parse_imported_bundle_message_cst(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<cpf::cst_node>;
+auto parse_imported_bundle_message_cst(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<cpf::cst_node>;
 auto recognize_imported_bundle_message_default(std::string_view input) -> cpf::recognize_result;
 auto recognize_imported_bundle_message_default(const cpf::token_sequence& tokens) -> cpf::recognize_result;
 auto complexity_inputs_imported_bundle_message_default(std::size_t production_index) -> std::span<const std::string_view>;
@@ -478,6 +499,8 @@ auto complexity_imported_bundle_message_default(std::size_t production_index) ->
 auto recompute_complexity_imported_bundle_message_default(std::size_t production_index) -> const cpf::complexity&;
 auto parse_imported_bundle_greeting_default(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<imported_bundle_greeting>;
 auto parse_imported_bundle_greeting_default(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<imported_bundle_greeting>;
+auto parse_imported_bundle_greeting_cst(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<cpf::cst_node>;
+auto parse_imported_bundle_greeting_cst(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<cpf::cst_node>;
 auto recognize_imported_bundle_greeting_default(std::string_view input) -> cpf::recognize_result;
 auto recognize_imported_bundle_greeting_default(const cpf::token_sequence& tokens) -> cpf::recognize_result;
 auto complexity_inputs_imported_bundle_greeting_default(std::size_t production_index) -> std::span<const std::string_view>;
@@ -485,6 +508,8 @@ auto complexity_imported_bundle_greeting_default(std::size_t production_index) -
 auto recompute_complexity_imported_bundle_greeting_default(std::size_t production_index) -> const cpf::complexity&;
 auto parse_imported_bundle_parting_default(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<imported_bundle_parting>;
 auto parse_imported_bundle_parting_default(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<imported_bundle_parting>;
+auto parse_imported_bundle_parting_cst(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<cpf::cst_node>;
+auto parse_imported_bundle_parting_cst(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<cpf::cst_node>;
 auto recognize_imported_bundle_parting_default(std::string_view input) -> cpf::recognize_result;
 auto recognize_imported_bundle_parting_default(const cpf::token_sequence& tokens) -> cpf::recognize_result;
 auto complexity_inputs_imported_bundle_parting_default(std::size_t production_index) -> std::span<const std::string_view>;
@@ -586,6 +611,16 @@ auto imported_bundle_word_node<UserData>::lex(std::string_view input) -> cpf::to
 }
 
 template<typename UserData>
+auto imported_bundle_word_node<UserData>::parse_cst(std::string_view input, const cpf::parse_options& options) -> cst_parse_result {
+   return detail::parse_imported_bundle_word_cst(input, options);
+}
+
+template<typename UserData>
+auto imported_bundle_word_node<UserData>::parse_cst(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cst_parse_result {
+   return detail::parse_imported_bundle_word_cst(tokens, options);
+}
+
+template<typename UserData>
 auto imported_bundle_word_node<UserData>::parse(std::string_view input, const cpf::parse_options& options) -> parse_result {
    if constexpr (std::is_void_v<UserData>) {
       return detail::parse_imported_bundle_word_default(input, options);
@@ -683,6 +718,16 @@ auto imported_bundle_suffix_node<UserData>::lex(std::string_view input) -> cpf::
 }
 
 template<typename UserData>
+auto imported_bundle_suffix_node<UserData>::parse_cst(std::string_view input, const cpf::parse_options& options) -> cst_parse_result {
+   return detail::parse_imported_bundle_suffix_cst(input, options);
+}
+
+template<typename UserData>
+auto imported_bundle_suffix_node<UserData>::parse_cst(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cst_parse_result {
+   return detail::parse_imported_bundle_suffix_cst(tokens, options);
+}
+
+template<typename UserData>
 auto imported_bundle_suffix_node<UserData>::parse(std::string_view input, const cpf::parse_options& options) -> parse_result {
    if constexpr (std::is_void_v<UserData>) {
       return detail::parse_imported_bundle_suffix_default(input, options);
@@ -777,6 +822,16 @@ std::ostream& operator<<(std::ostream& os, const imported_bundle_suffix_node<Use
 template<typename UserData>
 auto imported_bundle_greeting_node<UserData>::lex(std::string_view input) -> cpf::token_sequence {
    return detail::lex_imported_bundle_generated(input);
+}
+
+template<typename UserData>
+auto imported_bundle_greeting_node<UserData>::parse_cst(std::string_view input, const cpf::parse_options& options) -> cst_parse_result {
+   return detail::parse_imported_bundle_greeting_cst(input, options);
+}
+
+template<typename UserData>
+auto imported_bundle_greeting_node<UserData>::parse_cst(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cst_parse_result {
+   return detail::parse_imported_bundle_greeting_cst(tokens, options);
 }
 
 template<typename UserData>
@@ -896,6 +951,16 @@ auto imported_bundle_parting_node<UserData>::lex(std::string_view input) -> cpf:
 }
 
 template<typename UserData>
+auto imported_bundle_parting_node<UserData>::parse_cst(std::string_view input, const cpf::parse_options& options) -> cst_parse_result {
+   return detail::parse_imported_bundle_parting_cst(input, options);
+}
+
+template<typename UserData>
+auto imported_bundle_parting_node<UserData>::parse_cst(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cst_parse_result {
+   return detail::parse_imported_bundle_parting_cst(tokens, options);
+}
+
+template<typename UserData>
 auto imported_bundle_parting_node<UserData>::parse(std::string_view input, const cpf::parse_options& options) -> parse_result {
    if constexpr (std::is_void_v<UserData>) {
       return detail::parse_imported_bundle_parting_default(input, options);
@@ -990,6 +1055,16 @@ std::ostream& operator<<(std::ostream& os, const imported_bundle_parting_node<Us
 template<typename UserData>
 auto imported_bundle_message_node<UserData>::lex(std::string_view input) -> cpf::token_sequence {
    return detail::lex_imported_bundle_generated(input);
+}
+
+template<typename UserData>
+auto imported_bundle_message_node<UserData>::parse_cst(std::string_view input, const cpf::parse_options& options) -> cst_parse_result {
+   return detail::parse_imported_bundle_message_cst(input, options);
+}
+
+template<typename UserData>
+auto imported_bundle_message_node<UserData>::parse_cst(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cst_parse_result {
+   return detail::parse_imported_bundle_message_cst(tokens, options);
 }
 
 template<typename UserData>

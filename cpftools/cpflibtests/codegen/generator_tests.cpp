@@ -117,6 +117,14 @@ TEST_SUITE("cpflib.code_generator") {
           CHECK(generated.header.find(
                         "static parse_result parse(const cpf::token_sequence& tokens, const cpf::parse_options& options = {});") !=
                 std::string::npos);
+          CHECK(generated.header.find(
+                      "using cst_parse_result = cpf::parse_result<cpf::cst_node>;") != std::string::npos);
+          CHECK(generated.header.find(
+                      "static cst_parse_result parse_cst(std::string_view input, const cpf::parse_options& options = {});") !=
+                std::string::npos);
+          CHECK(generated.header.find(
+                      "static cst_parse_result parse_cst(const cpf::token_sequence& tokens, const cpf::parse_options& options = {});") !=
+                std::string::npos);
          CHECK(generated.header.find("static cpf::recognize_result recognize(std::string_view input);") !=
                std::string::npos);
           CHECK(generated.header.find(
@@ -211,6 +219,14 @@ TEST_SUITE("cpflib.code_generator") {
                std::string::npos);
          CHECK(generated.source.find("bool validate_generated_node(const cpf::node& node)") != std::string::npos);
          CHECK(generated.source.find("bool validate_generated_tree(const parse_node_ptr& tree)") != std::string::npos);
+          CHECK(generated.source.find("std::unique_ptr<cpf::cst_node> build_cst_node(const parse_node_ptr& tree)") !=
+                std::string::npos);
+          CHECK(generated.source.find("void append_cst_children(const parse_node_ptr& tree, std::vector<cpf::cst_child>& children)") !=
+                std::string::npos);
+          CHECK(generated.source.find("node->rule_name = std::string{generated_tree_rule_name(tree)};") !=
+                std::string::npos);
+          CHECK(generated.source.find("cpf::visit_cst_recursive(root, [&](const cpf::cst_node& current)") !=
+                std::string::npos);
          CHECK(generated.source.find("rejected by precedence/associativity constraints") != std::string::npos);
          CHECK(generated.source.find("definition_of_generated_tree(const parse_node_ptr& tree)") != std::string::npos);
          CHECK(generated.source.find("auto detail::recognize_expression_default(std::string_view input) -> cpf::recognize_result") !=

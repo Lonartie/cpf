@@ -9,6 +9,7 @@ For a grammar root such as `expression`, CPF generates node types like:
 ```c++
 struct expression : cpf::node {
     using parse_result = cpf::parse_result<expression>;
+    using cst_parse_result = cpf::parse_result<cpf::cst_node>;
 
     static constexpr std::size_t RuleId = 0;
     static constexpr std::size_t ProductionCount = 5;
@@ -16,6 +17,8 @@ struct expression : cpf::node {
     static cpf::token_sequence lex(std::string_view input);
     static parse_result parse(std::string_view input, const cpf::parse_options& options = {});
     static parse_result parse(const cpf::token_sequence& tokens, const cpf::parse_options& options = {});
+    static cst_parse_result parse_cst(std::string_view input, const cpf::parse_options& options = {});
+    static cst_parse_result parse_cst(const cpf::token_sequence& tokens, const cpf::parse_options& options = {});
     static cpf::recognize_result recognize(std::string_view input);
     static cpf::recognize_result recognize(const cpf::token_sequence& tokens);
     static auto complexity(std::size_t production_index) -> const cpf::complexity&;
@@ -35,8 +38,12 @@ Each generated rule also gets:
 Generated rules also expose:
 
 - `lex(...)` to run the generated lexer once and keep the resulting token sequence
+- `parse_cst(...)` to materialize a generic concrete-syntax forest that keeps punctuation terminals in source order
 - `recognize(...)` for syntax-only validation without building a forest of lazy parse trees
 - token-sequence overloads of `parse(...)` and `recognize(...)` so callers can reuse one lexed input across multiple parse options
+
+`parse(...)` continues to materialize the generated AST node family for the selected rule. `parse_cst(...)` materializes the
+generic `cpf::cst_node` runtime tree instead.
 
 The generated debug `operator<<` now prints ASTs as indented multiline trees for easier inspection.
 
@@ -196,6 +203,45 @@ auto value = visit(*result.forest.front(), visitor{});
 ```
 
 AST materialization is deferred until `result.forest.front()` is actually dereferenced.
+
+## CST parsing and concrete tree inspection
+
+Generated rules also expose `parse_cst(...)`, which returns `cpf::parse_result<cpf::cst_node>`.
+
+```c++
+auto result = expression::parse_cst("1 + 2 * 3");
+const auto& root = *result.forest.front();
+```
+
+The generic CST node shape is:
+
+```c++
+struct cst_node : cpf::node {
+    std::size_t rule = 0;
+    std::string rule_name;
+    std::vector<cpf::cst_child> children;
+};
+```
+
+Where each `cpf::cst_child` is either:
+
+- `cpf::matched_string` for one concrete terminal, including punctuation
+- `std::unique_ptr<cpf::cst_node>` for one nested public rule node
+
+Important CST semantics:
+
+- public rules stay explicit as `cpf::cst_node`s
+- synthetic lowering helpers used for groups, quantifiers, and template plumbing are flattened away
+- punctuation terminals stay in `children` in source order
+- `source_range` still covers the full matched source slice, so callers can reconstruct trivia from the original input
+- partial-recovery damage is attached to CST nodes the same way it is attached to AST nodes
+
+Utilities available on the runtime CST API:
+
+- `cpf::cst_node::clone()` for deep copies
+- `cpf::cst_node::source_text(input)` to recover the exact matched source slice
+- `cpf::visit_cst_recursive(...)` to traverse nested concrete nodes
+- `operator<<(std::ostream&, const cpf::cst_node&)` for multiline debug output
 
 ## Captured terminals and ranges
 

@@ -85,6 +85,7 @@ struct default_expr_node : cpf::node_with_user_data<UserData> {
    static constexpr std::size_t RuleId = 0;
    static constexpr std::size_t ProductionCount = 4;
    using parse_result = cpf::parse_result<default_expr_node<UserData>>;
+   using cst_parse_result = cpf::parse_result<cpf::cst_node>;
    default_expr_node() = default;
    default_expr_node(default_expr_node&&) = default;
    auto operator=(default_expr_node&&) -> default_expr_node& = default;
@@ -94,6 +95,8 @@ struct default_expr_node : cpf::node_with_user_data<UserData> {
    static auto lex(std::string_view input) -> cpf::token_sequence;
    static parse_result parse(std::string_view input, const cpf::parse_options& options = {});
    static parse_result parse(const cpf::token_sequence& tokens, const cpf::parse_options& options = {});
+   static cst_parse_result parse_cst(std::string_view input, const cpf::parse_options& options = {});
+   static cst_parse_result parse_cst(const cpf::token_sequence& tokens, const cpf::parse_options& options = {});
    static cpf::recognize_result recognize(std::string_view input);
    static cpf::recognize_result recognize(const cpf::token_sequence& tokens);
    static auto complexity(std::size_t production_index) -> const cpf::complexity&;
@@ -120,6 +123,7 @@ struct default_add_node : default_expr_node<UserData> {
    static constexpr std::size_t RuleId = 1;
    static constexpr std::size_t ProductionCount = 1;
    using parse_result = cpf::parse_result<default_add_node<UserData>>;
+   using cst_parse_result = cpf::parse_result<cpf::cst_node>;
    std::unique_ptr<default_expr_node<UserData>> left;
    cpf::matched_string op;
    std::unique_ptr<default_expr_node<UserData>> right;
@@ -133,6 +137,8 @@ struct default_add_node : default_expr_node<UserData> {
    static auto lex(std::string_view input) -> cpf::token_sequence;
    static parse_result parse(std::string_view input, const cpf::parse_options& options = {});
    static parse_result parse(const cpf::token_sequence& tokens, const cpf::parse_options& options = {});
+   static cst_parse_result parse_cst(std::string_view input, const cpf::parse_options& options = {});
+   static cst_parse_result parse_cst(const cpf::token_sequence& tokens, const cpf::parse_options& options = {});
    static cpf::recognize_result recognize(std::string_view input);
    static cpf::recognize_result recognize(const cpf::token_sequence& tokens);
    static auto complexity(std::size_t production_index) -> const cpf::complexity&;
@@ -159,6 +165,7 @@ struct default_subtract_node : default_expr_node<UserData> {
    static constexpr std::size_t RuleId = 2;
    static constexpr std::size_t ProductionCount = 1;
    using parse_result = cpf::parse_result<default_subtract_node<UserData>>;
+   using cst_parse_result = cpf::parse_result<cpf::cst_node>;
    std::unique_ptr<default_expr_node<UserData>> left;
    cpf::matched_string op;
    std::unique_ptr<default_expr_node<UserData>> right;
@@ -172,6 +179,8 @@ struct default_subtract_node : default_expr_node<UserData> {
    static auto lex(std::string_view input) -> cpf::token_sequence;
    static parse_result parse(std::string_view input, const cpf::parse_options& options = {});
    static parse_result parse(const cpf::token_sequence& tokens, const cpf::parse_options& options = {});
+   static cst_parse_result parse_cst(std::string_view input, const cpf::parse_options& options = {});
+   static cst_parse_result parse_cst(const cpf::token_sequence& tokens, const cpf::parse_options& options = {});
    static cpf::recognize_result recognize(std::string_view input);
    static cpf::recognize_result recognize(const cpf::token_sequence& tokens);
    static auto complexity(std::size_t production_index) -> const cpf::complexity&;
@@ -198,6 +207,7 @@ struct default_multiply_node : default_expr_node<UserData> {
    static constexpr std::size_t RuleId = 3;
    static constexpr std::size_t ProductionCount = 1;
    using parse_result = cpf::parse_result<default_multiply_node<UserData>>;
+   using cst_parse_result = cpf::parse_result<cpf::cst_node>;
    std::unique_ptr<default_expr_node<UserData>> left;
    cpf::matched_string op;
    std::unique_ptr<default_expr_node<UserData>> right;
@@ -211,6 +221,8 @@ struct default_multiply_node : default_expr_node<UserData> {
    static auto lex(std::string_view input) -> cpf::token_sequence;
    static parse_result parse(std::string_view input, const cpf::parse_options& options = {});
    static parse_result parse(const cpf::token_sequence& tokens, const cpf::parse_options& options = {});
+   static cst_parse_result parse_cst(std::string_view input, const cpf::parse_options& options = {});
+   static cst_parse_result parse_cst(const cpf::token_sequence& tokens, const cpf::parse_options& options = {});
    static cpf::recognize_result recognize(std::string_view input);
    static cpf::recognize_result recognize(const cpf::token_sequence& tokens);
    static auto complexity(std::size_t production_index) -> const cpf::complexity&;
@@ -237,6 +249,7 @@ struct default_number_node : default_expr_node<UserData> {
    static constexpr std::size_t RuleId = 4;
    static constexpr std::size_t ProductionCount = 1;
    using parse_result = cpf::parse_result<default_number_node<UserData>>;
+   using cst_parse_result = cpf::parse_result<cpf::cst_node>;
    cpf::matched_string value;
 
    default_number_node() = default;
@@ -248,6 +261,8 @@ struct default_number_node : default_expr_node<UserData> {
    static auto lex(std::string_view input) -> cpf::token_sequence;
    static parse_result parse(std::string_view input, const cpf::parse_options& options = {});
    static parse_result parse(const cpf::token_sequence& tokens, const cpf::parse_options& options = {});
+   static cst_parse_result parse_cst(std::string_view input, const cpf::parse_options& options = {});
+   static cst_parse_result parse_cst(const cpf::token_sequence& tokens, const cpf::parse_options& options = {});
    static cpf::recognize_result recognize(std::string_view input);
    static cpf::recognize_result recognize(const cpf::token_sequence& tokens);
    static auto complexity(std::size_t production_index) -> const cpf::complexity&;
@@ -506,6 +521,8 @@ auto lex_default_attrs_generated(std::string_view input) -> cpf::token_sequence;
 
 auto parse_default_expr_default(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<default_expr>;
 auto parse_default_expr_default(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<default_expr>;
+auto parse_default_expr_cst(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<cpf::cst_node>;
+auto parse_default_expr_cst(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<cpf::cst_node>;
 auto recognize_default_expr_default(std::string_view input) -> cpf::recognize_result;
 auto recognize_default_expr_default(const cpf::token_sequence& tokens) -> cpf::recognize_result;
 auto complexity_inputs_default_expr_default(std::size_t production_index) -> std::span<const std::string_view>;
@@ -513,6 +530,8 @@ auto complexity_default_expr_default(std::size_t production_index) -> const cpf:
 auto recompute_complexity_default_expr_default(std::size_t production_index) -> const cpf::complexity&;
 auto parse_default_add_default(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<default_add>;
 auto parse_default_add_default(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<default_add>;
+auto parse_default_add_cst(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<cpf::cst_node>;
+auto parse_default_add_cst(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<cpf::cst_node>;
 auto recognize_default_add_default(std::string_view input) -> cpf::recognize_result;
 auto recognize_default_add_default(const cpf::token_sequence& tokens) -> cpf::recognize_result;
 auto complexity_inputs_default_add_default(std::size_t production_index) -> std::span<const std::string_view>;
@@ -520,6 +539,8 @@ auto complexity_default_add_default(std::size_t production_index) -> const cpf::
 auto recompute_complexity_default_add_default(std::size_t production_index) -> const cpf::complexity&;
 auto parse_default_subtract_default(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<default_subtract>;
 auto parse_default_subtract_default(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<default_subtract>;
+auto parse_default_subtract_cst(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<cpf::cst_node>;
+auto parse_default_subtract_cst(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<cpf::cst_node>;
 auto recognize_default_subtract_default(std::string_view input) -> cpf::recognize_result;
 auto recognize_default_subtract_default(const cpf::token_sequence& tokens) -> cpf::recognize_result;
 auto complexity_inputs_default_subtract_default(std::size_t production_index) -> std::span<const std::string_view>;
@@ -527,6 +548,8 @@ auto complexity_default_subtract_default(std::size_t production_index) -> const 
 auto recompute_complexity_default_subtract_default(std::size_t production_index) -> const cpf::complexity&;
 auto parse_default_multiply_default(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<default_multiply>;
 auto parse_default_multiply_default(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<default_multiply>;
+auto parse_default_multiply_cst(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<cpf::cst_node>;
+auto parse_default_multiply_cst(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<cpf::cst_node>;
 auto recognize_default_multiply_default(std::string_view input) -> cpf::recognize_result;
 auto recognize_default_multiply_default(const cpf::token_sequence& tokens) -> cpf::recognize_result;
 auto complexity_inputs_default_multiply_default(std::size_t production_index) -> std::span<const std::string_view>;
@@ -534,6 +557,8 @@ auto complexity_default_multiply_default(std::size_t production_index) -> const 
 auto recompute_complexity_default_multiply_default(std::size_t production_index) -> const cpf::complexity&;
 auto parse_default_number_default(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<default_number>;
 auto parse_default_number_default(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<default_number>;
+auto parse_default_number_cst(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<cpf::cst_node>;
+auto parse_default_number_cst(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<cpf::cst_node>;
 auto recognize_default_number_default(std::string_view input) -> cpf::recognize_result;
 auto recognize_default_number_default(const cpf::token_sequence& tokens) -> cpf::recognize_result;
 auto complexity_inputs_default_number_default(std::size_t production_index) -> std::span<const std::string_view>;
@@ -644,6 +669,16 @@ auto default_expr_node<UserData>::lex(std::string_view input) -> cpf::token_sequ
 }
 
 template<typename UserData>
+auto default_expr_node<UserData>::parse_cst(std::string_view input, const cpf::parse_options& options) -> cst_parse_result {
+   return detail::parse_default_expr_cst(input, options);
+}
+
+template<typename UserData>
+auto default_expr_node<UserData>::parse_cst(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cst_parse_result {
+   return detail::parse_default_expr_cst(tokens, options);
+}
+
+template<typename UserData>
 auto default_expr_node<UserData>::parse(std::string_view input, const cpf::parse_options& options) -> parse_result {
    if constexpr (std::is_void_v<UserData>) {
       return detail::parse_default_expr_default(input, options);
@@ -743,6 +778,16 @@ std::ostream& operator<<(std::ostream& os, const default_expr_node<UserData>& no
 template<typename UserData>
 auto default_add_node<UserData>::lex(std::string_view input) -> cpf::token_sequence {
    return detail::lex_default_attrs_generated(input);
+}
+
+template<typename UserData>
+auto default_add_node<UserData>::parse_cst(std::string_view input, const cpf::parse_options& options) -> cst_parse_result {
+   return detail::parse_default_add_cst(input, options);
+}
+
+template<typename UserData>
+auto default_add_node<UserData>::parse_cst(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cst_parse_result {
+   return detail::parse_default_add_cst(tokens, options);
 }
 
 template<typename UserData>
@@ -867,6 +912,16 @@ auto default_subtract_node<UserData>::lex(std::string_view input) -> cpf::token_
 }
 
 template<typename UserData>
+auto default_subtract_node<UserData>::parse_cst(std::string_view input, const cpf::parse_options& options) -> cst_parse_result {
+   return detail::parse_default_subtract_cst(input, options);
+}
+
+template<typename UserData>
+auto default_subtract_node<UserData>::parse_cst(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cst_parse_result {
+   return detail::parse_default_subtract_cst(tokens, options);
+}
+
+template<typename UserData>
 auto default_subtract_node<UserData>::parse(std::string_view input, const cpf::parse_options& options) -> parse_result {
    if constexpr (std::is_void_v<UserData>) {
       return detail::parse_default_subtract_default(input, options);
@@ -988,6 +1043,16 @@ auto default_multiply_node<UserData>::lex(std::string_view input) -> cpf::token_
 }
 
 template<typename UserData>
+auto default_multiply_node<UserData>::parse_cst(std::string_view input, const cpf::parse_options& options) -> cst_parse_result {
+   return detail::parse_default_multiply_cst(input, options);
+}
+
+template<typename UserData>
+auto default_multiply_node<UserData>::parse_cst(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cst_parse_result {
+   return detail::parse_default_multiply_cst(tokens, options);
+}
+
+template<typename UserData>
 auto default_multiply_node<UserData>::parse(std::string_view input, const cpf::parse_options& options) -> parse_result {
    if constexpr (std::is_void_v<UserData>) {
       return detail::parse_default_multiply_default(input, options);
@@ -1106,6 +1171,16 @@ std::ostream& operator<<(std::ostream& os, const default_multiply_node<UserData>
 template<typename UserData>
 auto default_number_node<UserData>::lex(std::string_view input) -> cpf::token_sequence {
    return detail::lex_default_attrs_generated(input);
+}
+
+template<typename UserData>
+auto default_number_node<UserData>::parse_cst(std::string_view input, const cpf::parse_options& options) -> cst_parse_result {
+   return detail::parse_default_number_cst(input, options);
+}
+
+template<typename UserData>
+auto default_number_node<UserData>::parse_cst(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cst_parse_result {
+   return detail::parse_default_number_cst(tokens, options);
 }
 
 template<typename UserData>

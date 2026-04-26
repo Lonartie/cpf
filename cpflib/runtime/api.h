@@ -10,6 +10,7 @@
 #include <string_view>
 #include <unordered_map>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace cpf {
@@ -297,6 +298,62 @@ namespace cpf {
    template<> struct node_with_user_data<void> : node {
       using user_data_type = void;
    };
+
+   struct cst_node;
+
+   /// @brief One concrete CST child in source order.
+   using cst_child = std::variant<matched_string, std::unique_ptr<cst_node>>;
+
+   /// @brief Generic concrete-syntax node produced by generated `parse_cst(...)` entry points.
+   struct cst_node : node {
+      /// @brief Stable generated rule id associated with `rule_name`.
+      std::size_t rule = 0;
+      /// @brief Generated rule identifier for this node.
+      std::string rule_name;
+      /// @brief Concrete children in source order, including punctuation terminals.
+      std::vector<cst_child> children;
+
+      cst_node() = default;
+      cst_node(cst_node&&) = default;
+      auto operator=(cst_node&&) -> cst_node& = default;
+      cst_node(const cst_node&) = delete;
+      auto operator=(const cst_node&) -> cst_node& = delete;
+      ~cst_node() override = default;
+
+      [[nodiscard]] auto rule_id() const -> std::size_t override { return rule; }
+      [[nodiscard]] auto clone() const -> std::unique_ptr<cst_node>;
+
+      /// @brief Returns the exact source slice covered by this CST node.
+      /// @param input Original input text used to produce the CST.
+      /// @return Source substring spanning `range`.
+      [[nodiscard]] auto source_text(std::string_view input) const -> std::string;
+
+   protected:
+      [[nodiscard]] auto clone_node() const -> std::unique_ptr<node> override;
+   };
+
+   /// @brief Streams a multiline debug representation of a CST subtree.
+   std::ostream& operator<<(std::ostream& os, const cst_node& node);
+
+   template<typename Visitor>
+   void visit_cst_recursive(const cst_node& node, Visitor&& visitor) {
+      std::forward<Visitor>(visitor)(node);
+      for (const auto& child: node.children) {
+         if (const auto* nested = std::get_if<std::unique_ptr<cst_node>>(&child); nested != nullptr && *nested != nullptr) {
+            visit_cst_recursive(**nested, std::forward<Visitor>(visitor));
+         }
+      }
+   }
+
+   template<typename Visitor>
+   void visit_cst_recursive(cst_node& node, Visitor&& visitor) {
+      std::forward<Visitor>(visitor)(node);
+      for (auto& child: node.children) {
+         if (auto* nested = std::get_if<std::unique_ptr<cst_node>>(&child); nested != nullptr && *nested != nullptr) {
+            visit_cst_recursive(**nested, std::forward<Visitor>(visitor));
+         }
+      }
+   }
 
 
    /// @brief Lazy handle for one parse tree in a returned forest.

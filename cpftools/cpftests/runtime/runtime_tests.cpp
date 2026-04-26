@@ -124,6 +124,19 @@ namespace {
       }
       return result;
    }
+
+   auto cst_child_node(const cpf::cst_child& child) -> const cpf::cst_node& {
+      const auto* value = std::get_if<std::unique_ptr<cpf::cst_node>>(&child);
+      REQUIRE(value != nullptr);
+      REQUIRE(*value != nullptr);
+      return **value;
+   }
+
+   auto cst_child_token(const cpf::cst_child& child) -> const cpf::matched_string& {
+      const auto* value = std::get_if<cpf::matched_string>(&child);
+      REQUIRE(value != nullptr);
+      return *value;
+   }
 } // namespace
 
 TEST_SUITE("generated.runtime") {
@@ -244,6 +257,75 @@ TEST_SUITE("generated.runtime") {
          REQUIRE(parsed.success);
          REQUIRE(parsed.forest.size() == 1);
          CHECK(visit(*parsed.forest.front(), calculator_visitor{}) == 7);
+      }
+
+      SUBCASE("parse_cst preserves concrete punctuation and source slices") {
+         auto result = expression::parse_cst("1 + 2 * 3");
+
+         REQUIRE(result.success);
+         CHECK(result.status == cpf::parse_status::success);
+         CHECK_FALSE(result.error.has_value());
+         REQUIRE(result.forest.size() == 1);
+         CHECK_FALSE(result.forest.front().has_materialized());
+
+         const auto& root = *result.forest.front();
+         CHECK(root.rule_name == "expression");
+         CHECK(root.source_text("1 + 2 * 3") == "1 + 2 * 3");
+         REQUIRE(root.children.size() == 1);
+
+         const auto& addition_node = cst_child_node(root.children[0]);
+         CHECK(addition_node.rule_name == "addition");
+         REQUIRE(addition_node.children.size() == 3);
+         CHECK(cst_child_token(addition_node.children[1]).text == "+");
+
+         const auto& right_expression = cst_child_node(addition_node.children[2]);
+         REQUIRE(right_expression.children.size() == 1);
+         const auto& multiplication_node = cst_child_node(right_expression.children[0]);
+         REQUIRE(multiplication_node.children.size() == 3);
+         CHECK(cst_child_token(multiplication_node.children[1]).text == "*");
+
+         std::ostringstream stream;
+         stream << root;
+         CHECK(stream.str().find("addition [production=") != std::string::npos);
+         CHECK(stream.str().find("terminal(\"+\"") != std::string::npos);
+      }
+
+      SUBCASE("parse_cst flattens synthetic helper rules while keeping grouped terminals") {
+         auto result = grouped_sentence::parse_cst("(hi)");
+
+         REQUIRE(result.success);
+         REQUIRE(result.forest.size() == 1);
+
+         const auto& root = *result.forest.front();
+         CHECK(root.rule_name == "grouped_sentence");
+         REQUIRE(root.children.size() == 3);
+         CHECK(cst_child_token(root.children[0]).text == "(");
+         CHECK(cst_child_token(root.children[1]).text == "hi");
+         CHECK(cst_child_token(root.children[2]).text == ")");
+      }
+
+      SUBCASE("parse_cst exposes recovered damage through recursive CST traversal") {
+         cpf::parse_options options;
+         options.allow_partial = true;
+
+         auto result = expression::parse_cst("1 + * 2 + 3", options);
+
+         REQUIRE(result.success);
+         CHECK(result.partial);
+         REQUIRE(result.error.has_value());
+         REQUIRE(result.forest.size() == 1);
+         CHECK(result.forest.front().is_partial());
+
+         const auto& root = *result.forest.front();
+         auto damaged_nodes = std::size_t{0};
+         cpf::visit_cst_recursive(root, [&](const cpf::cst_node& node) {
+            if (node.is_damaged()) {
+               ++damaged_nodes;
+            }
+         });
+
+         CHECK(damaged_nodes >= 1);
+         CHECK_FALSE(result.forest.front().damaged_nodes().empty());
       }
 
       SUBCASE("parse options can reject ambiguity before AST construction") {

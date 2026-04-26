@@ -18,6 +18,7 @@ This directory contains the structured project documentation for CPF.
     - Generated parser API shape
     - `cpf::parse_options`
     - Lazy parse forests via `cpf::parse_tree<T>`
+    - Generic CST parsing through `parse_cst(...)`
     - Partial recovery through damaged trees
     - Error handling and complexity metadata
 - [`tooling.md`](./tooling.md)

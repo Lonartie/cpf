@@ -47,6 +47,48 @@ namespace cpf {
          os << range.begin.offset << ".." << range.end.offset << " (" << range.begin.line << ':'
             << range.begin.column << '-' << range.end.line << ':' << range.end.column << ')';
       }
+
+      [[nodiscard]] auto clone_cst_child(const cst_child& child) -> cst_child {
+         if (const auto* matched = std::get_if<matched_string>(&child); matched != nullptr) {
+            return *matched;
+         }
+
+         const auto& nested = std::get<std::unique_ptr<cst_node>>(child);
+         return nested != nullptr ? nested->clone() : std::unique_ptr<cst_node>{};
+      }
+
+      void write_cst_node(std::ostream& os, const cst_node& node, std::size_t indent) {
+         write_indent(os, indent);
+         os << node.rule_name << " [production=" << node.production_index << ", range=";
+         write_range(os, node.range);
+         os << ']';
+         if (node.children.empty()) {
+            return;
+         }
+
+         os << "(\n";
+         for (std::size_t index = 0; index < node.children.size(); ++index) {
+            const auto& child = node.children[index];
+            if (const auto* matched = std::get_if<matched_string>(&child); matched != nullptr) {
+               write_indent(os, indent + 1);
+               os << "terminal(" << std::quoted(matched->text) << ", range=";
+               write_range(os, matched->range);
+               os << ')';
+            } else if (const auto* nested = std::get_if<std::unique_ptr<cst_node>>(&child); nested != nullptr &&
+                       *nested != nullptr) {
+               write_cst_node(os, **nested, indent + 1);
+            } else {
+               write_indent(os, indent + 1);
+               os << "null";
+            }
+            if (index + 1 < node.children.size()) {
+               os << '\n';
+            }
+         }
+         os << '\n';
+         write_indent(os, indent);
+         os << ')';
+      }
    } // namespace
 
    namespace detail {
@@ -249,6 +291,34 @@ namespace cpf {
    void node::add_damage(node_damage damage) { m_damage.push_back(std::move(damage)); }
 
    void node::copy_damage_to(node& other) const { other.m_damage = m_damage; }
+
+   auto cst_node::clone() const -> std::unique_ptr<cst_node> {
+      auto copy = std::make_unique<cst_node>();
+      copy->production_index = production_index;
+      copy->range = range;
+      copy->rule = rule;
+      copy->rule_name = rule_name;
+      copy->children.reserve(children.size());
+      for (const auto& child: children) {
+         copy->children.push_back(clone_cst_child(child));
+      }
+      copy_damage_to(*copy);
+      return copy;
+   }
+
+   auto cst_node::source_text(std::string_view input) const -> std::string {
+      if (range.begin.offset > range.end.offset || range.end.offset > input.size()) {
+         throw std::runtime_error{"CST node range is outside the supplied input"};
+      }
+      return std::string{input.substr(range.begin.offset, range.end.offset - range.begin.offset)};
+   }
+
+   auto cst_node::clone_node() const -> std::unique_ptr<node> { return clone(); }
+
+   std::ostream& operator<<(std::ostream& os, const cst_node& node) {
+      write_cst_node(os, node, 0);
+      return os;
+   }
 
    std::ostream& operator<<(std::ostream& os, const token_sequence& sequence) {
       os << "token_sequence(\n";

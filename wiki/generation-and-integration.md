@@ -52,11 +52,16 @@ Generated headers now expose both parser and lexer entry points. A generated roo
 - `lex(std::string_view)` -> `cpf::token_sequence`
 - `parse(std::string_view, ...)`
 - `parse(const cpf::token_sequence&, ...)`
+- `parse_cst(std::string_view, ...)`
+- `parse_cst(const cpf::token_sequence&, ...)`
 - `recognize(std::string_view)`
 - `recognize(const cpf::token_sequence&)`
 
 This lets callers lex once and parse the same source multiple times with different `cpf::parse_options` values without paying for
 lexing again.
+
+`parse(...)` still materializes the generated AST node family for the selected rule. `parse_cst(...)` materializes a generic
+`cpf::cst_node` tree that preserves concrete terminals in source order and flattens only synthetic lowering helpers.
 
 ## `cpfgen` command-line interface
 

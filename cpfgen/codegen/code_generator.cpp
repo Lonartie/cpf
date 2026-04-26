@@ -1430,6 +1430,7 @@ namespace cpf {
             line(header, 1, "static constexpr std::size_t ProductionCount = " + std::to_string(definition_count) + ";");
             if (!rules_by_name.at(info.name)->synthetic) {
                line(header, 1, "using parse_result = cpf::parse_result<" + templated_rule_type(info.name) + ">;");
+               line(header, 1, "using cst_parse_result = cpf::parse_result<cpf::cst_node>;");
             }
             for (const auto& field: info.fields) {
                line(header, 1, render_field_declaration(field));
@@ -1451,6 +1452,10 @@ namespace cpf {
                     "static parse_result parse(std::string_view input, const cpf::parse_options& options = {});");
                line(header, 1,
                     "static parse_result parse(const cpf::token_sequence& tokens, const cpf::parse_options& options = {});");
+               line(header, 1,
+                    "static cst_parse_result parse_cst(std::string_view input, const cpf::parse_options& options = {});");
+               line(header, 1,
+                    "static cst_parse_result parse_cst(const cpf::token_sequence& tokens, const cpf::parse_options& options = {});");
                line(header, 1, "static cpf::recognize_result recognize(std::string_view input);");
                line(header, 1,
                     "static cpf::recognize_result recognize(const cpf::token_sequence& tokens);");
@@ -1708,6 +1713,10 @@ namespace cpf {
             line(header, 0,
                  "auto parse_" + info.name + "_default(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<" + info.name + ">;");
             line(header, 0,
+                 "auto parse_" + info.name + "_cst(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<cpf::cst_node>;");
+            line(header, 0,
+                 "auto parse_" + info.name + "_cst(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<cpf::cst_node>;");
+            line(header, 0,
                  "auto recognize_" + info.name + "_default(std::string_view input) -> cpf::recognize_result;");
             line(header, 0,
                  "auto recognize_" + info.name + "_default(const cpf::token_sequence& tokens) -> cpf::recognize_result;");
@@ -1819,6 +1828,20 @@ namespace cpf {
                line(header, 0,
                     "auto " + templated_rule_type(info.name) + "::lex(std::string_view input) -> cpf::token_sequence {");
                line(header, 1, "return detail::lex_" + base_name + "_generated(input);");
+               line(header, 0, "}");
+               line(header, 0);
+               line(header, 0, "template<typename UserData>");
+               line(header, 0,
+                    "auto " + templated_rule_type(info.name) +
+                          "::parse_cst(std::string_view input, const cpf::parse_options& options) -> cst_parse_result {");
+               line(header, 1, "return detail::parse_" + info.name + "_cst(input, options);");
+               line(header, 0, "}");
+               line(header, 0);
+               line(header, 0, "template<typename UserData>");
+               line(header, 0,
+                    "auto " + templated_rule_type(info.name) +
+                          "::parse_cst(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cst_parse_result {");
+               line(header, 1, "return detail::parse_" + info.name + "_cst(tokens, options);");
                line(header, 0, "}");
                line(header, 0);
                line(header, 0, "template<typename UserData>");
@@ -2520,6 +2543,8 @@ namespace cpf {
          line(source, 3, "std::move(arg_sizes));");
          line(source, 1, "}");
          line(source, 1, "std::unique_ptr<cpf::node> build_node(const parse_node_ptr& tree);");
+         line(source, 1, "std::unique_ptr<cpf::cst_node> build_cst_node(const parse_node_ptr& tree);");
+         line(source, 1, "void append_cst_children(const parse_node_ptr& tree, std::vector<cpf::cst_child>& children);");
          line(source, 0);
          line(source, 1, "template<typename T>");
          line(source, 1, "std::unique_ptr<T> release_built_node_as(std::unique_ptr<cpf::node> built) {");
@@ -2575,6 +2600,69 @@ namespace cpf {
          line(source, 2, "matched.range = tree->range;");
          line(source, 2, "append_matched_tree_text(tree, matched.text);");
          line(source, 2, "return matched;");
+         line(source, 1, "}");
+         line(source, 0);
+         line(source, 1, "bool generated_tree_is_synthetic(const parse_node_ptr& tree) {");
+         line(source, 2, "switch (tree->production) {");
+         for (std::size_t emitted_index = 0; emitted_index < emitted_productions.size(); ++emitted_index) {
+            const auto& emitted_production = emitted_productions[emitted_index];
+            if (emitted_production.source_rule == nullptr) {
+               continue;
+            }
+            line(source, 3, "case " + std::to_string(emitted_index) + ":");
+            line(source, 4, std::string{"return "} + (emitted_production.source_rule->synthetic ? "true;" : "false;"));
+         }
+         line(source, 3, "default:");
+         line(source, 4, "return false;");
+         line(source, 2, "}");
+         line(source, 1, "}");
+         line(source, 0);
+         line(source, 1, "std::size_t generated_tree_rule_id(const parse_node_ptr& tree) {");
+         line(source, 2, "switch (tree->production) {");
+         for (std::size_t emitted_index = 0; emitted_index < emitted_productions.size(); ++emitted_index) {
+            const auto& emitted_production = emitted_productions[emitted_index];
+            if (emitted_production.source_rule == nullptr || !classes.contains(emitted_production.source_rule->identifier)) {
+               continue;
+            }
+            line(source, 3, "case " + std::to_string(emitted_index) + ":");
+            line(source, 4, "return " + emitted_production.source_rule->identifier + "::RuleId;");
+         }
+         line(source, 3, "default:");
+         line(source, 4, "throw std::runtime_error{\"Unknown parse production\"};");
+         line(source, 2, "}");
+         line(source, 1, "}");
+         line(source, 0);
+         line(source, 1, "std::string_view generated_tree_rule_name(const parse_node_ptr& tree) {");
+         line(source, 2, "switch (tree->production) {");
+         for (std::size_t emitted_index = 0; emitted_index < emitted_productions.size(); ++emitted_index) {
+            const auto& emitted_production = emitted_productions[emitted_index];
+            if (emitted_production.source_rule == nullptr) {
+               continue;
+            }
+            line(source, 3, "case " + std::to_string(emitted_index) + ":");
+            line(source, 4, "return \"" + emitted_production.source_rule->identifier + "\";");
+         }
+         line(source, 3, "default:");
+         line(source, 4, "throw std::runtime_error{\"Unknown parse production\"};");
+         line(source, 2, "}");
+         line(source, 1, "}");
+         line(source, 0);
+         line(source, 1, "void append_cst_children(const parse_node_ptr& tree, std::vector<cpf::cst_child>& children) {");
+         line(source, 2, "for (const auto& child : tree->children) {");
+         line(source, 3, "if (const auto* matched = std::get_if<cpf::matched_string>(&child); matched != nullptr) {");
+         line(source, 4, "children.emplace_back(*matched);");
+         line(source, 4, "continue;");
+         line(source, 3, "}");
+         line(source, 3, "const auto* node = std::get_if<parse_node_ptr>(&child);");
+         line(source, 3, "if (node == nullptr || *node == nullptr) {");
+         line(source, 4, "throw std::runtime_error{\"Generated parse tree child is not a node\"};");
+         line(source, 3, "}");
+         line(source, 3, "if (generated_tree_is_synthetic(*node)) {");
+         line(source, 4, "append_cst_children(*node, children);");
+         line(source, 4, "continue;");
+         line(source, 3, "}");
+         line(source, 3, "children.emplace_back(build_cst_node(*node));");
+         line(source, 2, "}");
          line(source, 1, "}");
          line(source, 0);
 
@@ -3176,6 +3264,19 @@ namespace cpf {
          line(source, 2, "}");
          line(source, 1, "}");
          line(source, 0);
+         line(source, 1, "std::unique_ptr<cpf::cst_node> build_cst_node(const parse_node_ptr& tree) {");
+         line(source, 2, "auto node = std::make_unique<cpf::cst_node>();");
+         line(source, 2, "node->production_index = definition_of_generated_tree(tree);");
+         line(source, 2, "node->range = tree->range;");
+         line(source, 2, "node->rule = generated_tree_rule_id(tree);");
+         line(source, 2, "node->rule_name = std::string{generated_tree_rule_name(tree)};");
+         line(source, 2, "for (const auto& damage : tree->damage) {");
+         line(source, 3, "cpf::detail::add_damage(*node, damage);");
+         line(source, 2, "}");
+         line(source, 2, "append_cst_children(tree, node->children);");
+         line(source, 2, "return node;");
+         line(source, 1, "}");
+         line(source, 0);
 
          line(source, 1, "template<typename T>");
          line(source, 1,
@@ -3266,6 +3367,65 @@ namespace cpf {
          line(source, 2, "auto tokens = cpf::detail::lex_input(input, grammar_spec);");
          line(source, 2, "return parse_generated<T>(tokens, root_rule, options);");
          line(source, 1, "}");
+         line(source, 0);
+         line(source, 1,
+              "cpf::parse_result<cpf::cst_node> parse_generated_cst(const cpf::token_sequence& tokens, std::size_t root_rule, const cpf::parse_options& options) {");
+         line(source, 2, "cpf::parse_result<cpf::cst_node> result;");
+         line(source, 2, "auto forest = cpf::detail::earley_parse(tokens, grammar_spec, root_rule, options.allow_partial);");
+         line(source, 2, "if (!forest.success) {");
+         line(source, 3, "result.error = std::move(forest.error);");
+         line(source, 3, "return result;");
+         line(source, 2, "}");
+         line(source, 2, "result.partial = forest.partial;");
+         line(source, 2, "if (result.partial) {");
+         line(source, 3, "result.error = forest.error;");
+         line(source, 2, "}");
+         line(source, 2, "auto valid_tree_count = std::size_t{0};");
+         line(source, 2, "for (std::size_t tree_index = 0; tree_index < forest.forest.size(); ++tree_index) {");
+         line(source, 3, "const auto& tree = forest.forest[tree_index];");
+         line(source, 3, "if (!validate_generated_tree(tree)) {");
+         line(source, 4, "continue;");
+         line(source, 3, "}");
+         line(source, 3, "++valid_tree_count;");
+         line(source, 3, "if (options.error_on_ambiguity && valid_tree_count > 1) {");
+         line(source, 4, "result.status = cpf::parse_status::failure;");
+         line(source, 4, "result.success = false;");
+         line(source, 4, "result.forest.clear();");
+         line(source, 4, "result.error = cpf::detail::make_ambiguity_error(grammar_rule_names[root_rule]);");
+         line(source, 4, "return result;");
+         line(source, 3, "}");
+         line(source, 3, "result.status = result.partial ? cpf::parse_status::partial_success : cpf::parse_status::success;");
+         line(source, 3, "result.success = true;");
+         line(source, 3, "if (options.build_ast) {");
+         line(source, 4,
+              "result.forest.emplace_back(tree, definition_of_generated_tree(tree), tree->range, [tree]() { return build_cst_node(tree); }, forest.tree_damage[tree_index], forest.tree_partial[tree_index], [](const cpf::cst_node& root, std::vector<const cpf::node*>& damaged_nodes) {");
+         line(source, 5, "cpf::visit_cst_recursive(root, [&](const cpf::cst_node& current) {");
+         line(source, 6, "if (current.is_damaged()) {");
+         line(source, 7, "damaged_nodes.push_back(&current);");
+         line(source, 6, "}");
+         line(source, 5, "});");
+         line(source, 4,
+              "}, [tree](std::string_view repaired_input) { return cpf::detail::repaired_input_of(tree, repaired_input, grammar_spec); });");
+         line(source, 3, "}");
+         line(source, 2, "}");
+         line(source, 2, "if (result.success) {");
+         line(source, 3, "return result;");
+         line(source, 2, "}");
+         line(source, 2, "auto filtered_error = cpf::parse_error{};");
+         line(source, 2, "filtered_error.expected.push_back(\"valid parse tree\");");
+         line(source, 2, "filtered_error.found.kind = cpf::parse_error_found_kind::filtered_parse;");
+         line(source, 2,
+              "filtered_error.notes.push_back(std::string{R\"(completed Earley parses for rule ')\"} + std::string{grammar_rule_names[root_rule]} + R\"(' were rejected by precedence/associativity constraints)\");");
+         line(source, 2, "cpf::detail::error_tracker::finalize(filtered_error);");
+         line(source, 2, "result.error = std::move(filtered_error);");
+         line(source, 2, "return result;");
+         line(source, 1, "}");
+         line(source, 0);
+         line(source, 1,
+              "[[maybe_unused]] cpf::parse_result<cpf::cst_node> parse_generated_cst(std::string_view input, std::size_t root_rule, const cpf::parse_options& options) {");
+         line(source, 2, "auto tokens = cpf::detail::lex_input(input, grammar_spec);");
+         line(source, 2, "return parse_generated_cst(tokens, root_rule, options);");
+         line(source, 1, "}");
          line(source, 0, "} // namespace");
          line(source, 0);
 
@@ -3286,6 +3446,12 @@ namespace cpf {
                        info.name + "> {");
             line(source, 1, "auto tokens = detail::lex_" + base_name + "_generated(input);");
             line(source, 1, "return parse_" + info.name + "_default(tokens, options);");
+            line(source, 0, "}");
+            line(source, 0);
+            line(source, 0,
+                 "auto detail::parse_" + info.name + "_cst(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<cpf::cst_node> {");
+            line(source, 1, "auto tokens = detail::lex_" + base_name + "_generated(input);");
+            line(source, 1, "return parse_" + info.name + "_cst(tokens, options);");
             line(source, 0, "}");
             line(source, 0);
             line(source, 0,
@@ -3394,6 +3560,11 @@ namespace cpf {
                      "return parse_generated<" + info.name + ">(tokens, " + std::to_string(rule_indices.at(info.name)) +
                           ", options);");
             }
+            line(source, 0, "}");
+            line(source, 0);
+            line(source, 0,
+                 "auto detail::parse_" + info.name + "_cst(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<cpf::cst_node> {");
+            line(source, 1, "return parse_generated_cst(tokens, " + std::to_string(rule_indices.at(info.name)) + ", options);");
             line(source, 0, "}");
             line(source, 0);
             line(source, 0,

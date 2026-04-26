@@ -175,6 +175,8 @@ namespace {
          std::move(arg_sizes));
    }
    std::unique_ptr<cpf::node> build_node(const parse_node_ptr& tree);
+   std::unique_ptr<cpf::cst_node> build_cst_node(const parse_node_ptr& tree);
+   void append_cst_children(const parse_node_ptr& tree, std::vector<cpf::cst_child>& children);
 
    template<typename T>
    std::unique_ptr<T> release_built_node_as(std::unique_ptr<cpf::node> built) {
@@ -230,6 +232,87 @@ namespace {
       matched.range = tree->range;
       append_matched_tree_text(tree, matched.text);
       return matched;
+   }
+
+   bool generated_tree_is_synthetic(const parse_node_ptr& tree) {
+      switch (tree->production) {
+         case 0:
+            return false;
+         case 1:
+            return false;
+         case 2:
+            return false;
+         case 3:
+            return false;
+         case 4:
+            return false;
+         case 5:
+            return false;
+         case 6:
+            return false;
+         default:
+            return false;
+      }
+   }
+
+   std::size_t generated_tree_rule_id(const parse_node_ptr& tree) {
+      switch (tree->production) {
+         case 0:
+            return imported_bundle_word::RuleId;
+         case 1:
+            return imported_bundle_word::RuleId;
+         case 2:
+            return imported_bundle_suffix::RuleId;
+         case 3:
+            return imported_bundle_greeting::RuleId;
+         case 4:
+            return imported_bundle_parting::RuleId;
+         case 5:
+            return imported_bundle_message::RuleId;
+         case 6:
+            return imported_bundle_message::RuleId;
+         default:
+            throw std::runtime_error{"Unknown parse production"};
+      }
+   }
+
+   std::string_view generated_tree_rule_name(const parse_node_ptr& tree) {
+      switch (tree->production) {
+         case 0:
+            return "imported_bundle_word";
+         case 1:
+            return "imported_bundle_word";
+         case 2:
+            return "imported_bundle_suffix";
+         case 3:
+            return "imported_bundle_greeting";
+         case 4:
+            return "imported_bundle_parting";
+         case 5:
+            return "imported_bundle_message";
+         case 6:
+            return "imported_bundle_message";
+         default:
+            throw std::runtime_error{"Unknown parse production"};
+      }
+   }
+
+   void append_cst_children(const parse_node_ptr& tree, std::vector<cpf::cst_child>& children) {
+      for (const auto& child : tree->children) {
+         if (const auto* matched = std::get_if<cpf::matched_string>(&child); matched != nullptr) {
+            children.emplace_back(*matched);
+            continue;
+         }
+         const auto* node = std::get_if<parse_node_ptr>(&child);
+         if (node == nullptr || *node == nullptr) {
+            throw std::runtime_error{"Generated parse tree child is not a node"};
+         }
+         if (generated_tree_is_synthetic(*node)) {
+            append_cst_children(*node, children);
+            continue;
+         }
+         children.emplace_back(build_cst_node(*node));
+      }
    }
 
 
@@ -379,6 +462,19 @@ namespace {
       }
    }
 
+   std::unique_ptr<cpf::cst_node> build_cst_node(const parse_node_ptr& tree) {
+      auto node = std::make_unique<cpf::cst_node>();
+      node->production_index = definition_of_generated_tree(tree);
+      node->range = tree->range;
+      node->rule = generated_tree_rule_id(tree);
+      node->rule_name = std::string{generated_tree_rule_name(tree)};
+      for (const auto& damage : tree->damage) {
+         cpf::detail::add_damage(*node, damage);
+      }
+      append_cst_children(tree, node->children);
+      return node;
+   }
+
    template<typename T>
    cpf::recognize_result recognize_generated(const cpf::token_sequence& tokens, std::size_t root_rule) {
       cpf::recognize_result result;
@@ -454,6 +550,60 @@ namespace {
       auto tokens = cpf::detail::lex_input(input, grammar_spec);
       return parse_generated<T>(tokens, root_rule, options);
    }
+
+   cpf::parse_result<cpf::cst_node> parse_generated_cst(const cpf::token_sequence& tokens, std::size_t root_rule, const cpf::parse_options& options) {
+      cpf::parse_result<cpf::cst_node> result;
+      auto forest = cpf::detail::earley_parse(tokens, grammar_spec, root_rule, options.allow_partial);
+      if (!forest.success) {
+         result.error = std::move(forest.error);
+         return result;
+      }
+      result.partial = forest.partial;
+      if (result.partial) {
+         result.error = forest.error;
+      }
+      auto valid_tree_count = std::size_t{0};
+      for (std::size_t tree_index = 0; tree_index < forest.forest.size(); ++tree_index) {
+         const auto& tree = forest.forest[tree_index];
+         if (!validate_generated_tree(tree)) {
+            continue;
+         }
+         ++valid_tree_count;
+         if (options.error_on_ambiguity && valid_tree_count > 1) {
+            result.status = cpf::parse_status::failure;
+            result.success = false;
+            result.forest.clear();
+            result.error = cpf::detail::make_ambiguity_error(grammar_rule_names[root_rule]);
+            return result;
+         }
+         result.status = result.partial ? cpf::parse_status::partial_success : cpf::parse_status::success;
+         result.success = true;
+         if (options.build_ast) {
+            result.forest.emplace_back(tree, definition_of_generated_tree(tree), tree->range, [tree]() { return build_cst_node(tree); }, forest.tree_damage[tree_index], forest.tree_partial[tree_index], [](const cpf::cst_node& root, std::vector<const cpf::node*>& damaged_nodes) {
+               cpf::visit_cst_recursive(root, [&](const cpf::cst_node& current) {
+                  if (current.is_damaged()) {
+                     damaged_nodes.push_back(&current);
+                  }
+               });
+            }, [tree](std::string_view repaired_input) { return cpf::detail::repaired_input_of(tree, repaired_input, grammar_spec); });
+         }
+      }
+      if (result.success) {
+         return result;
+      }
+      auto filtered_error = cpf::parse_error{};
+      filtered_error.expected.push_back("valid parse tree");
+      filtered_error.found.kind = cpf::parse_error_found_kind::filtered_parse;
+      filtered_error.notes.push_back(std::string{R"(completed Earley parses for rule ')"} + std::string{grammar_rule_names[root_rule]} + R"(' were rejected by precedence/associativity constraints)");
+      cpf::detail::error_tracker::finalize(filtered_error);
+      result.error = std::move(filtered_error);
+      return result;
+   }
+
+   [[maybe_unused]] cpf::parse_result<cpf::cst_node> parse_generated_cst(std::string_view input, std::size_t root_rule, const cpf::parse_options& options) {
+      auto tokens = cpf::detail::lex_input(input, grammar_spec);
+      return parse_generated_cst(tokens, root_rule, options);
+   }
 } // namespace
 
 auto detail::lex_imported_bundle_generated(std::string_view input) -> cpf::token_sequence {
@@ -465,8 +615,17 @@ auto detail::parse_imported_bundle_word_default(std::string_view input, const cp
    return parse_imported_bundle_word_default(tokens, options);
 }
 
+auto detail::parse_imported_bundle_word_cst(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<cpf::cst_node> {
+   auto tokens = detail::lex_imported_bundle_generated(input);
+   return parse_imported_bundle_word_cst(tokens, options);
+}
+
 auto detail::parse_imported_bundle_word_default(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<imported_bundle_word> {
    return parse_generated<imported_bundle_word>(tokens, 0, options);
+}
+
+auto detail::parse_imported_bundle_word_cst(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<cpf::cst_node> {
+   return parse_generated_cst(tokens, 0, options);
 }
 
 auto detail::recognize_imported_bundle_word_default(std::string_view input) -> cpf::recognize_result {
@@ -522,8 +681,17 @@ auto detail::parse_imported_bundle_suffix_default(std::string_view input, const 
    return parse_imported_bundle_suffix_default(tokens, options);
 }
 
+auto detail::parse_imported_bundle_suffix_cst(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<cpf::cst_node> {
+   auto tokens = detail::lex_imported_bundle_generated(input);
+   return parse_imported_bundle_suffix_cst(tokens, options);
+}
+
 auto detail::parse_imported_bundle_suffix_default(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<imported_bundle_suffix> {
    return parse_generated<imported_bundle_suffix>(tokens, 1, options);
+}
+
+auto detail::parse_imported_bundle_suffix_cst(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<cpf::cst_node> {
+   return parse_generated_cst(tokens, 1, options);
 }
 
 auto detail::recognize_imported_bundle_suffix_default(std::string_view input) -> cpf::recognize_result {
@@ -572,8 +740,17 @@ auto detail::parse_imported_bundle_greeting_default(std::string_view input, cons
    return parse_imported_bundle_greeting_default(tokens, options);
 }
 
+auto detail::parse_imported_bundle_greeting_cst(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<cpf::cst_node> {
+   auto tokens = detail::lex_imported_bundle_generated(input);
+   return parse_imported_bundle_greeting_cst(tokens, options);
+}
+
 auto detail::parse_imported_bundle_greeting_default(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<imported_bundle_greeting> {
    return parse_generated<imported_bundle_greeting>(tokens, 2, options);
+}
+
+auto detail::parse_imported_bundle_greeting_cst(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<cpf::cst_node> {
+   return parse_generated_cst(tokens, 2, options);
 }
 
 auto detail::recognize_imported_bundle_greeting_default(std::string_view input) -> cpf::recognize_result {
@@ -622,8 +799,17 @@ auto detail::parse_imported_bundle_parting_default(std::string_view input, const
    return parse_imported_bundle_parting_default(tokens, options);
 }
 
+auto detail::parse_imported_bundle_parting_cst(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<cpf::cst_node> {
+   auto tokens = detail::lex_imported_bundle_generated(input);
+   return parse_imported_bundle_parting_cst(tokens, options);
+}
+
 auto detail::parse_imported_bundle_parting_default(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<imported_bundle_parting> {
    return parse_generated<imported_bundle_parting>(tokens, 3, options);
+}
+
+auto detail::parse_imported_bundle_parting_cst(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<cpf::cst_node> {
+   return parse_generated_cst(tokens, 3, options);
 }
 
 auto detail::recognize_imported_bundle_parting_default(std::string_view input) -> cpf::recognize_result {
@@ -670,6 +856,11 @@ auto detail::recompute_complexity_imported_bundle_parting_default(std::size_t pr
 auto detail::parse_imported_bundle_message_default(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<imported_bundle_message> {
    auto tokens = detail::lex_imported_bundle_generated(input);
    return parse_imported_bundle_message_default(tokens, options);
+}
+
+auto detail::parse_imported_bundle_message_cst(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<cpf::cst_node> {
+   auto tokens = detail::lex_imported_bundle_generated(input);
+   return parse_imported_bundle_message_cst(tokens, options);
 }
 
 auto detail::parse_imported_bundle_message_default(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<imported_bundle_message> {
@@ -823,6 +1014,10 @@ auto detail::parse_imported_bundle_message_default(const cpf::token_sequence& to
       result.error = best_error;
    }
    return result;
+}
+
+auto detail::parse_imported_bundle_message_cst(const cpf::token_sequence& tokens, const cpf::parse_options& options) -> cpf::parse_result<cpf::cst_node> {
+   return parse_generated_cst(tokens, 4, options);
 }
 
 auto detail::recognize_imported_bundle_message_default(std::string_view input) -> cpf::recognize_result {
