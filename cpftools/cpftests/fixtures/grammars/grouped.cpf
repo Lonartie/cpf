@@ -7,4 +7,8 @@ grouped_choice_greeting -> 'hello':text;
 grouped_choice_farewell -> 'bye':text;
 grouped_choice_value -> ('x' | 'y'):value;
 grouped_choice_payload -> (grouped_choice_greeting | grouped_choice_farewell):payload;
+grouped_number -> r'[0-9]+':value;
+grouped_pair -> ('x':first 'y':second | 'z':first 'w':second):value;
+grouped_pairs -> ('a':text 'b':suffix)+:pairs;
+grouped_signed_number -> ('-':sign grouped_number:value | grouped_number:value):payload;
 

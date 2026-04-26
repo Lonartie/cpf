@@ -1,5 +1,6 @@
 #include "ambiguous_choice.h"
 #include "calculator.h"
+#include "custom_errors.h"
 #include "error_choice.h"
 #include "grouped.h"
 #include "imported_bundle.h"
@@ -12,6 +13,7 @@
 
 #include "support/doctest.h"
 
+#include <algorithm>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -601,6 +603,16 @@ TEST_SUITE("generated.runtime") {
       }
    }
 
+   TEST_CASE("rule-level custom error annotations override generated nonterminal expectations") {
+      auto result = custom_assignment::parse("=value");
+
+      CHECK_FALSE(result.success);
+      REQUIRE(result.error.has_value());
+      CHECK(result.error->message.find("expected identifier") != std::string::npos);
+      CHECK(std::find(result.error->expected.begin(), result.error->expected.end(), "expected identifier") !=
+            result.error->expected.end());
+   }
+
    TEST_CASE("namespaced generated grammars remain fully usable through the CMake helper") {
       SUBCASE("parse entry points, visitors, and streaming stay available inside the namespace") {
          auto result = namespaced::expression::parse("1 + 2 + 3");
@@ -1097,6 +1109,54 @@ TEST_SUITE("generated.runtime") {
          });
 
          CHECK(visited == std::vector<std::string>{"grouped_choice_payload", "grouped_choice_greeting"});
+      }
+
+      SUBCASE("multi-symbol labeled groups materialize helper nodes with their inner captures") {
+         auto xy = grouped_pair::parse("xy");
+         REQUIRE(xy.success);
+         REQUIRE(xy.forest.size() == 1);
+         REQUIRE(xy.forest.front()->value != nullptr);
+         CHECK(xy.forest.front()->value->first.text == "x");
+         CHECK(xy.forest.front()->value->second.text == "y");
+
+         auto zw = grouped_pair::parse("zw");
+         REQUIRE(zw.success);
+         REQUIRE(zw.forest.size() == 1);
+         REQUIRE(zw.forest.front()->value != nullptr);
+         CHECK(zw.forest.front()->value->first.text == "z");
+         CHECK(zw.forest.front()->value->second.text == "w");
+      }
+
+      SUBCASE("quantified labeled groups materialize repeated helper nodes") {
+         auto repeated = grouped_pairs::parse("abab");
+         REQUIRE(repeated.success);
+         REQUIRE(repeated.forest.size() == 1);
+         REQUIRE(repeated.forest.front()->pairs.size() == 2);
+         REQUIRE(repeated.forest.front()->pairs[0] != nullptr);
+         REQUIRE(repeated.forest.front()->pairs[1] != nullptr);
+         CHECK(repeated.forest.front()->pairs[0]->text.text == "a");
+         CHECK(repeated.forest.front()->pairs[0]->suffix.text == "b");
+         CHECK(repeated.forest.front()->pairs[1]->text.text == "a");
+         CHECK(repeated.forest.front()->pairs[1]->suffix.text == "b");
+      }
+
+      SUBCASE("labeled groups may keep inner labeled captures optional across alternatives") {
+         auto negative = grouped_signed_number::parse("-12");
+         REQUIRE(negative.success);
+         REQUIRE(negative.forest.size() == 1);
+         REQUIRE(negative.forest.front()->payload != nullptr);
+         REQUIRE(negative.forest.front()->payload->sign.has_value());
+         CHECK(negative.forest.front()->payload->sign->text == "-");
+         REQUIRE(negative.forest.front()->payload->value != nullptr);
+         CHECK(negative.forest.front()->payload->value->value.text == "12");
+
+         auto positive = grouped_signed_number::parse("12");
+         REQUIRE(positive.success);
+         REQUIRE(positive.forest.size() == 1);
+         REQUIRE(positive.forest.front()->payload != nullptr);
+         CHECK_FALSE(positive.forest.front()->payload->sign.has_value());
+         REQUIRE(positive.forest.front()->payload->value != nullptr);
+         CHECK(positive.forest.front()->payload->value->value.text == "12");
       }
 
       SUBCASE("quantifiers apply to groups as parse-shaping constructs") {

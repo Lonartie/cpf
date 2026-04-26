@@ -457,7 +457,7 @@ namespace cpf {
          }
 
          [[nodiscard]] std::string make_group_rule_name() {
-            return "$cpf_group_" + std::to_string(synthetic_rule_counter_++);
+            return "cpf_group_" + std::to_string(synthetic_rule_counter_++);
          }
 
          std::vector<std::vector<symbol>>
@@ -484,15 +484,8 @@ namespace cpf {
                   lowered_item.push_back(std::vector<symbol>{*item.parsed_symbol});
                } else {
                   const auto& group = *item.group;
-                  if (!group.label.empty() && !is_group_single(group)) {
-                     throw error("Quantified labeled groups are not supported");
-                  }
-
                   if (!is_group_single(group) || !group.label.empty()) {
-                     if (group_contains_nested_labeled_capture(group)) {
-                        if (!group.label.empty()) {
-                           throw error("Labeled groups cannot contain labeled captures");
-                        }
+                     if (group.label.empty() && group_contains_nested_labeled_capture(group)) {
                         throw error("Quantified groups cannot contain labeled captures");
                      }
 
@@ -500,18 +493,8 @@ namespace cpf {
                      synthetic_rule.identifier = make_group_rule_name();
                      synthetic_rule.synthetic = true;
 
-                     auto lowered_group = lower_alternatives(group.alternatives, line, false, synthetic_rules);
-                     if (!group.label.empty()) {
-                        for (const auto& lowered_production: lowered_group) {
-                           if (lowered_production.size() != 1 || !lowered_production.front().is_single()) {
-                              throw error("Labeled groups must lower to exactly one symbol per alternative");
-                           }
-                           if (lowered_production.front().kind == symbol_kind::reference &&
-                               lowered_production.front().value.starts_with("$cpf_group_")) {
-                              throw error("Labeled groups must lower directly to terminals or public rules");
-                           }
-                        }
-                     }
+                     auto lowered_group =
+                           lower_alternatives(group.alternatives, line, !group.label.empty(), synthetic_rules);
                      synthetic_rule.productions.reserve(lowered_group.size());
                      for (const auto& lowered_production: lowered_group) {
                         production parsed_production;

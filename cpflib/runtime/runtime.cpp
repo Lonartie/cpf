@@ -448,6 +448,10 @@ namespace cpf {
 
          auto describe_expected_symbol(const parser_symbol& symbol, const grammar_spec& grammar) -> std::string {
             if (symbol.kind == parser_symbol_kind::nonterminal) {
+               if (grammar.rule_expected_labels != nullptr && symbol.value < grammar.rule_count &&
+                   !grammar.rule_expected_labels[symbol.value].empty()) {
+                  return std::string{grammar.rule_expected_labels[symbol.value]};
+               }
                return "rule '" + std::string{symbol.text} + "'";
             }
             const auto& terminal = grammar.token_symbols[symbol.value];
@@ -744,8 +748,13 @@ namespace cpf {
 
                   auto match = match_terminal(prepared.tokens, position, next, grammar);
                   if (!match.has_value()) {
+                     auto expected = describe_expected_symbol(next, grammar);
+                     if (grammar.rule_expected_labels != nullptr && production.lhs < grammar.rule_count &&
+                         !grammar.rule_expected_labels[production.lhs].empty()) {
+                        expected = std::string{grammar.rule_expected_labels[production.lhs]};
+                     }
                      tracker.record(token_position_offset(input, prepared.tokens, position),
-                                    describe_expected_symbol(next, grammar),
+                                    std::move(expected),
                                     describe_progress(production, dot));
                      continue;
                   }

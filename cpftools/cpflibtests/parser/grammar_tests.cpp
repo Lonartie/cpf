@@ -414,7 +414,7 @@ TEST_SUITE("cpflib.grammar_parser") {
       REQUIRE(grouped_value->productions.front().symbols.size() == 1);
       CHECK(grouped_value->productions.front().symbols.front().label == "value");
       CHECK(grouped_value->productions.front().symbols.front().kind == cpf::symbol_kind::reference);
-      CHECK(grouped_value->productions.front().symbols.front().value.find("$cpf_group_") == 0);
+      CHECK(grouped_value->productions.front().symbols.front().value.find("cpf_group_") == 0);
 
       auto synthetic_seen = false;
       for (const auto& rule: grammar.rules) {
@@ -431,7 +431,67 @@ TEST_SUITE("cpflib.grammar_parser") {
       CHECK(synthetic_seen);
    }
 
-   TEST_CASE("unsupported labeled group captures report expressive parser errors") {
+   TEST_CASE("full labeled groups lower through synthetic helper rules") {
+      auto grammar = cpf::parse_grammar(R"(
+         expr -> number;
+         number -> r'[0-9]+':value;
+         grouped_pair -> ('x':first 'y':second | 'z':first 'w':second):value;
+         grouped_quantified -> ('a':text 'b':suffix)+:pairs;
+         grouped_nested -> ('-':sign number:value | number:value):payload;
+      )");
+
+      auto* grouped_pair = grammar.find_rule("grouped_pair");
+      auto* grouped_quantified = grammar.find_rule("grouped_quantified");
+      auto* grouped_nested = grammar.find_rule("grouped_nested");
+
+      REQUIRE(grouped_pair != nullptr);
+      REQUIRE(grouped_quantified != nullptr);
+      REQUIRE(grouped_nested != nullptr);
+
+      SUBCASE("multi-symbol labeled groups lower to one labeled helper reference") {
+         REQUIRE(grouped_pair->productions.size() == 1);
+         REQUIRE(grouped_pair->productions.front().symbols.size() == 1);
+         const auto& symbol = grouped_pair->productions.front().symbols.front();
+         CHECK(symbol.label == "value");
+         CHECK(symbol.kind == cpf::symbol_kind::reference);
+         CHECK(symbol.value.find("cpf_group_") == 0);
+         CHECK(symbol.quantifier == cpf::symbol_quantifier::one);
+      }
+
+      SUBCASE("quantified labeled groups preserve the helper quantifier") {
+         REQUIRE(grouped_quantified->productions.size() == 1);
+         REQUIRE(grouped_quantified->productions.front().symbols.size() == 1);
+         const auto& symbol = grouped_quantified->productions.front().symbols.front();
+         CHECK(symbol.label == "pairs");
+         CHECK(symbol.kind == cpf::symbol_kind::reference);
+         CHECK(symbol.value.find("cpf_group_") == 0);
+         CHECK(symbol.quantifier == cpf::symbol_quantifier::one_or_more);
+      }
+
+      SUBCASE("labeled groups may contain inner labeled captures") {
+         REQUIRE(grouped_nested->productions.size() == 1);
+         REQUIRE(grouped_nested->productions.front().symbols.size() == 1);
+         const auto& symbol = grouped_nested->productions.front().symbols.front();
+         CHECK(symbol.label == "payload");
+         CHECK(symbol.kind == cpf::symbol_kind::reference);
+         CHECK(symbol.value.find("cpf_group_") == 0);
+
+         auto synthetic_seen = false;
+         for (const auto& rule: grammar.rules) {
+            if (!rule.synthetic || rule.identifier != symbol.value) {
+               continue;
+            }
+            synthetic_seen = true;
+            REQUIRE(rule.productions.size() == 2);
+            CHECK(rule.productions[0].symbols[0].label == "sign");
+            CHECK(rule.productions[0].symbols[1].label == "value");
+            CHECK(rule.productions[1].symbols[0].label == "value");
+         }
+         CHECK(synthetic_seen);
+      }
+   }
+
+   TEST_CASE("unsupported unlabeled quantified group captures report expressive parser errors") {
       auto capture_error = [](std::string_view source) -> std::string {
          try {
             static_cast<void>(cpf::parse_grammar(source));
@@ -441,32 +501,6 @@ TEST_SUITE("cpflib.grammar_parser") {
          return std::string{};
       };
 
-      SUBCASE("labeled groups cannot also contain inner labeled captures") {
-         auto message = capture_error(R"(
-            expr -> ('x':inner | 'y':inner):value;
-         )");
-
-         REQUIRE_FALSE(message.empty());
-         CHECK(message.find("Labeled groups cannot contain labeled captures") != std::string::npos);
-      }
-
-      SUBCASE("quantified labeled groups are still rejected") {
-         auto message = capture_error(R"(
-            expr -> ('x' | 'y')+:value;
-         )");
-
-         REQUIRE_FALSE(message.empty());
-         CHECK(message.find("Quantified labeled groups are not supported") != std::string::npos);
-      }
-
-      SUBCASE("labeled groups must lower to a single symbol per alternative") {
-         auto message = capture_error(R"(
-            expr -> ('x' 'y' | 'z'):value;
-         )");
-
-         REQUIRE_FALSE(message.empty());
-         CHECK(message.find("Labeled groups must lower to exactly one symbol per alternative") != std::string::npos);
-      }
 
       SUBCASE("quantified groups cannot contain labeled captures") {
          auto message = capture_error(R"(

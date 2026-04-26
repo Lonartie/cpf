@@ -78,6 +78,7 @@ namespace cpf {
          const production_spec* productions = nullptr;
          std::size_t production_count = 0;
          std::size_t rule_count = 0;
+         const std::string_view* rule_expected_labels = nullptr;
          const std::size_t* rule_production_indices = nullptr;
          const std::size_t* rule_production_offsets = nullptr;
          const std::size_t* rule_production_counts = nullptr;

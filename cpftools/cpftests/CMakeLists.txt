@@ -20,6 +20,7 @@ cpf_link_grammars(cpftests
         fixtures/grammars/default_labels.cpf
         fixtures/grammars/ambiguous_choice.cpf
         fixtures/grammars/error_choice.cpf
+        fixtures/grammars/custom_errors.cpf
 )
 
 cpf_link_grammars(cpftests

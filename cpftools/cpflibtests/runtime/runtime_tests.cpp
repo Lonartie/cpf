@@ -27,10 +27,12 @@ namespace {
    constexpr std::array<std::size_t, 1> recover_grammar_rule_production_indices{{0}};
    constexpr std::array<std::size_t, 1> recover_grammar_rule_production_offsets{{0}};
    constexpr std::array<std::size_t, 1> recover_grammar_rule_production_counts{{1}};
+   constexpr std::array<std::string_view, 1> recover_grammar_rule_expected_labels{{""}};
    constexpr cpf::detail::grammar_spec recover_grammar_spec{
          recover_grammar_productions.data(),
          recover_grammar_productions.size(),
          1,
+         recover_grammar_rule_expected_labels.data(),
          recover_grammar_rule_production_indices.data(),
          recover_grammar_rule_production_offsets.data(),
          recover_grammar_rule_production_counts.data(),
@@ -58,10 +60,12 @@ namespace {
    constexpr std::array<std::size_t, 3> optional_grammar_rule_production_indices{{0, 1, 2}};
    constexpr std::array<std::size_t, 2> optional_grammar_rule_production_offsets{{0, 1}};
    constexpr std::array<std::size_t, 2> optional_grammar_rule_production_counts{{1, 2}};
+   constexpr std::array<std::string_view, 2> optional_grammar_rule_expected_labels{{"", ""}};
    constexpr cpf::detail::grammar_spec optional_grammar_spec{
          optional_grammar_productions.data(),
          optional_grammar_productions.size(),
          2,
+         optional_grammar_rule_expected_labels.data(),
          optional_grammar_rule_production_indices.data(),
          optional_grammar_rule_production_offsets.data(),
          optional_grammar_rule_production_counts.data(),
@@ -98,10 +102,12 @@ namespace {
    constexpr std::array<std::size_t, 4> precedence_grammar_rule_production_indices{{0, 1, 2, 3}};
    constexpr std::array<std::size_t, 2> precedence_grammar_rule_production_offsets{{0, 2}};
    constexpr std::array<std::size_t, 2> precedence_grammar_rule_production_counts{{2, 2}};
+   constexpr std::array<std::string_view, 2> precedence_grammar_rule_expected_labels{{"", ""}};
    constexpr cpf::detail::grammar_spec precedence_grammar_spec{
          precedence_grammar_productions.data(),
          precedence_grammar_productions.size(),
          2,
+         precedence_grammar_rule_expected_labels.data(),
          precedence_grammar_rule_production_indices.data(),
          precedence_grammar_rule_production_offsets.data(),
          precedence_grammar_rule_production_counts.data(),
