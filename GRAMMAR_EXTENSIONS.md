@@ -1,4 +1,6 @@
-### 7. Lookahead predicates and commit/cut markers
+### ~~7. Lookahead predicates and commit/cut markers~~
+
+Implemented.
 
 **Problem**
 
@@ -35,7 +37,9 @@ identifier -> !keyword r'[A-Za-z_][A-Za-z0-9_]*':value;
 
 This is more advanced than the earlier items, but becomes valuable once CPF targets editor and tooling scenarios.
 
-### 8. Parameterized grammar macros or templates
+### ~~8. Parameterized grammar macros or templates~~
+
+Implemented.
 
 **Problem**
 

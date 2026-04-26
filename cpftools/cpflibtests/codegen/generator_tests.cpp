@@ -465,6 +465,40 @@ TEST_SUITE("cpflib.code_generator") {
             std::string::npos);
    }
 
+   TEST_CASE("lookahead predicates emit zero-width parser symbol kinds in generated source") {
+      auto grammar = cpf::parse_grammar(R"(
+         keyword -> 'if' | 'else';
+         identifier -> !keyword r'[A-Za-z_][A-Za-z0-9_]*':value;
+         call -> identifier:name &'(' '(':open ')':close;
+      )");
+
+      auto generated = cpf::generate_code(grammar, "lookahead_codegen");
+
+      CHECK(generated.source.find("cpf::detail::parser_symbol_kind::negative_nonterminal") != std::string::npos);
+      CHECK(generated.source.find("cpf::detail::parser_symbol_kind::positive_terminal") != std::string::npos);
+      CHECK(generated.source.find("identifier -> !keyword") != std::string::npos);
+      CHECK(generated.source.find("call -> identifier:name &'('") != std::string::npos);
+   }
+
+   TEST_CASE("template invocations generate hidden helper nodes with substituted captures") {
+      auto grammar = cpf::parse_grammar(R"(
+         template surrounded<Open, Inner, Close> -> Open:open Inner:value Close:close;
+         token identifier_head -> r'[A-Za-z_]';
+         token identifier_tail -> r'[A-Za-z0-9_]';
+         token identifier -> identifier_head identifier_tail*;
+         paren_identifier -> surrounded<'(', identifier, ')'>:body;
+      )");
+
+      auto generated = cpf::generate_code(grammar, "templates_codegen");
+
+      CHECK(generated.header.find("std::unique_ptr<cpf_template_surrounded_") != std::string::npos);
+      CHECK(generated.header.find(" body;") != std::string::npos);
+      CHECK(generated.header.find("cpf::matched_string open;") != std::string::npos);
+      CHECK(generated.header.find("cpf::matched_string value;") != std::string::npos);
+      CHECK(generated.header.find("cpf::matched_string close;") != std::string::npos);
+      CHECK(generated.source.find("paren_identifier -> cpf_template_surrounded_") != std::string::npos);
+   }
+
    TEST_CASE("generated code can be wrapped in an explicit C++ namespace") {
       auto grammar = cpf::parse_grammar(R"(
          @whitespace ws;

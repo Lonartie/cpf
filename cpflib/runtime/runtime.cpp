@@ -301,6 +301,26 @@ namespace cpf {
             }
          };
 
+         struct predicate_query_key {
+            const grammar_spec* grammar = nullptr;
+            const std::vector<lexed_token>* tokens = nullptr;
+            std::size_t rule = 0;
+            std::size_t position = 0;
+
+            [[nodiscard]] bool operator==(const predicate_query_key&) const = default;
+         };
+
+         struct predicate_query_key_hash {
+            [[nodiscard]] auto operator()(const predicate_query_key& key) const noexcept -> std::size_t {
+               auto seed = std::size_t{0};
+               hash_combine(seed, reinterpret_cast<std::size_t>(key.grammar));
+               hash_combine(seed, reinterpret_cast<std::size_t>(key.tokens));
+               hash_combine(seed, key.rule);
+               hash_combine(seed, key.position);
+               return seed;
+            }
+         };
+
          struct production_step_key {
             std::size_t production = 0;
             std::size_t symbol_index = 0;
@@ -324,6 +344,11 @@ namespace cpf {
          struct terminal_match {
             std::size_t end = 0;
             matched_string text;
+         };
+
+         struct predicate_context {
+            std::unordered_map<predicate_query_key, bool, predicate_query_key_hash> matches;
+            std::unordered_set<predicate_query_key, predicate_query_key_hash> in_progress;
          };
 
          auto token_position_offset(std::string_view input, const std::vector<lexed_token>& tokens, std::size_t position)
@@ -447,6 +472,20 @@ namespace cpf {
          }
 
          auto describe_expected_symbol(const parser_symbol& symbol, const grammar_spec& grammar) -> std::string {
+            if (symbol.kind == parser_symbol_kind::positive_nonterminal ||
+                symbol.kind == parser_symbol_kind::negative_nonterminal) {
+               auto underlying = symbol;
+               underlying.kind = parser_symbol_kind::nonterminal;
+               auto description = describe_expected_symbol(underlying, grammar);
+               return symbol.kind == parser_symbol_kind::positive_nonterminal ? description : "not " + description;
+            }
+            if (symbol.kind == parser_symbol_kind::positive_terminal ||
+                symbol.kind == parser_symbol_kind::negative_terminal) {
+               auto underlying = symbol;
+               underlying.kind = parser_symbol_kind::terminal;
+               auto description = describe_expected_symbol(underlying, grammar);
+               return symbol.kind == parser_symbol_kind::positive_terminal ? description : "not " + description;
+            }
             if (symbol.kind == parser_symbol_kind::nonterminal) {
                if (grammar.rule_expected_labels != nullptr && symbol.value < grammar.rule_count &&
                    !grammar.rule_expected_labels[symbol.value].empty()) {
@@ -489,6 +528,36 @@ namespace cpf {
                }
             }
             return terminal_match{position + 1, token.text};
+         }
+
+         [[nodiscard]] bool is_positive_lookahead(const parser_symbol& symbol) {
+            return symbol.kind == parser_symbol_kind::positive_nonterminal ||
+                   symbol.kind == parser_symbol_kind::positive_terminal;
+         }
+
+         [[nodiscard]] bool is_negative_lookahead(const parser_symbol& symbol) {
+            return symbol.kind == parser_symbol_kind::negative_nonterminal ||
+                   symbol.kind == parser_symbol_kind::negative_terminal;
+         }
+
+         [[nodiscard]] bool is_terminal_lookahead(const parser_symbol& symbol) {
+            return symbol.kind == parser_symbol_kind::positive_terminal ||
+                   symbol.kind == parser_symbol_kind::negative_terminal;
+         }
+
+         [[nodiscard]] bool is_nonterminal_lookahead(const parser_symbol& symbol) {
+            return symbol.kind == parser_symbol_kind::positive_nonterminal ||
+                   symbol.kind == parser_symbol_kind::negative_nonterminal;
+         }
+
+         [[nodiscard]] auto as_consuming_symbol(const parser_symbol& symbol) -> parser_symbol {
+            auto normalized = symbol;
+            if (is_terminal_lookahead(symbol)) {
+               normalized.kind = parser_symbol_kind::terminal;
+            } else if (is_nonterminal_lookahead(symbol)) {
+               normalized.kind = parser_symbol_kind::nonterminal;
+            }
+            return normalized;
          }
 
          auto virtual_terminal(std::string_view input, const std::vector<lexed_token>& tokens, std::size_t position,
@@ -667,6 +736,10 @@ namespace cpf {
             parse_error error;
          };
 
+         auto predicate_matches(std::string_view input, const std::vector<lexed_token>& tokens,
+                                const grammar_spec& grammar, const parser_symbol& symbol, std::size_t position,
+                                predicate_context& context) -> bool;
+
          auto collect_root_ends(std::string_view input, const prepared_parse& prepared, const grammar_spec& grammar,
                                 std::size_t root_rule, bool require_full_input) -> std::vector<std::size_t>;
          auto build_root_forest(std::string_view input, const grammar_spec& grammar, std::size_t root_rule,
@@ -697,7 +770,8 @@ namespace cpf {
          }
 
          auto prepare_earley_parse(std::string_view input, std::vector<lexed_token> tokens, const grammar_spec& grammar,
-                                   std::size_t root_rule) -> prepared_parse {
+                                   std::size_t root_rule, std::size_t start_position,
+                                   predicate_context& predicate_matches_cache) -> prepared_parse {
             prepared_parse prepared;
             error_tracker tracker;
             prepared.tokens = std::move(tokens);
@@ -706,7 +780,7 @@ namespace cpf {
             const auto root_begin = grammar.rule_production_offsets[root_rule];
             const auto root_count = grammar.rule_production_counts[root_rule];
             for (std::size_t offset = 0; offset < root_count; ++offset) {
-               prepared.chart.front().add(grammar.rule_production_indices[root_begin + offset], 0, 0);
+               prepared.chart[start_position].add(grammar.rule_production_indices[root_begin + offset], 0, start_position);
                prepared.has_root_production = true;
             }
 
@@ -715,7 +789,7 @@ namespace cpf {
                return prepared;
             }
 
-            for (std::size_t position = 0; position < prepared.chart.size(); ++position) {
+            for (std::size_t position = start_position; position < prepared.chart.size(); ++position) {
                for (std::size_t index = 0; index < prepared.chart[position].items.size(); ++index) {
                   const auto [production_index, dot, start] = prepared.chart[position].items[index];
                   const auto& production = grammar.productions[production_index];
@@ -743,6 +817,19 @@ namespace cpf {
                            prepared.chart[position].add(candidate, 0, position);
                         }
                      }
+                     continue;
+                  }
+
+                  if (is_positive_lookahead(next) || is_negative_lookahead(next)) {
+                     const auto matched = predicate_matches(input, prepared.tokens, grammar, next, position,
+                                                            predicate_matches_cache);
+                     const auto success = is_positive_lookahead(next) ? matched : !matched;
+                     if (!success) {
+                        tracker.record(token_position_offset(input, prepared.tokens, position),
+                                       describe_expected_symbol(next, grammar), describe_progress(production, dot));
+                        continue;
+                     }
+                     prepared.chart[position].add(production_index, dot + 1, start);
                      continue;
                   }
 
@@ -781,20 +868,20 @@ namespace cpf {
                (void) key;
             }
 
-            auto success = false;
-            for (std::size_t end = 0; end < prepared.chart.size(); ++end) {
-               if (end != prepared.tokens.size()) {
+             auto success = false;
+             for (std::size_t end = start_position; end < prepared.chart.size(); ++end) {
+                if (end != prepared.tokens.size()) {
                   continue;
                }
-               if (prepared.completed_rules.contains(span_key{root_rule, 0, end})) {
+                if (prepared.completed_rules.contains(span_key{root_rule, start_position, end})) {
                   success = true;
                   break;
                }
             }
 
             if (!success) {
-               for (std::size_t end = 0; end < prepared.chart.size(); ++end) {
-                  auto completed = prepared.completed_rules.find(span_key{root_rule, 0, end});
+                for (std::size_t end = start_position; end < prepared.chart.size(); ++end) {
+                   auto completed = prepared.completed_rules.find(span_key{root_rule, start_position, end});
                   if (completed != prepared.completed_rules.end()) {
                      auto failure_position = token_position_offset(input, prepared.tokens, end);
                      tracker.record(failure_position, "<end of input>",
@@ -808,9 +895,41 @@ namespace cpf {
             return prepared;
          }
 
+         auto predicate_matches(std::string_view input, const std::vector<lexed_token>& tokens,
+                                const grammar_spec& grammar, const parser_symbol& symbol, std::size_t position,
+                                predicate_context& context) -> bool {
+            const auto target = as_consuming_symbol(symbol);
+            if (target.kind == parser_symbol_kind::terminal) {
+               return match_terminal(tokens, position, target, grammar).has_value();
+            }
+
+            auto key = predicate_query_key{&grammar, &tokens, target.value, position};
+            if (auto cached = context.matches.find(key); cached != context.matches.end()) {
+               return cached->second;
+            }
+            if (!context.in_progress.insert(key).second) {
+               return false;
+            }
+
+            auto prepared = prepare_earley_parse(input, tokens, grammar, target.value, position, context);
+            auto matched = false;
+            for (std::size_t end = position; end < prepared.chart.size(); ++end) {
+               if (prepared.completed_rules.contains(span_key{target.value, position, end})) {
+                  matched = true;
+                  break;
+               }
+            }
+
+            context.in_progress.erase(key);
+            context.matches.emplace(key, matched);
+            return matched;
+         }
+
          auto prepare_earley_parse(std::string_view input, const grammar_spec& grammar, std::size_t root_rule)
                -> prepared_parse {
-            return prepare_earley_parse(input, tokenize_input(input, grammar).tokens, grammar, root_rule);
+            auto predicate_matches_cache = predicate_context{};
+            return prepare_earley_parse(input, tokenize_input(input, grammar).tokens, grammar, root_rule, 0,
+                                        predicate_matches_cache);
          }
 
          auto finish_earley_parse(std::string_view input, const grammar_spec& grammar, std::size_t root_rule,
@@ -888,6 +1007,7 @@ namespace cpf {
             std::unordered_map<span_key, node_list, span_key_hash> production_cache;
             std::unordered_set<span_key, span_key_hash> rule_in_progress;
             std::unordered_set<span_key, span_key_hash> production_in_progress;
+            auto predicate_matches_cache = predicate_context{};
 
             std::function<const node_list&(std::size_t, std::size_t, std::size_t)> build_rule;
             std::function<const node_list&(std::size_t, std::size_t, std::size_t)> build_production;
@@ -945,6 +1065,15 @@ namespace cpf {
                   }
 
                   const auto& symbol = production.symbols[symbol_index];
+                  if (is_positive_lookahead(symbol) || is_negative_lookahead(symbol)) {
+                     const auto matched = predicate_matches(input, prepared.tokens, grammar, symbol, position,
+                                                            predicate_matches_cache);
+                     if ((is_positive_lookahead(symbol) && matched) ||
+                         (is_negative_lookahead(symbol) && !matched)) {
+                        enumerate(symbol_index + 1, position);
+                     }
+                     return;
+                  }
                   if (symbol.kind == parser_symbol_kind::nonterminal) {
                      auto end_it = prepared.rule_ends.find(rule_start_key{symbol.value, position});
                      if (end_it == prepared.rule_ends.end()) {
@@ -965,7 +1094,7 @@ namespace cpf {
                      return;
                   }
 
-                    auto match = match_terminal(prepared.tokens, position, symbol, grammar);
+                      auto match = match_terminal(prepared.tokens, position, symbol, grammar);
                   if (!match.has_value() || match->end > end) {
                      return;
                   }
@@ -1149,6 +1278,20 @@ namespace cpf {
                }
 
                const auto& symbol = production.symbols[symbol_index];
+               if (is_positive_lookahead(symbol) || is_negative_lookahead(symbol)) {
+                  auto predicate_matches_cache = predicate_context{};
+                  const auto matched = predicate_matches(input, prepared.tokens, grammar, symbol, position,
+                                                         predicate_matches_cache);
+                  if ((is_positive_lookahead(symbol) && matched) ||
+                      (is_negative_lookahead(symbol) && !matched)) {
+                     const auto& suffixes = build_step(production_index, symbol_index + 1, position, end);
+                     for (const auto& suffix: suffixes) {
+                        keep_recovered_suffix_candidate(candidates, suffix);
+                     }
+                  }
+                  step_in_progress.erase(key);
+                  return step_cache.emplace(key, std::move(candidates)).first->second;
+               }
                if (symbol.kind == parser_symbol_kind::nonterminal) {
                   for (std::size_t child_end = position; child_end <= end; ++child_end) {
                      const auto& child_candidates = build_rule(symbol.value, position, child_end);
@@ -1372,8 +1515,10 @@ namespace cpf {
 
       auto earley_parse(const token_sequence& tokens, const grammar_spec& grammar, std::size_t root_rule,
                         bool allow_partial) -> parse_forest {
+         auto predicate_matches_cache = predicate_context{};
          return finish_earley_parse(tokens.input, grammar, root_rule,
-                                    prepare_earley_parse(tokens.input, tokens.tokens, grammar, root_rule),
+                                    prepare_earley_parse(tokens.input, tokens.tokens, grammar, root_rule, 0,
+                                                         predicate_matches_cache),
                                     allow_partial);
       }
 
@@ -1384,8 +1529,10 @@ namespace cpf {
 
       auto earley_recognize(const token_sequence& tokens, const grammar_spec& grammar,
                             std::size_t root_rule) -> recognize_result {
+         auto predicate_matches_cache = predicate_context{};
          return finish_earley_recognize(root_rule,
-                                        prepare_earley_parse(tokens.input, tokens.tokens, grammar, root_rule));
+                                        prepare_earley_parse(tokens.input, tokens.tokens, grammar, root_rule, 0,
+                                                             predicate_matches_cache));
       }
 
       auto earley_inspect(std::string_view input, const grammar_spec& grammar, std::size_t root_rule,
@@ -1464,6 +1611,16 @@ namespace cpf {
                }
 
                const auto& symbol = production.symbols[symbol_index];
+               if (is_positive_lookahead(symbol) || is_negative_lookahead(symbol)) {
+                  auto predicate_matches_cache = predicate_context{};
+                  const auto matched = predicate_matches(input, prepared.tokens, grammar, symbol, position,
+                                                         predicate_matches_cache);
+                  if ((is_positive_lookahead(symbol) && matched) ||
+                      (is_negative_lookahead(symbol) && !matched)) {
+                     return enumerate(symbol_index + 1, position);
+                  }
+                  return 0;
+               }
                if (symbol.kind == parser_symbol_kind::nonterminal) {
                   auto end_it = prepared.rule_ends.find(rule_start_key{symbol.value, position});
                   if (end_it == prepared.rule_ends.end()) {

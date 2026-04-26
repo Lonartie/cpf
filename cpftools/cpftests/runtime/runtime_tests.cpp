@@ -4,11 +4,13 @@
 #include "error_choice.h"
 #include "grouped.h"
 #include "imported_bundle.h"
+#include "lookahead.h"
 #include "lexer_priority.h"
 #include "merged_definitions.h"
 #include "message.h"
 #include "namespaced_calculator.h"
 #include "quantified.h"
+#include "templates.h"
 #include "tokens.h"
 
 #include "support/doctest.h"
@@ -763,6 +765,79 @@ TEST_SUITE("generated.runtime") {
       REQUIRE(equals.forest.size() == 1);
       CHECK(equals.forest.front()->production_index == 1);
       CHECK(equals.forest.front()->text.text == "=");
+   }
+
+   TEST_CASE("lookahead predicates and cut markers affect generated runtime behavior") {
+      SUBCASE("negative lookahead excludes reserved words from identifiers") {
+         auto value = lookahead_identifier::parse("name_1");
+         REQUIRE(value.success);
+         REQUIRE(value.forest.size() == 1);
+         CHECK(value.forest.front()->value.text == "name_1");
+
+         auto keyword = lookahead_identifier::parse("if");
+         CHECK_FALSE(keyword.success);
+      }
+
+      SUBCASE("positive lookahead requires the following delimiter without capturing it twice") {
+         auto call = lookahead_call::parse("foo()");
+         REQUIRE(call.success);
+         REQUIRE(call.forest.size() == 1);
+         CHECK(call.forest.front()->name->value.text == "foo");
+         CHECK(call.forest.front()->open.text == "(");
+         CHECK(call.forest.front()->close.text == ")");
+
+         auto missing = lookahead_call::parse("foo");
+         CHECK_FALSE(missing.success);
+      }
+
+      SUBCASE("cut markers commit to the earlier branch once its prefix matches") {
+         auto identifier = lookahead_statement::parse("value");
+         REQUIRE(identifier.success);
+         REQUIRE(identifier.forest.size() == 1);
+         CHECK(identifier.forest.front()->name->value.text == "value");
+
+         auto committed = lookahead_statement::parse("if(x)y");
+         REQUIRE(committed.success);
+         REQUIRE(committed.forest.size() == 1);
+         REQUIRE(committed.forest.front()->keyword.has_value());
+         CHECK(committed.forest.front()->keyword->text == "if");
+         CHECK(committed.forest.front()->condition->value.text == "x");
+         CHECK(committed.forest.front()->body->value.text == "y");
+
+         auto missing_paren = lookahead_statement::parse("if value");
+         CHECK_FALSE(missing_paren.success);
+      }
+   }
+
+   TEST_CASE("template instantiations generate reusable structured helper nodes") {
+      SUBCASE("single template invocations expose the substituted captures") {
+         auto result = template_paren_identifier::parse("(name)");
+         REQUIRE(result.success);
+         REQUIRE(result.forest.size() == 1);
+         REQUIRE(result.forest.front()->body != nullptr);
+         CHECK(result.forest.front()->body->open.text == "(");
+         CHECK(result.forest.front()->body->value.text == "name");
+         CHECK(result.forest.front()->body->close.text == ")");
+      }
+
+      SUBCASE("template arguments may carry quantifiers into substituted captures") {
+         auto result = template_brace_identifiers::parse("{foo bar}");
+         REQUIRE(result.success);
+         REQUIRE(result.forest.size() == 1);
+         REQUIRE(result.forest.front()->body != nullptr);
+         REQUIRE(result.forest.front()->body->value.size() == 2);
+         CHECK(result.forest.front()->body->value[0].text == "foo");
+         CHECK(result.forest.front()->body->value[1].text == "bar");
+      }
+
+      SUBCASE("multiple template families can shape different helper payloads consistently") {
+         auto result = template_returned_identifier::parse("return value");
+         REQUIRE(result.success);
+         REQUIRE(result.forest.size() == 1);
+         REQUIRE(result.forest.front()->payload != nullptr);
+         CHECK(result.forest.front()->payload->keyword.text == "return");
+         CHECK(result.forest.front()->payload->value.text == "value");
+      }
    }
 
    TEST_CASE("choice-only inheritance grammars stay visitable and printable") {

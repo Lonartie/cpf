@@ -92,6 +92,7 @@ namespace cpf {
          symbol_kind kind = symbol_kind::reference;
          std::size_t value = 0;
          std::string text;
+         lookahead_kind lookahead = lookahead_kind::none;
       };
 
       struct emitted_production_info {
@@ -102,6 +103,7 @@ namespace cpf {
          const rule* source_rule = nullptr;
          const production* source_production = nullptr;
          std::vector<lowered_symbol> lowered_symbols;
+         std::vector<std::optional<std::size_t>> child_indices;
       };
 
       struct emitted_lexer_symbol_info {
@@ -374,6 +376,9 @@ namespace cpf {
             return false;
          }
          return std::all_of(production.symbols.begin(), production.symbols.end(), [&](const auto& symbol) {
+            if (symbol.is_zero_width()) {
+               return false;
+            }
             return symbol.kind != symbol_kind::reference || lexical_rules.contains(symbol.value);
          });
       }
@@ -383,6 +388,9 @@ namespace cpf {
                         const std::unordered_map<std::string, field_info>& synthetic_capture_fields = {}) {
          field_info field;
          field.name = symbol.label;
+         if (symbol.is_zero_width()) {
+            return field;
+         }
          if (symbol.kind == symbol_kind::reference) {
             if (symbol.has_label()) {
                if (auto synthetic_it = synthetic_capture_fields.find(symbol.value);
@@ -729,6 +737,12 @@ namespace cpf {
             text = "'" + symbol.value + "'";
          } else {
             text = "r'" + symbol.value + "'";
+         }
+
+         if (symbol.lookahead == lookahead_kind::positive) {
+            text = "&" + text;
+         } else if (symbol.lookahead == lookahead_kind::negative) {
+            text = "!" + text;
          }
 
          switch (symbol.quantifier) {
@@ -2039,6 +2053,7 @@ namespace cpf {
          auto make_emitted_symbol = [&](const symbol& source_symbol) {
             emitted_symbol lowered_symbol;
             lowered_symbol.kind = source_symbol.kind;
+            lowered_symbol.lookahead = source_symbol.lookahead;
             if (source_symbol.kind == symbol_kind::reference) {
                lowered_symbol.value = rule_indices.at(source_symbol.value);
                lowered_symbol.text = source_symbol.value;
@@ -2082,6 +2097,7 @@ namespace cpf {
          for (const auto& rule: grammar.rules) {
             for (const auto& production: rule.productions) {
                emitted_production_info emitted_production;
+               auto next_child_index = std::size_t{0};
                emitted_production.lhs = rule_indices.at(rule.identifier);
                emitted_production.lhs_name = rule.identifier;
                emitted_production.debug_text = render_production_debug(rule.identifier, production);
@@ -2096,9 +2112,17 @@ namespace cpf {
                      auto helper_id = create_helper(source_symbol, rule.identifier, production.definition);
                      lowered.helper_id = helper_id;
                      emitted_production.symbols.push_back(emitted_symbol{
-                           symbol_kind::reference, helpers[helper_id].rule_index, helpers[helper_id].rule_name});
+                           symbol_kind::reference,
+                           helpers[helper_id].rule_index,
+                           helpers[helper_id].rule_name,
+                           source_symbol.lookahead});
                   } else {
                      emitted_production.symbols.push_back(make_emitted_symbol(source_symbol));
+                  }
+                  if (source_symbol.is_zero_width()) {
+                     emitted_production.child_indices.push_back(std::nullopt);
+                  } else {
+                     emitted_production.child_indices.push_back(next_child_index++);
                   }
                   emitted_production.lowered_symbols.push_back(lowered);
                }
@@ -2294,16 +2318,35 @@ namespace cpf {
             for (std::size_t i = 0; i < production.symbols.size(); ++i) {
                const auto& symbol = production.symbols[i];
                std::string rendered_symbol;
+               auto parser_kind = std::string_view{"cpf::detail::parser_symbol_kind::terminal"};
                if (symbol.kind == symbol_kind::reference) {
-                  rendered_symbol = "{cpf::detail::parser_symbol_kind::nonterminal, " + std::to_string(symbol.value) +
+                  parser_kind = "cpf::detail::parser_symbol_kind::nonterminal";
+                  if (symbol.lookahead == lookahead_kind::positive) {
+                     parser_kind = "cpf::detail::parser_symbol_kind::positive_nonterminal";
+                  } else if (symbol.lookahead == lookahead_kind::negative) {
+                     parser_kind = "cpf::detail::parser_symbol_kind::negative_nonterminal";
+                  }
+                  rendered_symbol = "{" + std::string{parser_kind} + ", " + std::to_string(symbol.value) +
                                     ", " + cpp_string_literal(symbol.text) + "}";
                } else {
-                  rendered_symbol = "{cpf::detail::parser_symbol_kind::terminal, " +
+                  if (symbol.lookahead == lookahead_kind::positive) {
+                     parser_kind = "cpf::detail::parser_symbol_kind::positive_terminal";
+                  } else if (symbol.lookahead == lookahead_kind::negative) {
+                     parser_kind = "cpf::detail::parser_symbol_kind::negative_terminal";
+                  }
+                  rendered_symbol = "{" + std::string{parser_kind} + ", " +
                                     std::to_string(grammar_token_symbol_indices.at(lexer_symbol_key(symbol.kind, symbol.text))) +
                                     ", " + cpp_string_literal(symbol.text) + "}";
                }
                if (symbol.kind == symbol_kind::literal) {
-                  rendered_symbol = "{cpf::detail::parser_symbol_kind::terminal, " +
+                  if (symbol.lookahead == lookahead_kind::positive) {
+                     parser_kind = "cpf::detail::parser_symbol_kind::positive_terminal";
+                  } else if (symbol.lookahead == lookahead_kind::negative) {
+                     parser_kind = "cpf::detail::parser_symbol_kind::negative_terminal";
+                  } else {
+                     parser_kind = "cpf::detail::parser_symbol_kind::terminal";
+                  }
+                  rendered_symbol = "{" + std::string{parser_kind} + ", " +
                                     std::to_string(grammar_token_symbol_indices.at(lexer_symbol_key(symbol.kind, symbol.text))) +
                                     ", " + cpp_string_literal(symbol.text) + "}";
                }
@@ -3057,6 +3100,10 @@ namespace cpf {
                for (std::size_t i = 0; i < emitted_production.lowered_symbols.size(); ++i) {
                   const auto& lowered_symbol = emitted_production.lowered_symbols[i];
                   const auto& symbol = *lowered_symbol.source;
+                  const auto child_index = emitted_production.child_indices[i];
+                  if (symbol.is_zero_width()) {
+                     continue;
+                  }
                   if (lowered_symbol.helper_id.has_value()) {
                      if (!symbol.has_label()) {
                         continue;
@@ -3066,11 +3113,11 @@ namespace cpf {
                      if (field.shape == field_shape::terminal_optional || field.shape == field_shape::terminal_vector) {
                         line(source, 4,
                              "node->" + symbol.label + " = extract_" + helper_name +
-                                    "(node_child_at(tree, " + std::to_string(i) + "));");
+                                     "(node_child_at(tree, " + std::to_string(*child_index) + "));");
                      } else if (field.shape == field_shape::node_scalar || field.shape == field_shape::node_vector) {
                         line(source, 4,
                              "node->" + symbol.label + " = extract_" + helper_name + "<" + field.resolved_rule +
-                                    ">(node_child_at(tree, " + std::to_string(i) + "));");
+                                     ">(node_child_at(tree, " + std::to_string(*child_index) + "));");
                      }
                      continue;
                   }
@@ -3084,23 +3131,23 @@ namespace cpf {
                            if (field.shape == field_shape::terminal_scalar) {
                               line(source, 4,
                                    "node->" + symbol.label + " = extract_" + capture_name +
-                                          "(node_child_at(tree, " + std::to_string(i) + "));");
+                                           "(node_child_at(tree, " + std::to_string(*child_index) + "));");
                            } else if (field.shape == field_shape::capture_variant) {
                               line(source, 4,
                                    "node->" + symbol.label + " = extract_" + capture_name +
-                                          "(node_child_at(tree, " + std::to_string(i) + "));");
+                                           "(node_child_at(tree, " + std::to_string(*child_index) + "));");
                            } else {
                               line(source, 4,
                                    "node->" + symbol.label + " = extract_" + capture_name + "<" + field.resolved_rule +
-                                          ">(node_child_at(tree, " + std::to_string(i) + "));");
+                                           ">(node_child_at(tree, " + std::to_string(*child_index) + "));");
                            }
                         } else if (lexical_rules.contains(symbol.value)) {
                            line(source, 4,
-                                "node->" + symbol.label + " = matched_tree_at(node_child_at(tree, " + std::to_string(i) + "));");
+                                 "node->" + symbol.label + " = matched_tree_at(node_child_at(tree, " + std::to_string(*child_index) + "));");
                         } else {
                            line(source, 4,
                                 "auto child_" + std::to_string(i) +
-                                       " = build_node(node_child_at(tree, " + std::to_string(i) + "));");
+                                        " = build_node(node_child_at(tree, " + std::to_string(*child_index) + "));");
                            line(source, 4,
                                 "node->" + symbol.label + " = release_built_node_as<" + field.resolved_rule +
                                       ">(std::move(child_" + std::to_string(i) + "));" );
@@ -3108,7 +3155,7 @@ namespace cpf {
                      }
                   } else if (symbol.has_label()) {
                      line(source, 4,
-                          "node->" + symbol.label + " = matched_child_at(tree, " + std::to_string(i) + ");");
+                           "node->" + symbol.label + " = matched_child_at(tree, " + std::to_string(*child_index) + ");");
                   }
                }
                line(source, 4, "return node;");

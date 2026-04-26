@@ -49,7 +49,14 @@ namespace cpf {
       void merge_parse_error(parse_error& target, const parse_error& candidate);
       [[nodiscard]] auto make_ambiguity_error(std::string_view rule_name) -> parse_error;
 
-      enum class parser_symbol_kind { nonterminal, terminal };
+      enum class parser_symbol_kind {
+         nonterminal,
+         terminal,
+         positive_nonterminal,
+         positive_terminal,
+         negative_nonterminal,
+         negative_terminal
+      };
 
       enum class lexer_symbol_kind { literal, regex };
 

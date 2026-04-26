@@ -1,0 +1,7 @@
+lookahead_keyword -> 'if' | 'else' | 'while';
+lookahead_identifier -> !lookahead_keyword r'[A-Za-z_][A-Za-z0-9_]*':value;
+lookahead_call -> lookahead_identifier:name &'(' '(':open ')':close;
+lookahead_statement -> 'if':keyword !> '(':open lookahead_identifier:condition ')':close lookahead_identifier:body |
+					   lookahead_identifier:name;
+
+

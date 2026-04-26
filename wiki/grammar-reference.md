@@ -15,6 +15,9 @@ CPF currently supports:
 - quantified symbols: `?`, `*`, `+`, `{n}`
 - grouped alternatives
 - full labeled group captures, including multi-symbol and quantified groups
+- lookahead predicates: `!symbol` and `&symbol`
+- commit/cut markers: `!>`
+- parameterized grammar templates
 - multi-file grammars through `@import`
 - generated-code namespaces
 
@@ -153,6 +156,57 @@ Generated member types follow the captured symbol kind:
 - optional terminals: `std::optional<cpf::matched_string>`
 - repeated references: `std::vector<std::unique_ptr<rule>>`
 - repeated terminals: `std::vector<cpf::matched_string>`
+
+## Lookahead predicates and cut markers
+
+CPF supports zero-width local disambiguation markers in parser rules:
+
+```text
+lookahead_keyword -> 'if' | 'else' | 'while';
+lookahead_identifier -> !lookahead_keyword r'[A-Za-z_][A-Za-z0-9_]*':value;
+lookahead_call -> lookahead_identifier:name &'(' '(':open ')':close;
+lookahead_statement -> 'if':keyword !> '(':open lookahead_identifier:condition ')':close lookahead_identifier:body
+					| lookahead_identifier:name;
+```
+
+Rules:
+
+- `!symbol` succeeds when `symbol` does **not** match at the current token position
+- `&symbol` succeeds when `symbol` **does** match at the current token position
+- predicates are zero-width: they do not consume input and they do not create AST fields
+- `!>` commits to the current alternative once the production prefix before the marker has matched
+- later alternatives in the same rule are suppressed automatically when an earlier cut-prefix matches
+
+This is useful for:
+
+- reserved-word exclusion without splitting the grammar into helper rules
+- requiring a delimiter or keyword before consuming it in the main production
+- preventing fallback alternatives from masking a more specific branch after a distinguishing prefix
+
+## Parameterized templates
+
+CPF templates capture reusable single-production or multi-production grammar shapes:
+
+```text
+template template_surrounded<Open, Inner, Close> -> Open:open Inner:value Close:close;
+template template_keyword_value<Keyword, Value> -> Keyword:keyword Value:value;
+
+template_paren_identifier -> template_surrounded<'(', template_identifier, ')'>:body;
+template_brace_identifiers -> template_surrounded<'{', template_identifier+, '}'>:body;
+template_returned_identifier -> template_keyword_value<'return', template_identifier>:payload;
+```
+
+Rules:
+
+- `template name<Param, ...> -> ...;` declares a reusable grammar template
+- template invocations appear anywhere a normal grammar symbol can appear
+- arguments can be literals, regex terminals, rule references, grouped expressions, and quantified items
+- template declarations are compile-time only and do not become public generated entry points
+- each invocation lowers to a hidden synthetic helper rule, so labeled invocations can still materialize helper-node payloads
+
+Template arguments inherit labels and quantifiers from the argument expression itself unless the template placeholder
+adds its own suffix. This makes list-style utilities such as `template_surrounded<'{', item+, '}'>` preserve repeated
+storage automatically in the generated AST.
 
 ## Multi-file grammars
 

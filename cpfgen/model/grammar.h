@@ -13,6 +13,9 @@ namespace cpf {
    /// @brief Postfix repetition applied to a grammar symbol.
    enum class symbol_quantifier { one, optional, zero_or_more, one_or_more, exact };
 
+   /// @brief Zero-width lookahead behavior attached to a grammar symbol.
+   enum class lookahead_kind { none, positive, negative };
+
    /// @brief Operator used by a grammar attribute assignment.
    enum class attribute_operator { assign, less_than, greater_than };
 
@@ -31,6 +34,7 @@ namespace cpf {
       std::string label;
       symbol_quantifier quantifier = symbol_quantifier::one;
       std::size_t exact_repetition = 1;
+      lookahead_kind lookahead = lookahead_kind::none;
 
       /// @brief Checks whether the symbol exposes a generated member label.
       /// @return True when the symbol was annotated with a label.
@@ -47,6 +51,10 @@ namespace cpf {
       /// @brief Checks whether the symbol behaves like a single required occurrence.
       /// @return True when the symbol lowers to exactly one occurrence.
       [[nodiscard]] bool is_single() const;
+
+      /// @brief Checks whether the symbol performs a zero-width lookahead test.
+      /// @return True when the symbol matches without consuming input.
+      [[nodiscard]] bool is_zero_width() const;
    };
 
    /// @brief One production alternative for a rule.

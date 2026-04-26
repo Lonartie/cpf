@@ -491,6 +491,114 @@ TEST_SUITE("cpflib.grammar_parser") {
       }
    }
 
+   TEST_CASE("lookahead predicates are preserved as zero-width grammar symbols") {
+      auto grammar = cpf::parse_grammar(R"(
+         keyword -> 'if' | 'else';
+         identifier -> !keyword r'[A-Za-z_][A-Za-z0-9_]*':value;
+         call -> identifier:name &'(' '(':open ')':close;
+      )");
+
+      auto* identifier = grammar.find_rule("identifier");
+      auto* call = grammar.find_rule("call");
+
+      REQUIRE(identifier != nullptr);
+      REQUIRE(call != nullptr);
+      REQUIRE(identifier->productions.size() == 1);
+      REQUIRE(call->productions.size() == 1);
+
+      SUBCASE("negative lookahead keeps the referenced symbol and zero-width marker") {
+         REQUIRE(identifier->productions.front().symbols.size() == 2);
+         const auto& guard = identifier->productions.front().symbols[0];
+         CHECK(guard.kind == cpf::symbol_kind::reference);
+         CHECK(guard.value == "keyword");
+         CHECK(guard.lookahead == cpf::lookahead_kind::negative);
+         CHECK_FALSE(guard.has_label());
+      }
+
+      SUBCASE("positive lookahead on terminals stays separate from the consuming terminal") {
+         REQUIRE(call->productions.front().symbols.size() == 4);
+         const auto& guard = call->productions.front().symbols[1];
+         const auto& open = call->productions.front().symbols[2];
+         CHECK(guard.kind == cpf::symbol_kind::literal);
+         CHECK(guard.value == "(");
+         CHECK(guard.lookahead == cpf::lookahead_kind::positive);
+         CHECK(open.kind == cpf::symbol_kind::literal);
+         CHECK(open.value == "(");
+         CHECK(open.lookahead == cpf::lookahead_kind::none);
+         CHECK(open.label == "open");
+      }
+   }
+
+   TEST_CASE("cut markers lower later alternatives behind negative lookahead guards") {
+      auto grammar = cpf::parse_grammar(R"(
+         statement -> 'if':keyword !> '(':open identifier:condition ')':close identifier:body | identifier:name;
+      )");
+
+      auto* statement = grammar.find_rule("statement");
+      REQUIRE(statement != nullptr);
+      REQUIRE(statement->productions.size() == 2);
+
+      SUBCASE("the committed alternative keeps its original consuming symbols") {
+         const auto& committed = statement->productions[0].symbols;
+         REQUIRE(committed.size() == 5);
+         CHECK(committed[0].value == "if");
+         CHECK(committed[1].value == "(");
+         CHECK(committed[2].value == "identifier");
+      }
+
+      SUBCASE("later alternatives are guarded by a synthetic negative lookahead helper") {
+         const auto& fallback = statement->productions[1].symbols;
+         REQUIRE(fallback.size() == 2);
+         CHECK(fallback[0].kind == cpf::symbol_kind::reference);
+         CHECK(fallback[0].lookahead == cpf::lookahead_kind::negative);
+         CHECK(fallback[0].value.find("cpf_group_") == 0);
+         CHECK(fallback[1].value == "identifier");
+         CHECK(fallback[1].label == "name");
+      }
+   }
+
+   TEST_CASE("template declarations instantiate into synthetic helper rules") {
+      auto grammar = cpf::parse_grammar(R"(
+         template surrounded<Open, Inner, Close> -> Open:open Inner:value Close:close;
+         token identifier_head -> r'[A-Za-z_]';
+         token identifier_tail -> r'[A-Za-z0-9_]';
+         token identifier -> identifier_head identifier_tail*;
+         paren_identifier -> surrounded<'(', identifier, ')'>:body;
+      )");
+
+      CHECK(grammar.find_rule("surrounded") == nullptr);
+
+      auto* paren_identifier = grammar.find_rule("paren_identifier");
+      REQUIRE(paren_identifier != nullptr);
+      REQUIRE(paren_identifier->productions.size() == 1);
+      REQUIRE(paren_identifier->productions.front().symbols.size() == 1);
+
+      const auto& invocation = paren_identifier->productions.front().symbols.front();
+      CHECK(invocation.kind == cpf::symbol_kind::reference);
+      CHECK(invocation.label == "body");
+      CHECK(invocation.value.find("cpf_template_surrounded_") == 0);
+
+      auto instantiated = false;
+      for (const auto& rule: grammar.rules) {
+         if (!rule.synthetic || rule.identifier != invocation.value) {
+            continue;
+         }
+         instantiated = true;
+         REQUIRE(rule.productions.size() == 1);
+         REQUIRE(rule.productions.front().symbols.size() == 3);
+         CHECK(rule.productions.front().symbols[0].kind == cpf::symbol_kind::literal);
+         CHECK(rule.productions.front().symbols[0].value == "(");
+         CHECK(rule.productions.front().symbols[0].label == "open");
+         CHECK(rule.productions.front().symbols[1].kind == cpf::symbol_kind::reference);
+         CHECK(rule.productions.front().symbols[1].value == "identifier");
+         CHECK(rule.productions.front().symbols[1].label == "value");
+         CHECK(rule.productions.front().symbols[2].kind == cpf::symbol_kind::literal);
+         CHECK(rule.productions.front().symbols[2].value == ")");
+         CHECK(rule.productions.front().symbols[2].label == "close");
+      }
+      CHECK(instantiated);
+   }
+
    TEST_CASE("unsupported unlabeled quantified group captures report expressive parser errors") {
       auto capture_error = [](std::string_view source) -> std::string {
          try {

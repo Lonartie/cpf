@@ -19,6 +19,8 @@ namespace cpf {
       return quantifier == symbol_quantifier::one || (quantifier == symbol_quantifier::exact && exact_repetition == 1);
    }
 
+   bool symbol::is_zero_width() const { return lookahead != lookahead_kind::none; }
+
    std::optional<attribute> production::find_attribute(std::string_view name) const {
       auto it = std::find_if(attributes.begin(), attributes.end(),
                              [&](const auto& attribute) { return attribute.name == name; });
