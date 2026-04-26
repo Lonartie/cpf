@@ -5,6 +5,7 @@ include(CheckIPOSupported)
 include(CTest)
 
 option(CPF_BUILD_BENCHMARKS "Build cpfbench parser benchmarks" ON)
+option(CPF_BUILD_YACC_COMPARE "Build the yacc-vs-CPF comparison lab" ON)
 option(CPF_ENABLE_IPO "Enable interprocedural optimization when supported" ON)
 
 set(CMAKE_CXX_STANDARD 20)

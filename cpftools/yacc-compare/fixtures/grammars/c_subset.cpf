@@ -1,0 +1,69 @@
+translation_unit -> external_declaration_list;
+external_declaration_list -> external_declaration external_declaration*;
+external_declaration -> function_definition | global_declaration;
+function_definition -> type_specifier r'[A-Za-z_][A-Za-z0-9_]*' '(' parameter_list_opt ')' compound_statement;
+parameter_list_opt -> parameter_list?;
+parameter_list -> parameter_declaration (',' parameter_declaration)*;
+parameter_declaration -> type_specifier declarator;
+global_declaration -> type_specifier init_declarator_list_opt ';';
+local_declaration -> type_specifier init_declarator_list_opt ';';
+init_declarator_list_opt -> init_declarator_list?;
+init_declarator_list -> init_declarator (',' init_declarator)*;
+init_declarator -> declarator ('=' assignment_expression)?;
+declarator -> scalar_declarator | array_declarator;
+scalar_declarator -> r'[A-Za-z_][A-Za-z0-9_]*';
+array_declarator -> r'[A-Za-z_][A-Za-z0-9_]*' '[' r'[0-9]+' ']';
+type_specifier -> int_type | void_type;
+int_type -> 'int';
+void_type -> 'void';
+compound_statement -> '{' block_item* '}';
+block_item -> local_declaration | statement;
+statement -> matched_statement | unmatched_statement;
+matched_statement -> compound_statement | expression_statement | jump_statement | matched_iteration_statement | matched_if_statement;
+unmatched_statement -> unmatched_if_statement | unmatched_iteration_statement;
+matched_if_statement -> 'if' '(' expression ')' matched_statement 'else' matched_statement;
+unmatched_if_statement -> 'if' '(' expression ')' statement | 'if' '(' expression ')' matched_statement 'else' unmatched_statement;
+matched_iteration_statement -> matched_while_statement | matched_for_statement;
+matched_while_statement -> 'while' '(' expression ')' matched_statement;
+matched_for_statement -> 'for' '(' expression_opt ';' expression_opt ';' expression_opt ')' matched_statement;
+unmatched_iteration_statement -> unmatched_while_statement | unmatched_for_statement;
+unmatched_while_statement -> 'while' '(' expression ')' unmatched_statement;
+unmatched_for_statement -> 'for' '(' expression_opt ';' expression_opt ';' expression_opt ')' unmatched_statement;
+expression_statement -> expression? ';';
+jump_statement -> 'return' expression_opt ';';
+expression_opt -> expression?;
+expression -> assignment_expression (',' assignment_expression)*;
+assignment_expression -> assignment_form | value_expression;
+assignment_form -> unary_expression '=' assignment_expression;
+value_expression -> logical_or_expression;
+logical_or_expression -> logical_and_expression ('||' logical_and_expression)*;
+logical_and_expression -> equality_expression ('&&' equality_expression)*;
+equality_expression -> relational_expression (('==' | '!=') relational_expression)*;
+relational_expression -> additive_expression (('<' | '>' | '<=' | '>=') additive_expression)*;
+additive_expression -> multiplicative_expression (('+' | '-') multiplicative_expression)*;
+multiplicative_expression -> unary_expression (('*' | '/' | '%') unary_expression)*;
+unary_expression -> postfix_unary_expression | positive_unary_expression | negative_unary_expression | logical_not_expression;
+postfix_unary_expression -> postfix_expression;
+positive_unary_expression -> '+' unary_expression;
+negative_unary_expression -> '-' unary_expression;
+logical_not_expression -> '!' unary_expression;
+postfix_expression -> primary_expression postfix_suffix*;
+postfix_suffix -> '(' argument_expression_list_opt ')' | '[' expression ']';
+argument_expression_list_opt -> argument_expression_list?;
+argument_expression_list -> assignment_expression (',' assignment_expression)*;
+primary_expression -> identifier_expression | integer_expression | parenthesized_expression;
+identifier_expression -> r'[A-Za-z_][A-Za-z0-9_]*';
+integer_expression -> r'[0-9]+';
+parenthesized_expression -> '(' expression ')';
+
+@whitespace whitespace;
+skip whitespace -> r'[ \t\r\n]+';
+skip line_comment -> r'//[^\n]*';
+
+
+
+
+
+
+
+
