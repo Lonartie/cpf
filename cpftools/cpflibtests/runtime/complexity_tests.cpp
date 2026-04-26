@@ -36,6 +36,15 @@ TEST_SUITE("cpflib.complexity") {
       CHECK(result.relative_root_mean_square_error < 0.02);
    }
 
+   TEST_CASE("sparse noisy samples still yield a monotonic extrapolated estimator") {
+      const auto result = cpf::detail::analyze_complexity_samples({32.0, 64.0, 128.0, 256.0},
+                                                                  {1.4e-4, 2.1e-4, 4.7e-4, 4.3e-4});
+
+      CHECK(result.estimate(256.0) >= result.estimate(64.0));
+      CHECK(result.estimate(512.0) >= result.estimate(256.0));
+      CHECK(result.estimate(1024.0) >= result.estimate(512.0));
+   }
+
    TEST_CASE("synthetic linearithmic samples fit an O(N log N) model") {
       std::vector<double> sizes{2.0, 4.0, 8.0, 16.0, 32.0, 64.0};
       std::vector<double> samples;

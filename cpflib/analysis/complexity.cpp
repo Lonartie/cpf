@@ -252,6 +252,35 @@ namespace cpf {
          return stream.str();
       }
 
+      auto extrapolated_monotonicity_penalty(const complexity_model& model, const std::vector<double>& coefficients,
+                                             const std::vector<double>& arg_sizes) -> double {
+         if (arg_sizes.size() < 2U) {
+            return 0.0;
+         }
+
+         auto evaluation_sizes = arg_sizes;
+         std::sort(evaluation_sizes.begin(), evaluation_sizes.end());
+
+         const auto largest_size = evaluation_sizes.back();
+         const auto next_size = largest_size > 0.0 ? largest_size * 2.0 : 1.0;
+         const auto far_size = next_size > 0.0 ? next_size * 2.0 : 1.0;
+         evaluation_sizes.push_back(next_size);
+         evaluation_sizes.push_back(far_size);
+
+         auto penalty = 0.0;
+         auto previous_estimate = evaluate_model(model, coefficients, evaluation_sizes.front());
+         for (std::size_t index = 1; index < evaluation_sizes.size(); ++index) {
+            const auto current_estimate = evaluate_model(model, coefficients, evaluation_sizes[index]);
+            const auto tolerance = positive_scale_denominator(previous_estimate) * 1e-6;
+            if (current_estimate + tolerance < previous_estimate) {
+               penalty += (previous_estimate - current_estimate) / positive_scale_denominator(previous_estimate);
+            }
+            previous_estimate = current_estimate;
+         }
+
+         return penalty;
+      }
+
       auto solve_linear_system(std::vector<std::vector<double>> matrix, std::vector<double> right_hand_side)
             -> std::optional<std::vector<double>> {
          auto dimension = matrix.size();
@@ -388,6 +417,7 @@ namespace cpf {
          auto fitted_at_largest_input = evaluate_model(model, coefficients, largest_input);
          auto dominant_component = coefficients.front() * model.basis_functions.front()(largest_input);
          auto dominant_share = std::abs(dominant_component) / positive_scale_denominator(fitted_at_largest_input);
+         const auto monotonicity_penalty = extrapolated_monotonicity_penalty(model, coefficients, arg_sizes);
 
          auto score = (relative_root_mean_square_error * 5.0) + 0.004 * static_cast<double>(parameter_count - 1U) +
                       0.0005 * static_cast<double>(model.dominant_rank);
@@ -397,6 +427,7 @@ namespace cpf {
          if (dominant_share < 0.05) {
             score += (0.05 - dominant_share) * 2.0;
          }
+         score += monotonicity_penalty * 10.0;
 
          complexity_fit fit;
          fit.model = &model;
