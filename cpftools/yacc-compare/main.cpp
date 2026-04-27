@@ -19,9 +19,10 @@
 
 namespace {
    namespace c_subset = cpfyacc::c_subset;
+   constexpr auto ParserColumnWidth = 14;
 
    struct cli_options {
-      std::size_t iterations = 3;
+      std::size_t iterations = 50;
       bool verify_only = false;
       bool show_components = false;
    };
@@ -102,6 +103,26 @@ namespace {
       }
    }
 
+   void ensure_cpf_dynamic_accepts(const cpf::compiled_grammar& grammar, std::string_view input) {
+      auto options = cpf::parse_options{};
+      options.build_ast = false;
+      auto result = grammar.parse(input, options);
+      if (!result.success) {
+         auto message = result.error.has_value() ? result.error->message : std::string{"unknown dynamic CPF parse failure"};
+         throw std::runtime_error{"dynamic CPF parse failed: " + message};
+      }
+   }
+
+   void ensure_cpf_dynamic_accepts(const cpf::compiled_grammar& grammar, const cpf::token_sequence& tokens) {
+      auto options = cpf::parse_options{};
+      options.build_ast = false;
+      auto result = grammar.parse(tokens, options);
+      if (!result.success) {
+         auto message = result.error.has_value() ? result.error->message : std::string{"unknown dynamic CPF token parse failure"};
+         throw std::runtime_error{"dynamic CPF token parse failed: " + message};
+      }
+   }
+
    template<typename Parser>
    [[nodiscard]] auto measure_parser(std::string name, std::size_t iterations, Parser&& parse_once)
          -> parser_measurement {
@@ -131,7 +152,7 @@ namespace {
    }
 
    void print_measurement(const parser_measurement& measurement) {
-      std::cout << std::left << std::setw(10) << measurement.name << std::right << std::setw(12)
+      std::cout << std::left << std::setw(ParserColumnWidth) << measurement.name << std::right << std::setw(12)
                 << measurement.iterations << std::setw(14) << std::fixed << std::setprecision(3)
                 << measurement.total_milliseconds << std::setw(14) << measurement.average_milliseconds << std::setw(14)
                 << measurement.minimum_milliseconds << std::setw(14) << measurement.maximum_milliseconds << '\n';
@@ -142,8 +163,13 @@ int main(int argc, char** argv) {
    try {
       const auto options = parse_arguments(argc, argv);
       const auto fixture_path = std::filesystem::path{CPF_YACC_COMPARE_FIXTURE_PATH};
+      const auto grammar_path = std::filesystem::path{CPF_YACC_COMPARE_GRAMMAR_PATH};
       const auto input = read_text_file(fixture_path);
-      const auto cpf_tokens = c_subset::translation_unit::lex(input);
+      const auto dynamic_compile = measure_parser("cpf dyn init", 1,
+                                                  [&grammar_path] { (void) cpf::compile_grammar_file(grammar_path); });
+      const auto dynamic_grammar = cpf::compile_grammar_file(grammar_path);
+      const auto cpf_generated_tokens = c_subset::translation_unit::lex(input);
+      const auto cpf_dynamic_tokens = dynamic_grammar.lex(input);
 
       std::cout << "Fixture:   " << fixture_path << '\n';
       std::cout << "Bytes:     " << input.size() << '\n';
@@ -151,7 +177,8 @@ int main(int argc, char** argv) {
 
       ensure_yacc_accepts(input);
       ensure_cpf_accepts(input);
-      std::cout << "Verified:  yacc and CPF both accept the fixture" << '\n';
+      ensure_cpf_dynamic_accepts(dynamic_grammar, input);
+      std::cout << "Verified:  yacc, generated CPF, and dynamic CPF all accept the fixture" << '\n';
 
       if (options.verify_only) {
          return 0;
@@ -159,42 +186,60 @@ int main(int argc, char** argv) {
 
       const auto yacc = measure_parser("yacc", options.iterations,
                                        [&input] { ensure_yacc_accepts(input); });
-      const auto cpf = measure_parser("cpf", options.iterations,
-                                      [&input] { ensure_cpf_accepts(input); });
+      const auto cpf_generated = measure_parser("cpf gen", options.iterations,
+                                                [&input] { ensure_cpf_accepts(input); });
+      const auto cpf_dynamic = measure_parser("cpf dyn", options.iterations,
+                                              [&dynamic_grammar, &input] { ensure_cpf_dynamic_accepts(dynamic_grammar, input); });
 
       std::cout << '\n';
-      std::cout << std::left << std::setw(10) << "Parser" << std::right << std::setw(12) << "Iterations"
+      std::cout << std::left << std::setw(ParserColumnWidth) << "Parser" << std::right << std::setw(12) << "Iterations"
                 << std::setw(14) << "Total ms" << std::setw(14) << "Avg ms" << std::setw(14) << "Min ms"
                 << std::setw(14) << "Max ms" << '\n';
-      std::cout << std::string(78, '-') << '\n';
+      std::cout << std::string(ParserColumnWidth + 54, '-') << '\n';
       print_measurement(yacc);
-      print_measurement(cpf);
-      std::cout << std::string(78, '-') << '\n';
+      print_measurement(cpf_generated);
+      print_measurement(cpf_dynamic);
+      std::cout << std::string(ParserColumnWidth + 54, '-') << '\n';
 
       if (yacc.average_milliseconds > 0.0) {
-         std::cout << "CPF / yacc average runtime ratio: " << std::fixed << std::setprecision(2)
-                   << (cpf.average_milliseconds / yacc.average_milliseconds) << "x" << '\n';
+         std::cout << "generated CPF / yacc average runtime ratio: " << std::fixed << std::setprecision(2)
+                   << (cpf_generated.average_milliseconds / yacc.average_milliseconds) << "x" << '\n';
+         std::cout << "dynamic CPF / yacc average runtime ratio:   " << std::fixed << std::setprecision(2)
+                   << (cpf_dynamic.average_milliseconds / yacc.average_milliseconds) << "x" << '\n';
       }
-      if (cpf.average_milliseconds > 0.0) {
-         std::cout << "yacc / CPF average runtime ratio: " << std::fixed << std::setprecision(2)
-                   << (yacc.average_milliseconds / cpf.average_milliseconds) << "x" << '\n';
+      if (cpf_generated.average_milliseconds > 0.0) {
+         std::cout << "yacc / generated CPF average runtime ratio: " << std::fixed << std::setprecision(2)
+                   << (yacc.average_milliseconds / cpf_generated.average_milliseconds) << "x" << '\n';
+      }
+      if (cpf_dynamic.average_milliseconds > 0.0) {
+         std::cout << "yacc / dynamic CPF average runtime ratio:   " << std::fixed << std::setprecision(2)
+                   << (yacc.average_milliseconds / cpf_dynamic.average_milliseconds) << "x" << '\n';
       }
 
       if (options.show_components) {
-         const auto cpf_lex = measure_parser("cpf lex", options.iterations,
+         const auto cpf_generated_lex = measure_parser("cpf gen lex", options.iterations,
                                              [&input] { (void) c_subset::translation_unit::lex(input); });
-         const auto cpf_parse_tokens = measure_parser("cpf parse(tok)", options.iterations,
-                                                      [&cpf_tokens] { ensure_cpf_accepts(cpf_tokens); });
+         const auto cpf_generated_parse_tokens = measure_parser("cpf gen parse", options.iterations,
+                                                                [&cpf_generated_tokens] { ensure_cpf_accepts(cpf_generated_tokens); });
+         const auto cpf_dynamic_lex = measure_parser("cpf dyn lex", options.iterations,
+                                                     [&dynamic_grammar, &input] { (void) dynamic_grammar.lex(input); });
+         const auto cpf_dynamic_parse_tokens = measure_parser("cpf dyn parse", options.iterations,
+                                                              [&dynamic_grammar, &cpf_dynamic_tokens] {
+                                                                 ensure_cpf_dynamic_accepts(dynamic_grammar, cpf_dynamic_tokens);
+                                                              });
 
          std::cout << '\n';
          std::cout << "CPF component breakdown" << '\n';
-         std::cout << std::left << std::setw(10) << "Parser" << std::right << std::setw(12) << "Iterations"
+         std::cout << std::left << std::setw(ParserColumnWidth) << "Parser" << std::right << std::setw(12) << "Iterations"
                    << std::setw(14) << "Total ms" << std::setw(14) << "Avg ms" << std::setw(14) << "Min ms"
                    << std::setw(14) << "Max ms" << '\n';
-         std::cout << std::string(78, '-') << '\n';
-         print_measurement(cpf_lex);
-         print_measurement(cpf_parse_tokens);
-         std::cout << std::string(78, '-') << '\n';
+         std::cout << std::string(ParserColumnWidth + 54, '-') << '\n';
+         print_measurement(dynamic_compile);
+         print_measurement(cpf_generated_lex);
+         print_measurement(cpf_generated_parse_tokens);
+         print_measurement(cpf_dynamic_lex);
+         print_measurement(cpf_dynamic_parse_tokens);
+         std::cout << std::string(ParserColumnWidth + 54, '-') << '\n';
       }
 
       return 0;

@@ -1,9 +1,10 @@
 # yacc-compare
 
-This lab compares two compiled parsers on the same committed C-subset fixture:
+This lab compares three parsers on the same committed C-subset fixture:
 
 - a yacc/bison parser with a handwritten C lexer
 - a generated/precompiled CPF parser linked into the executable through `cpf_link_grammars(...)`
+- a runtime-compiled CPF parser loaded from `fixtures/grammars/c_subset.cpf`
 
 ## Supported language subset
 
@@ -50,7 +51,8 @@ Measure three parses with each parser:
 ./cmake-build-debug/cpftools/yacc-compare/yacc_compare --iterations=3
 ```
 
-Show the generated CPF component breakdown as well (`lex` versus `parse(tokens)`):
+Show the generated and dynamic CPF component breakdowns as well (`lex` versus `parse(tokens)`, plus the one-time
+dynamic grammar compilation cost):
 
 ```zsh
 ./cmake-build-debug/cpftools/yacc-compare/yacc_compare --iterations=3 --show-components
@@ -62,6 +64,6 @@ Show the generated CPF component breakdown as well (`lex` versus `parse(tokens)`
 - `fixtures/grammars/c_subset.cpf`: matching CPF grammar
 - `fixtures/programs/c_subset_fixture.c`: large committed fixture program
 - `yacc_driver.c`: handwritten lexer and C wrapper around the generated yacc parser
-- `main.cpp`: comparison runner for the yacc parser and the generated/precompiled CPF parser
+- `main.cpp`: comparison runner for the yacc parser, the generated/precompiled CPF parser, and the dynamic CPF parser
 
 

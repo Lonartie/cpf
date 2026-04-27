@@ -42,6 +42,7 @@ add_executable(yacc_compare
 
 target_compile_definitions(yacc_compare PRIVATE
         CPF_YACC_COMPARE_FIXTURE_PATH="${CMAKE_CURRENT_LIST_DIR}/fixtures/programs/c_subset_fixture.c"
+        CPF_YACC_COMPARE_GRAMMAR_PATH="${CMAKE_CURRENT_LIST_DIR}/fixtures/grammars/c_subset.cpf"
 )
 
 cpf_link_grammars(yacc_compare

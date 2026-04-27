@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <functional>
 #include <limits>
+#include <memory>
 #include <sstream>
 #include <tuple>
 #include <unordered_map>
@@ -18,6 +19,7 @@ namespace cpf {
          using source_location = source_position;
 
          struct cached_input_layout {
+            bool initialized = false;
             const char* data = nullptr;
             std::size_t size = 0;
             std::vector<std::size_t> line_offsets;
@@ -25,10 +27,11 @@ namespace cpf {
 
          auto line_offsets_of(std::string_view input) -> const std::vector<std::size_t>& {
             thread_local auto cache = cached_input_layout{};
-            if (cache.data == input.data() && cache.size == input.size()) {
+            if (cache.initialized && cache.data == input.data() && cache.size == input.size()) {
                return cache.line_offsets;
             }
 
+            cache.initialized = true;
             cache.data = input.data();
             cache.size = input.size();
             cache.line_offsets.clear();
@@ -562,9 +565,9 @@ namespace cpf {
          };
 
          struct packed_key_set {
-            static constexpr auto Empty = std::numeric_limits<std::uint64_t>::max();
-
             std::vector<std::uint64_t> slots;
+            std::vector<std::uint32_t> generations;
+            std::uint32_t generation = 1;
             std::size_t size = 0;
 
             [[nodiscard]] static auto hash_of(std::uint64_t key) -> std::size_t {
@@ -579,12 +582,17 @@ namespace cpf {
 
             void ensure_capacity_for_insert() {
                if (slots.empty()) {
-                  slots.assign(32, Empty);
+                  slots.assign(32, 0);
+                  generations.assign(32, 0);
                   return;
                }
                if ((size + 1) * 10 >= slots.size() * 7) {
                   rehash(slots.size() * 2);
                }
+            }
+
+            [[nodiscard]] auto occupied(std::size_t index) const -> bool {
+               return generations[index] == generation;
             }
 
             [[nodiscard]] auto insert(std::uint64_t key) -> bool {
@@ -593,7 +601,9 @@ namespace cpf {
                auto index = hash_of(key) & (slots.size() - 1);
                while (true) {
                   auto& slot = slots[index];
-                  if (slot == Empty) {
+                  auto& slot_generation = generations[index];
+                  if (slot_generation != generation) {
+                     slot_generation = generation;
                      slot = key;
                      ++size;
                      return true;
@@ -612,11 +622,10 @@ namespace cpf {
 
                auto index = hash_of(key) & (slots.size() - 1);
                while (true) {
-                  const auto slot = slots[index];
-                  if (slot == Empty) {
+                  if (!occupied(index)) {
                      return false;
                   }
-                  if (slot == key) {
+                  if (slots[index] == key) {
                      return true;
                   }
                   index = (index + 1) & (slots.size() - 1);
@@ -625,13 +634,31 @@ namespace cpf {
 
             void rehash(std::size_t new_capacity) {
                auto old_slots = std::move(slots);
-               slots.assign(new_capacity, Empty);
+               auto old_generations = std::move(generations);
+               const auto old_generation = generation;
+               slots.assign(new_capacity, 0);
+               generations.assign(new_capacity, 0);
+               generation = 1;
                size = 0;
-               for (const auto slot: old_slots) {
-                  if (slot != Empty) {
-                     (void) insert(slot);
+               for (std::size_t index = 0; index < old_slots.size(); ++index) {
+                  if (old_generations[index] == old_generation) {
+                     (void) insert(old_slots[index]);
                   }
                }
+            }
+
+            void clear() {
+               size = 0;
+               if (slots.empty()) {
+                  generation = 1;
+                  return;
+               }
+               if (generation == std::numeric_limits<std::uint32_t>::max()) {
+                  std::fill(generations.begin(), generations.end(), 0);
+                  generation = 1;
+                  return;
+               }
+               ++generation;
             }
          };
 
@@ -682,14 +709,62 @@ namespace cpf {
             packed_key_set completion_indices;
             std::unordered_set<completion_key, completion_key_hash> fallback_completion_indices;
             std::size_t* waiting_heads = nullptr;
+            std::uint32_t* waiting_head_generations = nullptr;
             std::size_t* completion_heads = nullptr;
+            std::uint32_t* completion_head_generations = nullptr;
+            std::uint32_t current_generation = 0;
             std::size_t rule_count = 0;
 
-            void initialize(std::size_t* waiting_storage, std::size_t* completion_storage,
-                            std::size_t count) {
+            void initialize(std::size_t* waiting_storage, std::uint32_t* waiting_generation_storage,
+                            std::size_t* completion_storage, std::uint32_t* completion_generation_storage,
+                            std::uint32_t generation, std::size_t count) {
                waiting_heads = waiting_storage;
+               waiting_head_generations = waiting_generation_storage;
                completion_heads = completion_storage;
+               completion_head_generations = completion_generation_storage;
+               current_generation = generation;
                rule_count = count;
+            }
+
+            void reset(std::size_t* waiting_storage, std::uint32_t* waiting_generation_storage,
+                       std::size_t* completion_storage, std::uint32_t* completion_generation_storage,
+                       std::uint32_t generation, std::size_t count) {
+               waiting_heads = waiting_storage;
+               waiting_head_generations = waiting_generation_storage;
+               completion_heads = completion_storage;
+               completion_head_generations = completion_generation_storage;
+               current_generation = generation;
+               rule_count = count;
+               items.clear();
+               completions.clear();
+               item_indices.clear();
+               completion_indices.clear();
+               fallback_item_indices.clear();
+               fallback_completion_indices.clear();
+            }
+
+            [[nodiscard]] auto waiting_head_for(std::size_t rule) const -> std::size_t {
+               if (waiting_head_generations[rule] != current_generation) {
+                  return invalid_index;
+               }
+               return waiting_heads[rule];
+            }
+
+            void set_waiting_head(std::size_t rule, std::size_t value) {
+               waiting_head_generations[rule] = current_generation;
+               waiting_heads[rule] = value;
+            }
+
+            [[nodiscard]] auto completion_head_for(std::size_t rule) const -> std::size_t {
+               if (completion_head_generations[rule] != current_generation) {
+                  return invalid_index;
+               }
+               return completion_heads[rule];
+            }
+
+            void set_completion_head(std::size_t rule, std::size_t value) {
+               completion_head_generations[rule] = current_generation;
+               completion_heads[rule] = value;
             }
 
             [[nodiscard]] auto add_item(const earley_machine& machine, const packed_pair_codec& codec,
@@ -705,8 +780,8 @@ namespace cpf {
                auto record = item_record{state, start, invalid_index};
                const auto& state_spec = machine.states[state];
                if (!state_spec.complete && state_spec.next.kind == parser_symbol_kind::nonterminal) {
-                  record.next_waiting = waiting_heads[state_spec.next.value];
-                  waiting_heads[state_spec.next.value] = items.size();
+                  record.next_waiting = waiting_head_for(state_spec.next.value);
+                  set_waiting_head(state_spec.next.value, items.size());
                }
                items.push_back(record);
                return true;
@@ -722,8 +797,8 @@ namespace cpf {
                   return false;
                }
 
-               auto record = completion_record{rule, end, completion_heads[rule]};
-               completion_heads[rule] = completions.size();
+               auto record = completion_record{rule, end, completion_head_for(rule)};
+               set_completion_head(rule, completions.size());
                completions.push_back(record);
                return true;
             }
@@ -745,6 +820,16 @@ namespace cpf {
          struct predicate_context {
             std::unordered_map<predicate_query_key, bool, predicate_query_key_hash> matches;
             std::unordered_set<predicate_query_key, predicate_query_key_hash> in_progress;
+         };
+
+         struct recognize_fast_buffer {
+            std::vector<recognize_column> chart;
+            std::vector<std::uint32_t> column_generations;
+            std::vector<std::size_t> waiting_heads_storage;
+            std::vector<std::uint32_t> waiting_head_generations;
+            std::vector<std::size_t> completion_heads_storage;
+            std::vector<std::uint32_t> completion_head_generations;
+            std::uint32_t generation = 0;
          };
 
          void add_dispatch_byte(std::array<std::vector<std::size_t>, 256>& buckets, unsigned char value,
@@ -1121,29 +1206,68 @@ namespace cpf {
             const auto& machine = earley_machine_of(grammar);
             const auto item_codec = packed_pair_codec::make(machine.states.size(), tokens.size());
             const auto completion_codec = packed_pair_codec::make(grammar.rule_count, tokens.size());
-            auto chart = std::vector<recognize_column>(tokens.size() + 1);
-            auto waiting_heads_storage = std::vector<std::size_t>((tokens.size() + 1) * grammar.rule_count,
-                                                                  recognize_column::invalid_index);
-            auto completion_heads_storage = std::vector<std::size_t>((tokens.size() + 1) * grammar.rule_count,
-                                                                     recognize_column::invalid_index);
-            for (std::size_t index = 0; index < chart.size(); ++index) {
-               chart[index].initialize(waiting_heads_storage.data() + index * grammar.rule_count,
-                                       completion_heads_storage.data() + index * grammar.rule_count,
-                                       grammar.rule_count);
+            const auto chart_size = tokens.size() + 1;
+
+            thread_local auto recognize_fast_buffers = std::vector<std::unique_ptr<recognize_fast_buffer>>{};
+            thread_local auto recognize_fast_depth = std::size_t{0};
+
+            ++recognize_fast_depth;
+            if (recognize_fast_buffers.size() < recognize_fast_depth) {
+               recognize_fast_buffers.resize(recognize_fast_depth);
             }
+            if (recognize_fast_buffers[recognize_fast_depth - 1] == nullptr) {
+               recognize_fast_buffers[recognize_fast_depth - 1] = std::make_unique<recognize_fast_buffer>();
+            }
+
+            auto& buffer = *recognize_fast_buffers[recognize_fast_depth - 1];
+            if (buffer.chart.size() < chart_size) {
+               buffer.chart.resize(chart_size);
+            }
+            if (buffer.column_generations.size() < chart_size) {
+               buffer.column_generations.resize(chart_size, 0);
+            }
+            buffer.waiting_heads_storage.resize(chart_size * grammar.rule_count);
+            buffer.waiting_head_generations.resize(chart_size * grammar.rule_count, 0);
+            buffer.completion_heads_storage.resize(chart_size * grammar.rule_count);
+            buffer.completion_head_generations.resize(chart_size * grammar.rule_count, 0);
+            if (buffer.generation == std::numeric_limits<std::uint32_t>::max()) {
+               std::fill(buffer.column_generations.begin(), buffer.column_generations.end(), 0);
+               std::fill(buffer.waiting_head_generations.begin(), buffer.waiting_head_generations.end(), 0);
+               std::fill(buffer.completion_head_generations.begin(), buffer.completion_head_generations.end(), 0);
+               buffer.generation = 1;
+            } else {
+               ++buffer.generation;
+            }
+            auto& chart = buffer.chart;
+            const auto generation = buffer.generation;
+
+            const auto activate_column = [&](std::size_t position) -> recognize_column& {
+               auto& column = chart[position];
+               if (buffer.column_generations[position] != generation) {
+                  column.reset(buffer.waiting_heads_storage.data() + position * grammar.rule_count,
+                               buffer.waiting_head_generations.data() + position * grammar.rule_count,
+                               buffer.completion_heads_storage.data() + position * grammar.rule_count,
+                               buffer.completion_head_generations.data() + position * grammar.rule_count,
+                               generation,
+                               grammar.rule_count);
+                  buffer.column_generations[position] = generation;
+               }
+               return column;
+            };
 
             const auto enqueue_item = [&](auto&& self, std::size_t position, std::size_t state,
                                           std::size_t start) -> void {
-               if (!chart[position].add_item(machine, item_codec, state, start)) {
+               auto& column = activate_column(position);
+               if (!column.add_item(machine, item_codec, state, start)) {
                   return;
                }
 
                const auto& state_spec = machine.states[state];
                if (!state_spec.complete) {
                   if (state_spec.next.kind == parser_symbol_kind::nonterminal) {
-                     for (auto completion_index = chart[position].completion_heads[state_spec.next.value];
+                     for (auto completion_index = column.completion_head_for(state_spec.next.value);
                           completion_index != recognize_column::invalid_index;) {
-                        const auto completion = chart[position].completions[completion_index];
+                        const auto completion = column.completions[completion_index];
                         completion_index = completion.next;
                         self(self, completion.end, state_spec.advance_state, start);
                      }
@@ -1151,13 +1275,14 @@ namespace cpf {
                   return;
                }
 
-               if (!chart[start].add_completion(completion_codec, state_spec.lhs, position)) {
+               auto& start_column = activate_column(start);
+               if (!start_column.add_completion(completion_codec, state_spec.lhs, position)) {
                   return;
                }
 
-               for (auto parent_index = chart[start].waiting_heads[state_spec.lhs];
+               for (auto parent_index = start_column.waiting_head_for(state_spec.lhs);
                     parent_index != recognize_column::invalid_index;) {
-                  const auto parent = chart[start].items[parent_index];
+                  const auto parent = start_column.items[parent_index];
                   parent_index = parent.next_waiting;
                   const auto& parent_state = machine.states[parent.state];
                   self(self, position, parent_state.advance_state, parent.start);
@@ -1170,9 +1295,13 @@ namespace cpf {
                enqueue_item(enqueue_item, start_position, machine.production_state_offsets[production], start_position);
             }
 
-            for (std::size_t position = start_position; position < chart.size(); ++position) {
-               for (std::size_t index = 0; index < chart[position].items.size(); ++index) {
-                  const auto item = chart[position].items[index];
+            for (std::size_t position = start_position; position < chart_size; ++position) {
+               if (buffer.column_generations[position] != generation) {
+                  continue;
+               }
+               auto& column = chart[position];
+               for (std::size_t index = 0; index < column.items.size(); ++index) {
+                  const auto item = column.items[index];
                   const auto& state = machine.states[item.state];
 
                   if (state.complete) {
@@ -1205,7 +1334,10 @@ namespace cpf {
                }
             }
 
-            return chart[start_position].has_completion(completion_codec, root_rule, tokens.size());
+            const auto matched = buffer.column_generations[start_position] == generation &&
+                                 chart[start_position].has_completion(completion_codec, root_rule, tokens.size());
+            --recognize_fast_depth;
+            return matched;
          }
 
          auto virtual_terminal(std::string_view input, const std::vector<lexed_token>& tokens, std::size_t position,
@@ -1454,7 +1586,7 @@ namespace cpf {
          struct prepared_parse {
             bool has_root_production = false;
             std::vector<lexed_token> tokens;
-            std::vector<chart_column> chart;
+            std::size_t chart_size = 0;
             std::unordered_map<span_key, std::vector<std::size_t>, span_key_hash> completed_rules;
             std::unordered_set<span_key, span_key_hash> completed_productions;
             std::vector<std::vector<std::vector<std::size_t>>> rule_ends;
@@ -1514,20 +1646,22 @@ namespace cpf {
             prepared_parse prepared;
             error_tracker tracker;
             prepared.tokens = std::move(tokens);
-            prepared.chart.resize(prepared.tokens.size() + 1);
-            prepared.rule_ends.resize(prepared.chart.size());
-            auto waiting_heads_storage = std::vector<std::size_t>(prepared.chart.size() * grammar.rule_count,
-                                                                  chart_column::invalid_index);
-            for (std::size_t index = 0; index < prepared.chart.size(); ++index) {
-               prepared.chart[index].initialize(waiting_heads_storage.data() + index * grammar.rule_count);
-            }
+            prepared.chart_size = prepared.tokens.size() + 1;
+            prepared.rule_ends.resize(prepared.chart_size);
             for (auto& starts: prepared.rule_ends) {
                starts.resize(grammar.rule_count);
             }
 
+            auto chart = std::vector<chart_column>(prepared.chart_size);
+            auto waiting_heads_storage = std::vector<std::size_t>(prepared.chart_size * grammar.rule_count,
+                                                                  chart_column::invalid_index);
+            for (std::size_t index = 0; index < chart.size(); ++index) {
+               chart[index].initialize(waiting_heads_storage.data() + index * grammar.rule_count);
+            }
+
             const auto enqueue_item = [&](auto&& self, std::size_t position, std::size_t production, std::size_t dot,
                                           std::size_t start) -> bool {
-               if (!prepared.chart[position].add(grammar, production, dot, start)) {
+               if (!chart[position].add(grammar, production, dot, start)) {
                   return false;
                }
 
@@ -1558,9 +1692,9 @@ namespace cpf {
                return prepared;
             }
 
-            for (std::size_t position = start_position; position < prepared.chart.size(); ++position) {
-               for (std::size_t index = 0; index < prepared.chart[position].items.size(); ++index) {
-                  const auto item = prepared.chart[position].items[index];
+            for (std::size_t position = start_position; position < chart.size(); ++position) {
+               for (std::size_t index = 0; index < chart[position].items.size(); ++index) {
+                  const auto item = chart[position].items[index];
                   const auto production_index = item.production;
                   const auto dot = item.dot;
                   const auto start = item.start;
@@ -1574,10 +1708,11 @@ namespace cpf {
                       if (completed_ends.empty() || completed_ends.back() != position) {
                          completed_ends.push_back(position);
                       }
+                      prepared.completed_productions.insert(span_key{production_index, start, position});
 
-                      for (auto parent_index = prepared.chart[start].waiting_head_for(production.lhs);
+                      for (auto parent_index = chart[start].waiting_head_for(production.lhs);
                            parent_index != chart_column::invalid_index;) {
-                         const auto parent = prepared.chart[start].items[parent_index];
+                         const auto parent = chart[start].items[parent_index];
                          parent_index = parent.next_waiting;
                          (void) enqueue_item(enqueue_item, position, parent.production, parent.dot + 1, parent.start);
                       }
@@ -1630,21 +1765,8 @@ namespace cpf {
                }
             }
 
-            for (std::size_t end = 0; end < prepared.chart.size(); ++end) {
-               for (const auto& item: prepared.chart[end].items) {
-                  const auto production_index = item.production;
-                  const auto dot = item.dot;
-                  const auto start = item.start;
-                  const auto& production = grammar.productions[production_index];
-                  if (dot != production.symbol_count) {
-                     continue;
-                  }
-                  prepared.completed_productions.insert(span_key{production_index, start, end});
-               }
-            }
-
              auto success = false;
-             for (std::size_t end = start_position; end < prepared.chart.size(); ++end) {
+             for (std::size_t end = start_position; end < prepared.chart_size; ++end) {
                 if (end != prepared.tokens.size()) {
                   continue;
                }
@@ -1655,7 +1777,7 @@ namespace cpf {
             }
 
              if (!success && track_errors) {
-                for (std::size_t end = start_position; end < prepared.chart.size(); ++end) {
+                for (std::size_t end = start_position; end < prepared.chart_size; ++end) {
                     if (rule_completed_at(prepared, root_rule, start_position, end)) {
                      auto failure_position = token_position_offset(input, prepared.tokens, end);
                      tracker.record(failure_position, "<end of input>",
@@ -1733,7 +1855,7 @@ namespace cpf {
                return result;
             }
 
-            for (std::size_t end = 0; end < prepared.chart.size(); ++end) {
+               for (std::size_t end = 0; end < prepared.chart_size; ++end) {
                if (end != prepared.tokens.size()) {
                   continue;
                }
@@ -1753,7 +1875,7 @@ namespace cpf {
             (void) input;
             (void) grammar;
             auto ends = std::vector<std::size_t>{};
-            for (std::size_t end = 0; end < prepared.chart.size(); ++end) {
+               for (std::size_t end = 0; end < prepared.chart_size; ++end) {
                 if (require_full_input && end != prepared.tokens.size()) {
                   continue;
                }
@@ -2525,7 +2647,7 @@ namespace cpf {
          }
 
          std::size_t accepted_end = prepared.tokens.size() + 1;
-         for (std::size_t end = 0; end < prepared.chart.size(); ++end) {
+         for (std::size_t end = 0; end < prepared.chart_size; ++end) {
              if (end != prepared.tokens.size()) {
                continue;
             }
