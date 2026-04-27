@@ -1,5 +1,7 @@
 #include "yacc_driver.h"
 
+#include "c_subset.h"
+
 #include <cpflib>
 
 #include <algorithm>
@@ -16,9 +18,12 @@
 #include <vector>
 
 namespace {
+   namespace c_subset = cpfyacc::c_subset;
+
    struct cli_options {
       std::size_t iterations = 3;
       bool verify_only = false;
+      bool show_components = false;
    };
 
    struct parser_measurement {
@@ -36,6 +41,10 @@ namespace {
          auto argument = std::string_view{argv[index]};
          if (argument == "--verify-only") {
             options.verify_only = true;
+            continue;
+         }
+         if (argument == "--show-components") {
+            options.show_components = true;
             continue;
          }
          if (argument.rfind("--iterations=", 0) == 0) {
@@ -65,11 +74,6 @@ namespace {
       return static_cast<std::size_t>(std::count(text.begin(), text.end(), '\n')) + 1;
    }
 
-   [[nodiscard]] auto runtime_cpf_parser() -> const cpf::compiled_grammar& {
-      static const auto parser = cpf::compile_grammar_file(std::filesystem::path{CPF_YACC_COMPARE_CPF_GRAMMAR_PATH});
-      return parser;
-   }
-
    void ensure_yacc_accepts(std::string_view input) {
       auto result = yacc_parse_source(input.data(), input.size());
       if (!result.success) {
@@ -81,10 +85,20 @@ namespace {
    void ensure_cpf_accepts(std::string_view input) {
       auto options = cpf::parse_options{};
       options.build_ast = false;
-      auto result = runtime_cpf_parser().parse(input, options);
+      auto result = c_subset::translation_unit::parse(input, options);
       if (!result.success) {
          auto message = result.error.has_value() ? result.error->message : std::string{"unknown CPF parse failure"};
          throw std::runtime_error{"CPF parse failed: " + message};
+      }
+   }
+
+   void ensure_cpf_accepts(const cpf::token_sequence& tokens) {
+      auto options = cpf::parse_options{};
+      options.build_ast = false;
+      auto result = c_subset::translation_unit::parse(tokens, options);
+      if (!result.success) {
+         auto message = result.error.has_value() ? result.error->message : std::string{"unknown CPF parse failure"};
+         throw std::runtime_error{"CPF token parse failed: " + message};
       }
    }
 
@@ -129,6 +143,7 @@ int main(int argc, char** argv) {
       const auto options = parse_arguments(argc, argv);
       const auto fixture_path = std::filesystem::path{CPF_YACC_COMPARE_FIXTURE_PATH};
       const auto input = read_text_file(fixture_path);
+      const auto cpf_tokens = c_subset::translation_unit::lex(input);
 
       std::cout << "Fixture:   " << fixture_path << '\n';
       std::cout << "Bytes:     " << input.size() << '\n';
@@ -164,6 +179,24 @@ int main(int argc, char** argv) {
          std::cout << "yacc / CPF average runtime ratio: " << std::fixed << std::setprecision(2)
                    << (yacc.average_milliseconds / cpf.average_milliseconds) << "x" << '\n';
       }
+
+      if (options.show_components) {
+         const auto cpf_lex = measure_parser("cpf lex", options.iterations,
+                                             [&input] { (void) c_subset::translation_unit::lex(input); });
+         const auto cpf_parse_tokens = measure_parser("cpf parse(tok)", options.iterations,
+                                                      [&cpf_tokens] { ensure_cpf_accepts(cpf_tokens); });
+
+         std::cout << '\n';
+         std::cout << "CPF component breakdown" << '\n';
+         std::cout << std::left << std::setw(10) << "Parser" << std::right << std::setw(12) << "Iterations"
+                   << std::setw(14) << "Total ms" << std::setw(14) << "Avg ms" << std::setw(14) << "Min ms"
+                   << std::setw(14) << "Max ms" << '\n';
+         std::cout << std::string(78, '-') << '\n';
+         print_measurement(cpf_lex);
+         print_measurement(cpf_parse_tokens);
+         std::cout << std::string(78, '-') << '\n';
+      }
+
       return 0;
    } catch (const std::exception& exception) {
       std::cerr << "yacc_compare failed: " << exception.what() << '\n';

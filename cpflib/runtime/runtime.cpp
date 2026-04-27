@@ -1,7 +1,10 @@
 #include "runtime.h"
 
 #include <algorithm>
+#include <array>
+#include <bit>
 #include <cctype>
+#include <cstdint>
 #include <functional>
 #include <limits>
 #include <sstream>
@@ -14,18 +17,38 @@ namespace cpf {
       namespace {
          using source_location = source_position;
 
+         struct cached_input_layout {
+            const char* data = nullptr;
+            std::size_t size = 0;
+            std::vector<std::size_t> line_offsets;
+         };
+
+         auto line_offsets_of(std::string_view input) -> const std::vector<std::size_t>& {
+            thread_local auto cache = cached_input_layout{};
+            if (cache.data == input.data() && cache.size == input.size()) {
+               return cache.line_offsets;
+            }
+
+            cache.data = input.data();
+            cache.size = input.size();
+            cache.line_offsets.clear();
+            cache.line_offsets.push_back(0);
+            for (std::size_t index = 0; index < input.size(); ++index) {
+               if (input[index] == '\n') {
+                  cache.line_offsets.push_back(index + 1);
+               }
+            }
+            return cache.line_offsets;
+         }
+
          auto locate(std::string_view input, std::size_t offset) -> source_location {
             source_location location;
             location.offset = std::min(offset, input.size());
-            auto limit = std::min(offset, input.size());
-            for (std::size_t i = 0; i < limit; ++i) {
-               if (input[i] == '\n') {
-                  ++location.line;
-                  location.column = 1;
-               } else {
-                  ++location.column;
-               }
-            }
+            const auto& line_offsets = line_offsets_of(input);
+            const auto line_index = static_cast<std::size_t>(
+                  std::upper_bound(line_offsets.begin(), line_offsets.end(), location.offset) - line_offsets.begin() - 1);
+            location.line = line_index + 1;
+            location.column = 1 + location.offset - line_offsets[line_index];
             return location;
          }
 
@@ -131,6 +154,99 @@ namespace cpf {
             return true;
          }
 
+         auto capture_simple_match(std::string_view input, std::size_t begin, std::size_t end, std::string* capture)
+               -> void {
+            if (capture != nullptr) {
+               *capture = std::string{input.substr(begin, end - begin)};
+            }
+         }
+
+         auto try_identifier_regex_at(std::string_view input, std::size_t& position, std::string* capture = nullptr)
+               -> bool {
+            if (position >= input.size()) {
+               return false;
+            }
+            const auto begin = position;
+            const auto first = static_cast<unsigned char>(input[position]);
+            if (std::isalpha(first) == 0 && first != '_') {
+               return false;
+            }
+            ++position;
+            while (position < input.size()) {
+               const auto current = static_cast<unsigned char>(input[position]);
+               if (std::isalnum(current) == 0 && current != '_') {
+                  break;
+               }
+               ++position;
+            }
+            capture_simple_match(input, begin, position, capture);
+            return true;
+         }
+
+         auto try_decimal_regex_at(std::string_view input, std::size_t& position, std::string* capture = nullptr)
+               -> bool {
+            if (position >= input.size() || std::isdigit(static_cast<unsigned char>(input[position])) == 0) {
+               return false;
+            }
+            const auto begin = position;
+            do {
+               ++position;
+            } while (position < input.size() && std::isdigit(static_cast<unsigned char>(input[position])) != 0);
+            capture_simple_match(input, begin, position, capture);
+            return true;
+         }
+
+         auto try_whitespace_regex_at(std::string_view input, std::size_t& position, std::string* capture = nullptr)
+               -> bool {
+            if (position >= input.size()) {
+               return false;
+            }
+            const auto begin = position;
+            while (position < input.size()) {
+               const auto current = input[position];
+               if (current != ' ' && current != '\t' && current != '\r' && current != '\n') {
+                  break;
+               }
+               ++position;
+            }
+            if (position == begin) {
+               return false;
+            }
+            capture_simple_match(input, begin, position, capture);
+            return true;
+         }
+
+         auto try_line_comment_regex_at(std::string_view input, std::size_t& position, std::string* capture = nullptr)
+               -> bool {
+            if (position + 1 >= input.size() || input[position] != '/' || input[position + 1] != '/') {
+               return false;
+            }
+            const auto begin = position;
+            position += 2;
+            while (position < input.size() && input[position] != '\n') {
+               ++position;
+            }
+            capture_simple_match(input, begin, position, capture);
+            return true;
+         }
+
+         auto try_simple_regex_at(std::string_view input, std::size_t& position, std::string_view regex_text,
+                                  std::string* capture = nullptr) -> std::optional<bool> {
+            if (regex_text == "[A-Za-z_][A-Za-z0-9_]*") {
+               return try_identifier_regex_at(input, position, capture);
+            }
+            if (regex_text == "[0-9]+") {
+               return try_decimal_regex_at(input, position, capture);
+            }
+            if (regex_text == "[ \t\r\n]+") {
+               return try_whitespace_regex_at(input, position, capture);
+            }
+            if (regex_text == "//[^\n]*") {
+               return try_line_comment_regex_at(input, position, capture);
+            }
+            return std::nullopt;
+         }
+
          auto try_regex_at(std::string_view input, std::size_t& position, const std::regex& regex,
                            std::string* capture = nullptr) -> bool {
             auto begin = input.data() + position;
@@ -152,6 +268,9 @@ namespace cpf {
             if (symbol.kind == lexer_symbol_kind::literal) {
                return try_literal_at(input, position, symbol.text, capture);
             }
+            if (auto simple = try_simple_regex_at(input, position, symbol.text, capture); simple.has_value()) {
+               return *simple;
+            }
             if (symbol.compiled_regex != nullptr) {
                return try_regex_at(input, position, *symbol.compiled_regex, capture);
             }
@@ -167,6 +286,24 @@ namespace cpf {
             std::string text;
             bool skip = false;
          };
+
+         struct lexer_dispatch_key {
+            const lexer_symbol_spec* token_symbols = nullptr;
+            std::size_t token_symbol_count = 0;
+            const lexer_symbol_spec* skip_symbols = nullptr;
+            std::size_t skip_symbol_count = 0;
+
+            [[nodiscard]] bool operator==(const lexer_dispatch_key&) const = default;
+         };
+
+         struct lexer_dispatch {
+            std::array<std::vector<std::size_t>, 256> token_candidates;
+            std::array<std::vector<std::size_t>, 256> skip_candidates;
+            std::vector<std::size_t> token_fallback_candidates;
+            std::vector<std::size_t> skip_fallback_candidates;
+         };
+
+         [[nodiscard]] auto lexer_dispatch_of(const grammar_spec& grammar) -> const lexer_dispatch&;
 
          auto better_raw_lexer_match(const raw_lexer_match& candidate, const std::optional<raw_lexer_match>& current,
                                      std::size_t begin) -> bool {
@@ -189,11 +326,14 @@ namespace cpf {
          auto best_skip_match_at(std::string_view input, std::size_t position, const grammar_spec& grammar)
                -> std::optional<raw_lexer_match> {
             auto best = std::optional<raw_lexer_match>{};
-            for (std::size_t index = 0; index < grammar.skip_symbol_count; ++index) {
+            const auto& dispatch = lexer_dispatch_of(grammar);
+            const auto current = static_cast<unsigned char>(input[position]);
+
+            const auto consider = [&](std::size_t index) {
                auto next = position;
                std::string capture;
                if (!try_lexer_symbol_at(input, next, grammar.skip_symbols[index], &capture) || next == position) {
-                  continue;
+                  return;
                }
                auto candidate = raw_lexer_match{index, next, grammar.skip_symbols[index].precedence,
                                                 grammar.skip_symbols[index].kind,
@@ -201,6 +341,13 @@ namespace cpf {
                if (better_raw_lexer_match(candidate, best, position)) {
                   best = std::move(candidate);
                }
+            };
+
+            for (const auto index: dispatch.skip_candidates[current]) {
+               consider(index);
+            }
+            for (const auto index: dispatch.skip_fallback_candidates) {
+               consider(index);
             }
             return best;
          }
@@ -348,6 +495,248 @@ namespace cpf {
             }
          };
 
+         struct recognize_item_key {
+            std::size_t state = 0;
+            std::size_t start = 0;
+
+            [[nodiscard]] bool operator==(const recognize_item_key&) const = default;
+         };
+
+         struct recognize_item_key_hash {
+            [[nodiscard]] auto operator()(const recognize_item_key& key) const noexcept -> std::size_t {
+               auto seed = std::size_t{0};
+               hash_combine(seed, key.state);
+               hash_combine(seed, key.start);
+               return seed;
+            }
+         };
+
+         struct completion_key {
+            std::size_t rule = 0;
+            std::size_t end = 0;
+
+            [[nodiscard]] bool operator==(const completion_key&) const = default;
+         };
+
+         struct completion_key_hash {
+            [[nodiscard]] auto operator()(const completion_key& key) const noexcept -> std::size_t {
+               auto seed = std::size_t{0};
+               hash_combine(seed, key.rule);
+               hash_combine(seed, key.end);
+               return seed;
+            }
+         };
+
+         struct packed_pair_codec {
+            std::uint32_t shift = 0;
+            std::uint64_t second_mask = 0;
+            bool packed = false;
+
+            [[nodiscard]] static auto bit_count(std::size_t value) -> std::uint32_t {
+               return static_cast<std::uint32_t>(std::bit_width(static_cast<std::uint64_t>(value)));
+            }
+
+            [[nodiscard]] static auto make(std::size_t first_max, std::size_t second_max) -> packed_pair_codec {
+               auto codec = packed_pair_codec{};
+               const auto second_bits = bit_count(second_max);
+               const auto first_bits = bit_count(first_max);
+               if (first_bits + second_bits >= 64) {
+                  return codec;
+               }
+
+               codec.shift = second_bits;
+               codec.second_mask = second_bits == 0 ? 0 : ((std::uint64_t{1} << second_bits) - 1);
+               codec.packed = true;
+               return codec;
+            }
+
+            [[nodiscard]] auto encode(std::size_t first, std::size_t second) const -> std::uint64_t {
+               if (!packed) {
+                  return std::numeric_limits<std::uint64_t>::max();
+               }
+
+               const auto left = static_cast<std::uint64_t>(first);
+               const auto right = static_cast<std::uint64_t>(second);
+               return (left << shift) | (right & second_mask);
+            }
+         };
+
+         struct packed_key_set {
+            static constexpr auto Empty = std::numeric_limits<std::uint64_t>::max();
+
+            std::vector<std::uint64_t> slots;
+            std::size_t size = 0;
+
+            [[nodiscard]] static auto hash_of(std::uint64_t key) -> std::size_t {
+               auto value = key;
+               value ^= value >> 33U;
+               value *= 0xff51afd7ed558ccdULL;
+               value ^= value >> 33U;
+               value *= 0xc4ceb9fe1a85ec53ULL;
+               value ^= value >> 33U;
+               return static_cast<std::size_t>(value);
+            }
+
+            void ensure_capacity_for_insert() {
+               if (slots.empty()) {
+                  slots.assign(32, Empty);
+                  return;
+               }
+               if ((size + 1) * 10 >= slots.size() * 7) {
+                  rehash(slots.size() * 2);
+               }
+            }
+
+            [[nodiscard]] auto insert(std::uint64_t key) -> bool {
+               ensure_capacity_for_insert();
+
+               auto index = hash_of(key) & (slots.size() - 1);
+               while (true) {
+                  auto& slot = slots[index];
+                  if (slot == Empty) {
+                     slot = key;
+                     ++size;
+                     return true;
+                  }
+                  if (slot == key) {
+                     return false;
+                  }
+                  index = (index + 1) & (slots.size() - 1);
+               }
+            }
+
+            [[nodiscard]] auto contains(std::uint64_t key) const -> bool {
+               if (slots.empty()) {
+                  return false;
+               }
+
+               auto index = hash_of(key) & (slots.size() - 1);
+               while (true) {
+                  const auto slot = slots[index];
+                  if (slot == Empty) {
+                     return false;
+                  }
+                  if (slot == key) {
+                     return true;
+                  }
+                  index = (index + 1) & (slots.size() - 1);
+               }
+            }
+
+            void rehash(std::size_t new_capacity) {
+               auto old_slots = std::move(slots);
+               slots.assign(new_capacity, Empty);
+               size = 0;
+               for (const auto slot: old_slots) {
+                  if (slot != Empty) {
+                     (void) insert(slot);
+                  }
+               }
+            }
+         };
+
+         struct earley_machine_key {
+            const production_spec* productions = nullptr;
+            const std::size_t* rule_production_indices = nullptr;
+            const std::size_t* rule_production_offsets = nullptr;
+            const std::size_t* rule_production_counts = nullptr;
+            std::size_t production_count = 0;
+            std::size_t rule_count = 0;
+
+            [[nodiscard]] bool operator==(const earley_machine_key&) const = default;
+         };
+
+         struct recognize_state {
+            std::size_t production = 0;
+            std::size_t dot = 0;
+            std::size_t lhs = 0;
+            std::size_t advance_state = 0;
+            parser_symbol next{};
+            bool complete = false;
+         };
+
+         struct earley_machine {
+            std::vector<std::size_t> production_state_offsets;
+            std::vector<recognize_state> states;
+         };
+
+         struct recognize_column {
+            static constexpr auto invalid_index = std::numeric_limits<std::size_t>::max();
+
+            struct item_record {
+               std::size_t state = 0;
+               std::size_t start = 0;
+               std::size_t next_waiting = invalid_index;
+            };
+
+            struct completion_record {
+               std::size_t rule = 0;
+               std::size_t end = 0;
+               std::size_t next = invalid_index;
+            };
+
+            std::vector<item_record> items;
+            packed_key_set item_indices;
+            std::unordered_set<recognize_item_key, recognize_item_key_hash> fallback_item_indices;
+            std::vector<completion_record> completions;
+            packed_key_set completion_indices;
+            std::unordered_set<completion_key, completion_key_hash> fallback_completion_indices;
+            std::size_t* waiting_heads = nullptr;
+            std::size_t* completion_heads = nullptr;
+            std::size_t rule_count = 0;
+
+            void initialize(std::size_t* waiting_storage, std::size_t* completion_storage,
+                            std::size_t count) {
+               waiting_heads = waiting_storage;
+               completion_heads = completion_storage;
+               rule_count = count;
+            }
+
+            [[nodiscard]] auto add_item(const earley_machine& machine, const packed_pair_codec& codec,
+                                        std::size_t state, std::size_t start) -> bool {
+               if (codec.packed) {
+                  if (!item_indices.insert(codec.encode(state, start))) {
+                     return false;
+                  }
+               } else if (!fallback_item_indices.emplace(recognize_item_key{state, start}).second) {
+                  return false;
+               }
+
+               auto record = item_record{state, start, invalid_index};
+               const auto& state_spec = machine.states[state];
+               if (!state_spec.complete && state_spec.next.kind == parser_symbol_kind::nonterminal) {
+                  record.next_waiting = waiting_heads[state_spec.next.value];
+                  waiting_heads[state_spec.next.value] = items.size();
+               }
+               items.push_back(record);
+               return true;
+            }
+
+            [[nodiscard]] auto add_completion(const packed_pair_codec& codec, std::size_t rule,
+                                              std::size_t end) -> bool {
+               if (codec.packed) {
+                  if (!completion_indices.insert(codec.encode(rule, end))) {
+                     return false;
+                  }
+               } else if (!fallback_completion_indices.emplace(completion_key{rule, end}).second) {
+                  return false;
+               }
+
+               auto record = completion_record{rule, end, completion_heads[rule]};
+               completion_heads[rule] = completions.size();
+               completions.push_back(record);
+               return true;
+            }
+
+            [[nodiscard]] auto has_completion(const packed_pair_codec& codec, std::size_t rule,
+                                              std::size_t end) const -> bool {
+               if (codec.packed) {
+                  return completion_indices.contains(codec.encode(rule, end));
+               }
+               return fallback_completion_indices.contains(completion_key{rule, end});
+            }
+         };
+
          struct terminal_match {
             std::size_t end = 0;
             matched_string text;
@@ -357,6 +746,144 @@ namespace cpf {
             std::unordered_map<predicate_query_key, bool, predicate_query_key_hash> matches;
             std::unordered_set<predicate_query_key, predicate_query_key_hash> in_progress;
          };
+
+         void add_dispatch_byte(std::array<std::vector<std::size_t>, 256>& buckets, unsigned char value,
+                                std::size_t index) {
+            buckets[value].push_back(index);
+         }
+
+         void add_dispatch_range(std::array<std::vector<std::size_t>, 256>& buckets, unsigned char first,
+                                 unsigned char last, std::size_t index) {
+            for (auto value = first; value <= last; ++value) {
+               buckets[value].push_back(index);
+            }
+         }
+
+         void register_dispatch_symbol(std::array<std::vector<std::size_t>, 256>& buckets,
+                                       std::vector<std::size_t>& fallback, const lexer_symbol_spec& symbol,
+                                       std::size_t index) {
+            if (symbol.kind == lexer_symbol_kind::literal) {
+               if (symbol.text.empty()) {
+                  fallback.push_back(index);
+                  return;
+               }
+               add_dispatch_byte(buckets, static_cast<unsigned char>(symbol.text.front()), index);
+               return;
+            }
+
+            if (symbol.text == "[A-Za-z_][A-Za-z0-9_]*") {
+               add_dispatch_range(buckets, static_cast<unsigned char>('A'), static_cast<unsigned char>('Z'), index);
+               add_dispatch_range(buckets, static_cast<unsigned char>('a'), static_cast<unsigned char>('z'), index);
+               add_dispatch_byte(buckets, static_cast<unsigned char>('_'), index);
+               return;
+            }
+            if (symbol.text == "[0-9]+") {
+               add_dispatch_range(buckets, static_cast<unsigned char>('0'), static_cast<unsigned char>('9'), index);
+               return;
+            }
+            if (symbol.text == "[ \t\r\n]+") {
+               add_dispatch_byte(buckets, static_cast<unsigned char>(' '), index);
+               add_dispatch_byte(buckets, static_cast<unsigned char>('\t'), index);
+               add_dispatch_byte(buckets, static_cast<unsigned char>('\r'), index);
+               add_dispatch_byte(buckets, static_cast<unsigned char>('\n'), index);
+               return;
+            }
+            if (symbol.text == "//[^\n]*") {
+               add_dispatch_byte(buckets, static_cast<unsigned char>('/'), index);
+               return;
+            }
+
+            fallback.push_back(index);
+         }
+
+         auto build_lexer_dispatch(const grammar_spec& grammar) -> lexer_dispatch {
+            auto dispatch = lexer_dispatch{};
+            for (std::size_t index = 0; index < grammar.token_symbol_count; ++index) {
+               register_dispatch_symbol(dispatch.token_candidates, dispatch.token_fallback_candidates,
+                                        grammar.token_symbols[index], index);
+            }
+            for (std::size_t index = 0; index < grammar.skip_symbol_count; ++index) {
+               register_dispatch_symbol(dispatch.skip_candidates, dispatch.skip_fallback_candidates,
+                                        grammar.skip_symbols[index], index);
+            }
+            return dispatch;
+         }
+
+         [[nodiscard]] auto lexer_dispatch_key_of(const grammar_spec& grammar) -> lexer_dispatch_key {
+            return lexer_dispatch_key{grammar.token_symbols,
+                                      grammar.token_symbol_count,
+                                      grammar.skip_symbols,
+                                      grammar.skip_symbol_count};
+         }
+
+         [[nodiscard]] auto lexer_dispatch_of(const grammar_spec& grammar) -> const lexer_dispatch& {
+            struct cache_entry {
+               lexer_dispatch_key key{};
+               lexer_dispatch dispatch;
+               bool valid = false;
+            };
+
+            thread_local auto cache = cache_entry{};
+            const auto key = lexer_dispatch_key_of(grammar);
+            if (!cache.valid || cache.key != key) {
+               cache.key = key;
+               cache.dispatch = build_lexer_dispatch(grammar);
+               cache.valid = true;
+            }
+            return cache.dispatch;
+         }
+
+         auto build_earley_machine(const grammar_spec& grammar) -> earley_machine {
+            auto machine = earley_machine{};
+            machine.production_state_offsets.resize(grammar.production_count);
+
+            for (std::size_t production_index = 0; production_index < grammar.production_count; ++production_index) {
+               const auto& production = grammar.productions[production_index];
+               const auto base = machine.states.size();
+               machine.production_state_offsets[production_index] = base;
+               machine.states.reserve(machine.states.size() + production.symbol_count + 1);
+               for (std::size_t dot = 0; dot <= production.symbol_count; ++dot) {
+                  auto state = recognize_state{};
+                  state.production = production_index;
+                  state.dot = dot;
+                  state.lhs = production.lhs;
+                  state.complete = dot == production.symbol_count;
+                  if (!state.complete) {
+                     state.next = production.symbols[dot];
+                     state.advance_state = base + dot + 1;
+                  }
+                  machine.states.push_back(state);
+               }
+            }
+
+            return machine;
+         }
+
+         [[nodiscard]] auto earley_machine_key_of(const grammar_spec& grammar) -> earley_machine_key {
+            return earley_machine_key{grammar.productions,
+                                      grammar.rule_production_indices,
+                                      grammar.rule_production_offsets,
+                                      grammar.rule_production_counts,
+                                      grammar.production_count,
+                                      grammar.rule_count};
+         }
+
+         [[nodiscard]] auto earley_machine_of(const grammar_spec& grammar) -> const earley_machine& {
+            struct cache_entry {
+               earley_machine_key key{};
+               earley_machine machine;
+               bool valid = false;
+            };
+
+            thread_local auto cache = cache_entry{};
+            const auto key = earley_machine_key_of(grammar);
+            if (!cache.valid || cache.key != key) {
+               cache.key = key;
+               cache.machine = build_earley_machine(grammar);
+               cache.valid = true;
+            }
+            return cache.machine;
+         }
 
          auto token_position_offset(std::string_view input, const std::vector<lexed_token>& tokens, std::size_t position)
                -> std::size_t {
@@ -383,6 +910,8 @@ namespace cpf {
          auto best_token_match_at(std::string_view input, std::size_t position, const grammar_spec& grammar)
                -> std::optional<raw_lexer_match> {
             auto best = std::optional<raw_lexer_match>{};
+            const auto& dispatch = lexer_dispatch_of(grammar);
+            const auto current = static_cast<unsigned char>(input[position]);
 
             const auto consider = [&](bool skip, std::size_t index, const lexer_symbol_spec& symbol) {
                auto next = position;
@@ -396,10 +925,16 @@ namespace cpf {
                }
             };
 
-            for (std::size_t index = 0; index < grammar.token_symbol_count; ++index) {
+            for (const auto index: dispatch.token_candidates[current]) {
                consider(false, index, grammar.token_symbols[index]);
             }
-            for (std::size_t index = 0; index < grammar.skip_symbol_count; ++index) {
+            for (const auto index: dispatch.token_fallback_candidates) {
+               consider(false, index, grammar.token_symbols[index]);
+            }
+            for (const auto index: dispatch.skip_candidates[current]) {
+               consider(true, index, grammar.skip_symbols[index]);
+            }
+            for (const auto index: dispatch.skip_fallback_candidates) {
                consider(true, index, grammar.skip_symbols[index]);
             }
             return best;
@@ -567,6 +1102,112 @@ namespace cpf {
             return normalized;
          }
 
+         auto predicate_matches(std::string_view input, const std::vector<lexed_token>& tokens,
+                                const grammar_spec& grammar, const parser_symbol& symbol, std::size_t position,
+                                predicate_context& context) -> bool;
+
+         auto recognize_fast(std::string_view input, const std::vector<lexed_token>& tokens,
+                             const grammar_spec& grammar, std::size_t root_rule, std::size_t start_position,
+                             predicate_context& context) -> bool {
+            if (root_rule >= grammar.rule_count || start_position > tokens.size()) {
+               return false;
+            }
+
+            const auto root_count = grammar.rule_production_counts[root_rule];
+            if (root_count == 0) {
+               return false;
+            }
+
+            const auto& machine = earley_machine_of(grammar);
+            const auto item_codec = packed_pair_codec::make(machine.states.size(), tokens.size());
+            const auto completion_codec = packed_pair_codec::make(grammar.rule_count, tokens.size());
+            auto chart = std::vector<recognize_column>(tokens.size() + 1);
+            auto waiting_heads_storage = std::vector<std::size_t>((tokens.size() + 1) * grammar.rule_count,
+                                                                  recognize_column::invalid_index);
+            auto completion_heads_storage = std::vector<std::size_t>((tokens.size() + 1) * grammar.rule_count,
+                                                                     recognize_column::invalid_index);
+            for (std::size_t index = 0; index < chart.size(); ++index) {
+               chart[index].initialize(waiting_heads_storage.data() + index * grammar.rule_count,
+                                       completion_heads_storage.data() + index * grammar.rule_count,
+                                       grammar.rule_count);
+            }
+
+            const auto enqueue_item = [&](auto&& self, std::size_t position, std::size_t state,
+                                          std::size_t start) -> void {
+               if (!chart[position].add_item(machine, item_codec, state, start)) {
+                  return;
+               }
+
+               const auto& state_spec = machine.states[state];
+               if (!state_spec.complete) {
+                  if (state_spec.next.kind == parser_symbol_kind::nonterminal) {
+                     for (auto completion_index = chart[position].completion_heads[state_spec.next.value];
+                          completion_index != recognize_column::invalid_index;) {
+                        const auto completion = chart[position].completions[completion_index];
+                        completion_index = completion.next;
+                        self(self, completion.end, state_spec.advance_state, start);
+                     }
+                  }
+                  return;
+               }
+
+               if (!chart[start].add_completion(completion_codec, state_spec.lhs, position)) {
+                  return;
+               }
+
+               for (auto parent_index = chart[start].waiting_heads[state_spec.lhs];
+                    parent_index != recognize_column::invalid_index;) {
+                  const auto parent = chart[start].items[parent_index];
+                  parent_index = parent.next_waiting;
+                  const auto& parent_state = machine.states[parent.state];
+                  self(self, position, parent_state.advance_state, parent.start);
+               }
+            };
+
+            const auto root_begin = grammar.rule_production_offsets[root_rule];
+            for (std::size_t offset = 0; offset < root_count; ++offset) {
+               const auto production = grammar.rule_production_indices[root_begin + offset];
+               enqueue_item(enqueue_item, start_position, machine.production_state_offsets[production], start_position);
+            }
+
+            for (std::size_t position = start_position; position < chart.size(); ++position) {
+               for (std::size_t index = 0; index < chart[position].items.size(); ++index) {
+                  const auto item = chart[position].items[index];
+                  const auto& state = machine.states[item.state];
+
+                  if (state.complete) {
+                     continue;
+                  }
+
+                  const auto& next = state.next;
+                  if (next.kind == parser_symbol_kind::nonterminal) {
+                     const auto rule_begin = grammar.rule_production_offsets[next.value];
+                     const auto rule_count = grammar.rule_production_counts[next.value];
+                     for (std::size_t offset = 0; offset < rule_count; ++offset) {
+                        const auto production = grammar.rule_production_indices[rule_begin + offset];
+                        enqueue_item(enqueue_item, position, machine.production_state_offsets[production], position);
+                     }
+                     continue;
+                  }
+
+                  if (is_positive_lookahead(next) || is_negative_lookahead(next)) {
+                     const auto matched = predicate_matches(input, tokens, grammar, next, position, context);
+                     const auto success = is_positive_lookahead(next) ? matched : !matched;
+                     if (success) {
+                        enqueue_item(enqueue_item, position, state.advance_state, item.start);
+                     }
+                     continue;
+                  }
+
+                  if (auto match = match_terminal(tokens, position, next, grammar); match.has_value()) {
+                     enqueue_item(enqueue_item, match->end, state.advance_state, item.start);
+                  }
+               }
+            }
+
+            return chart[start_position].has_completion(completion_codec, root_rule, tokens.size());
+         }
+
          auto virtual_terminal(std::string_view input, const std::vector<lexed_token>& tokens, std::size_t position,
                                std::string_view text) -> matched_string {
             matched_string match;
@@ -720,16 +1361,93 @@ namespace cpf {
          }
 
          struct chart_column {
-            std::vector<chart_item_key> items;
-            std::unordered_set<chart_item_key, chart_item_key_hash> indices;
+            static constexpr auto invalid_index = std::numeric_limits<std::size_t>::max();
 
-            auto add(std::size_t production, std::size_t dot, std::size_t start) -> bool {
+            struct item_index_set {
+               std::vector<chart_item_key> slots;
+               std::size_t size = 0;
+
+               item_index_set() : slots(16, empty_key()) {}
+
+               [[nodiscard]] static auto empty_key() -> chart_item_key {
+                  return chart_item_key{std::numeric_limits<std::size_t>::max(), 0, 0};
+               }
+
+               [[nodiscard]] static auto is_empty(const chart_item_key& key) -> bool {
+                  return key.production == std::numeric_limits<std::size_t>::max();
+               }
+
+               [[nodiscard]] auto insert(const chart_item_key& key) -> bool {
+                  if ((size + 1) * 10 >= slots.size() * 7) {
+                     rehash(slots.size() * 2);
+                  }
+
+                  auto index = chart_item_key_hash{}(key) & (slots.size() - 1);
+                  while (true) {
+                     auto& slot = slots[index];
+                     if (is_empty(slot)) {
+                        slot = key;
+                        ++size;
+                        return true;
+                     }
+                     if (slot == key) {
+                        return false;
+                     }
+                     index = (index + 1) & (slots.size() - 1);
+                  }
+               }
+
+               void rehash(std::size_t new_capacity) {
+                  auto old_slots = std::move(slots);
+                  slots.assign(new_capacity, empty_key());
+                  size = 0;
+                  for (const auto& slot: old_slots) {
+                     if (!is_empty(slot)) {
+                        (void) insert(slot);
+                     }
+                  }
+               }
+            };
+
+            struct item_record {
+               std::size_t production = 0;
+               std::size_t dot = 0;
+               std::size_t start = 0;
+               std::size_t next_waiting = invalid_index;
+            };
+
+            std::vector<item_record> items;
+            item_index_set indices;
+            std::size_t* waiting_heads = nullptr;
+
+            void initialize(std::size_t* waiting_storage) {
+               waiting_heads = waiting_storage;
+            }
+
+            auto add(const grammar_spec& grammar, std::size_t production, std::size_t dot, std::size_t start) -> bool {
                auto key = chart_item_key{production, dot, start};
-               if (!indices.insert(key).second) {
+               if (!indices.insert(key)) {
                   return false;
                }
-               items.push_back(key);
+
+               auto record = item_record{production, dot, start, invalid_index};
+               const auto& production_spec = grammar.productions[production];
+               if (dot < production_spec.symbol_count) {
+                  const auto& next = production_spec.symbols[dot];
+                  if (next.kind == parser_symbol_kind::nonterminal) {
+                     record.next_waiting = waiting_heads[next.value];
+                     waiting_heads[next.value] = items.size();
+                  }
+               }
+               items.push_back(record);
                return true;
+            }
+
+            [[nodiscard]] auto waiting_head_for(std::size_t rule) const -> std::size_t {
+               if (waiting_heads != nullptr) {
+                  return waiting_heads[rule];
+               }
+               return invalid_index;
             }
          };
 
@@ -739,13 +1457,19 @@ namespace cpf {
             std::vector<chart_column> chart;
             std::unordered_map<span_key, std::vector<std::size_t>, span_key_hash> completed_rules;
             std::unordered_set<span_key, span_key_hash> completed_productions;
-            std::unordered_map<rule_start_key, std::vector<std::size_t>, rule_start_key_hash> rule_ends;
+            std::vector<std::vector<std::vector<std::size_t>>> rule_ends;
             parse_error error;
          };
 
-         auto predicate_matches(std::string_view input, const std::vector<lexed_token>& tokens,
-                                const grammar_spec& grammar, const parser_symbol& symbol, std::size_t position,
-                                predicate_context& context) -> bool;
+         [[nodiscard]] auto rule_end_list(prepared_parse& prepared, std::size_t rule, std::size_t start)
+               -> std::vector<std::size_t>& {
+            return prepared.rule_ends[start][rule];
+         }
+
+         [[nodiscard]] auto rule_end_list(const prepared_parse& prepared, std::size_t rule, std::size_t start)
+               -> const std::vector<std::size_t>& {
+            return prepared.rule_ends[start][rule];
+         }
 
          auto collect_root_ends(std::string_view input, const prepared_parse& prepared, const grammar_spec& grammar,
                                 std::size_t root_rule, bool require_full_input) -> std::vector<std::size_t>;
@@ -755,6 +1479,12 @@ namespace cpf {
                -> std::vector<parse_node_ptr>;
          auto recover_full_input(std::string_view input, const grammar_spec& grammar, std::size_t root_rule,
                                  const prepared_parse& prepared) -> parse_forest;
+
+         auto rule_completed_at(const prepared_parse& prepared, std::size_t rule, std::size_t start, std::size_t end)
+               -> bool {
+            const auto& completed = rule_end_list(prepared, rule, start);
+            return std::binary_search(completed.begin(), completed.end(), end);
+         }
 
          auto capped_add(std::size_t left, std::size_t right, std::size_t limit) -> std::size_t {
             if (left >= limit || right >= limit) {
@@ -779,16 +1509,47 @@ namespace cpf {
 
          auto prepare_earley_parse(std::string_view input, std::vector<lexed_token> tokens, const grammar_spec& grammar,
                                    std::size_t root_rule, std::size_t start_position,
-                                   predicate_context& predicate_matches_cache) -> prepared_parse {
+                                   predicate_context& predicate_matches_cache, bool track_errors = true)
+               -> prepared_parse {
             prepared_parse prepared;
             error_tracker tracker;
             prepared.tokens = std::move(tokens);
             prepared.chart.resize(prepared.tokens.size() + 1);
+            prepared.rule_ends.resize(prepared.chart.size());
+            auto waiting_heads_storage = std::vector<std::size_t>(prepared.chart.size() * grammar.rule_count,
+                                                                  chart_column::invalid_index);
+            for (std::size_t index = 0; index < prepared.chart.size(); ++index) {
+               prepared.chart[index].initialize(waiting_heads_storage.data() + index * grammar.rule_count);
+            }
+            for (auto& starts: prepared.rule_ends) {
+               starts.resize(grammar.rule_count);
+            }
+
+            const auto enqueue_item = [&](auto&& self, std::size_t position, std::size_t production, std::size_t dot,
+                                          std::size_t start) -> bool {
+               if (!prepared.chart[position].add(grammar, production, dot, start)) {
+                  return false;
+               }
+
+               const auto& production_spec = grammar.productions[production];
+               if (dot < production_spec.symbol_count) {
+                  const auto& next = production_spec.symbols[dot];
+                  if (next.kind == parser_symbol_kind::nonterminal) {
+                     const auto& completed_ends = rule_end_list(prepared, next.value, position);
+                     for (const auto end: completed_ends) {
+                        (void) self(self, end, production, dot + 1, start);
+                     }
+                  }
+               }
+
+               return true;
+            };
 
             const auto root_begin = grammar.rule_production_offsets[root_rule];
             const auto root_count = grammar.rule_production_counts[root_rule];
             for (std::size_t offset = 0; offset < root_count; ++offset) {
-               prepared.chart[start_position].add(grammar.rule_production_indices[root_begin + offset], 0, start_position);
+               (void) enqueue_item(enqueue_item, start_position, grammar.rule_production_indices[root_begin + offset], 0,
+                                   start_position);
                prepared.has_root_production = true;
             }
 
@@ -799,31 +1560,37 @@ namespace cpf {
 
             for (std::size_t position = start_position; position < prepared.chart.size(); ++position) {
                for (std::size_t index = 0; index < prepared.chart[position].items.size(); ++index) {
-                  const auto [production_index, dot, start] = prepared.chart[position].items[index];
+                  const auto item = prepared.chart[position].items[index];
+                  const auto production_index = item.production;
+                  const auto dot = item.dot;
+                  const auto start = item.start;
                   const auto& production = grammar.productions[production_index];
 
                   if (dot == production.symbol_count) {
-                     for (std::size_t parent_item_index = 0; parent_item_index < prepared.chart[start].items.size();
-                          ++parent_item_index) {
-                        const auto [parent_index, parent_dot, parent_start] = prepared.chart[start].items[parent_item_index];
-                        const auto& parent = grammar.productions[parent_index];
-                        if (parent_dot >= parent.symbol_count) {
-                           continue;
-                        }
-                        const auto& next = parent.symbols[parent_dot];
-                        if (next.kind == parser_symbol_kind::nonterminal && next.value == production.lhs) {
-                           prepared.chart[position].add(parent_index, parent_dot + 1, parent_start);
-                        }
-                     }
+                      if (track_errors) {
+                         prepared.completed_rules[span_key{production.lhs, start, position}].push_back(production_index);
+                      }
+                      auto& completed_ends = rule_end_list(prepared, production.lhs, start);
+                      if (completed_ends.empty() || completed_ends.back() != position) {
+                         completed_ends.push_back(position);
+                      }
+
+                      for (auto parent_index = prepared.chart[start].waiting_head_for(production.lhs);
+                           parent_index != chart_column::invalid_index;) {
+                         const auto parent = prepared.chart[start].items[parent_index];
+                         parent_index = parent.next_waiting;
+                         (void) enqueue_item(enqueue_item, position, parent.production, parent.dot + 1, parent.start);
+                      }
                      continue;
                   }
 
                   const auto& next = production.symbols[dot];
                   if (next.kind == parser_symbol_kind::nonterminal) {
-                     for (std::size_t candidate = 0; candidate < grammar.production_count; ++candidate) {
-                        if (grammar.productions[candidate].lhs == next.value) {
-                           prepared.chart[position].add(candidate, 0, position);
-                        }
+                      const auto rule_begin = grammar.rule_production_offsets[next.value];
+                      const auto rule_count = grammar.rule_production_counts[next.value];
+                      for (std::size_t offset = 0; offset < rule_count; ++offset) {
+                         const auto candidate = grammar.rule_production_indices[rule_begin + offset];
+                         (void) enqueue_item(enqueue_item, position, candidate, 0, position);
                      }
                      continue;
                   }
@@ -833,16 +1600,22 @@ namespace cpf {
                                                             predicate_matches_cache);
                      const auto success = is_positive_lookahead(next) ? matched : !matched;
                      if (!success) {
+                        if (!track_errors) {
+                           continue;
+                        }
                         tracker.record(token_position_offset(input, prepared.tokens, position),
                                        describe_expected_symbol(next, grammar), describe_progress(production, dot));
                         continue;
                      }
-                     prepared.chart[position].add(production_index, dot + 1, start);
+                     (void) enqueue_item(enqueue_item, position, production_index, dot + 1, start);
                      continue;
                   }
 
                   auto match = match_terminal(prepared.tokens, position, next, grammar);
                   if (!match.has_value()) {
+                     if (!track_errors) {
+                        continue;
+                     }
                      auto expected = describe_expected_symbol(next, grammar);
                      if (grammar.rule_expected_labels != nullptr && production.lhs < grammar.rule_count &&
                          !grammar.rule_expected_labels[production.lhs].empty()) {
@@ -853,27 +1626,21 @@ namespace cpf {
                                     describe_progress(production, dot));
                      continue;
                   }
-                  prepared.chart[match->end].add(production_index, dot + 1, start);
+                  (void) enqueue_item(enqueue_item, match->end, production_index, dot + 1, start);
                }
             }
 
             for (std::size_t end = 0; end < prepared.chart.size(); ++end) {
                for (const auto& item: prepared.chart[end].items) {
-                  const auto [production_index, dot, start] = item;
+                  const auto production_index = item.production;
+                  const auto dot = item.dot;
+                  const auto start = item.start;
                   const auto& production = grammar.productions[production_index];
                   if (dot != production.symbol_count) {
                      continue;
                   }
                   prepared.completed_productions.insert(span_key{production_index, start, end});
-                  prepared.completed_rules[span_key{production.lhs, start, end}].push_back(production_index);
-                  prepared.rule_ends[rule_start_key{production.lhs, start}].push_back(end);
                }
-            }
-
-            for (auto& [key, ends]: prepared.rule_ends) {
-               std::sort(ends.begin(), ends.end());
-               ends.erase(std::unique(ends.begin(), ends.end()), ends.end());
-               (void) key;
             }
 
              auto success = false;
@@ -881,20 +1648,18 @@ namespace cpf {
                 if (end != prepared.tokens.size()) {
                   continue;
                }
-                if (prepared.completed_rules.contains(span_key{root_rule, start_position, end})) {
+                 if (rule_completed_at(prepared, root_rule, start_position, end)) {
                   success = true;
                   break;
                }
             }
 
-            if (!success) {
+             if (!success && track_errors) {
                 for (std::size_t end = start_position; end < prepared.chart.size(); ++end) {
-                   auto completed = prepared.completed_rules.find(span_key{root_rule, start_position, end});
-                  if (completed != prepared.completed_rules.end()) {
+                    if (rule_completed_at(prepared, root_rule, start_position, end)) {
                      auto failure_position = token_position_offset(input, prepared.tokens, end);
                      tracker.record(failure_position, "<end of input>",
-                                    "after completing rule '" +
-                                          std::string{grammar.productions[completed->second.front()].lhs_name} + "'");
+                                    "after completing rule '" + std::string{grammar.productions[root_begin].lhs_name} + "'");
                   }
                }
                prepared.error = tracker.build(input);
@@ -919,25 +1684,18 @@ namespace cpf {
                return false;
             }
 
-            auto prepared = prepare_earley_parse(input, tokens, grammar, target.value, position, context);
-            auto matched = false;
-            for (std::size_t end = position; end < prepared.chart.size(); ++end) {
-               if (prepared.completed_rules.contains(span_key{target.value, position, end})) {
-                  matched = true;
-                  break;
-               }
-            }
+            const auto matched = recognize_fast(input, tokens, grammar, target.value, position, context);
 
             context.in_progress.erase(key);
             context.matches.emplace(key, matched);
             return matched;
          }
 
-         auto prepare_earley_parse(std::string_view input, const grammar_spec& grammar, std::size_t root_rule)
-               -> prepared_parse {
+          auto prepare_earley_parse(std::string_view input, const grammar_spec& grammar, std::size_t root_rule,
+                                    bool track_errors = true) -> prepared_parse {
             auto predicate_matches_cache = predicate_context{};
             return prepare_earley_parse(input, tokenize_input(input, grammar).tokens, grammar, root_rule, 0,
-                                        predicate_matches_cache);
+                                        predicate_matches_cache, track_errors);
          }
 
          auto finish_earley_parse(std::string_view input, const grammar_spec& grammar, std::size_t root_rule,
@@ -980,7 +1738,7 @@ namespace cpf {
                   continue;
                }
 
-               if (prepared.completed_rules.contains(span_key{root_rule, 0, end})) {
+               if (rule_completed_at(prepared, root_rule, 0, end)) {
                   result.success = true;
                   return result;
                }
@@ -999,7 +1757,7 @@ namespace cpf {
                 if (require_full_input && end != prepared.tokens.size()) {
                   continue;
                }
-               if (prepared.completed_rules.contains(span_key{root_rule, 0, end})) {
+               if (rule_completed_at(prepared, root_rule, 0, end)) {
                   ends.push_back(end);
                }
             }
@@ -1085,8 +1843,8 @@ namespace cpf {
                      return;
                   }
                   if (symbol.kind == parser_symbol_kind::nonterminal) {
-                     auto end_it = prepared.rule_ends.find(rule_start_key{symbol.value, position});
-                     if (end_it == prepared.rule_ends.end()) {
+                     const auto& child_ends = rule_end_list(prepared, symbol.value, position);
+                     if (child_ends.empty()) {
                         return;
                      }
 
@@ -1102,14 +1860,14 @@ namespace cpf {
                         }
                      };
                      if (span_order == forest_span_order::ascending) {
-                        for (const auto child_end: end_it->second) {
+                        for (const auto child_end: child_ends) {
                            if (child_end > end) {
                               break;
                            }
                            append_children(child_end);
                         }
                      } else {
-                        for (auto child_it = end_it->second.rbegin(); child_it != end_it->second.rend(); ++child_it) {
+                        for (auto child_it = child_ends.rbegin(); child_it != child_ends.rend(); ++child_it) {
                            append_children(*child_it);
                         }
                      }
@@ -1649,6 +2407,15 @@ namespace cpf {
          return true;
       }
 
+      auto requires_tree_validation(const model_spec& model) -> bool {
+         for (std::size_t index = 0; index < model.production_metadata_count; ++index) {
+            if (model.production_metadata[index].validation_constraint_count != 0) {
+               return true;
+            }
+         }
+         return false;
+      }
+
       void append_cst_children(const parse_node_ptr& tree, const model_spec& model, std::vector<cst_child>& children) {
          for (const auto& child: tree->children) {
             if (const auto* matched = std::get_if<matched_string>(&child); matched != nullptr) {
@@ -1723,15 +2490,29 @@ namespace cpf {
 
       auto earley_recognize(std::string_view input, const grammar_spec& grammar, std::size_t root_rule)
             -> recognize_result {
-         return finish_earley_recognize(root_rule, prepare_earley_parse(input, grammar, root_rule));
+         auto tokenized = tokenize_input(input, grammar);
+         auto predicate_matches_cache = predicate_context{};
+         if (recognize_fast(tokenized.input, tokenized.tokens, grammar, root_rule, 0, predicate_matches_cache)) {
+            auto result = recognize_result{};
+            result.success = true;
+            return result;
+         }
+         return finish_earley_recognize(root_rule, prepare_earley_parse(input, grammar, root_rule, true));
       }
 
       auto earley_recognize(const token_sequence& tokens, const grammar_spec& grammar,
                             std::size_t root_rule) -> recognize_result {
          auto predicate_matches_cache = predicate_context{};
+         if (recognize_fast(tokens.input, tokens.tokens, grammar, root_rule, 0, predicate_matches_cache)) {
+            auto result = recognize_result{};
+            result.success = true;
+            return result;
+         }
+
+         predicate_matches_cache = {};
          return finish_earley_recognize(root_rule,
                                         prepare_earley_parse(tokens.input, tokens.tokens, grammar, root_rule, 0,
-                                                             predicate_matches_cache));
+                                                             predicate_matches_cache, true));
       }
 
       auto earley_inspect(std::string_view input, const grammar_spec& grammar, std::size_t root_rule,
@@ -1748,7 +2529,7 @@ namespace cpf {
              if (end != prepared.tokens.size()) {
                continue;
             }
-            if (prepared.completed_rules.contains(span_key{root_rule, 0, end})) {
+            if (rule_completed_at(prepared, root_rule, 0, end)) {
                accepted_end = end;
                result.success = true;
                break;
@@ -1821,13 +2602,13 @@ namespace cpf {
                   return 0;
                }
                if (symbol.kind == parser_symbol_kind::nonterminal) {
-                  auto end_it = prepared.rule_ends.find(rule_start_key{symbol.value, position});
-                  if (end_it == prepared.rule_ends.end()) {
+                  const auto& child_ends = rule_end_list(prepared, symbol.value, position);
+                  if (child_ends.empty()) {
                      return 0;
                   }
 
                   auto total = std::size_t{0};
-                  for (const auto child_end: end_it->second) {
+                  for (const auto child_end: child_ends) {
                      if (child_end > end) {
                         break;
                      }

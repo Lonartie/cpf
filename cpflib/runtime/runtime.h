@@ -167,6 +167,7 @@ namespace cpf {
       [[nodiscard]] auto validate_child_tree(const parse_node_ptr& child, int precedence, bool left_associative,
                                              bool is_left_child, const model_spec& model) -> bool;
       [[nodiscard]] auto validate_parse_tree(const parse_node_ptr& tree, const model_spec& model) -> bool;
+      [[nodiscard]] auto requires_tree_validation(const model_spec& model) -> bool;
       void append_cst_children(const parse_node_ptr& tree, const model_spec& model, std::vector<cst_child>& children);
       [[nodiscard]] auto build_cst_node(const parse_node_ptr& tree, const model_spec& model) -> std::unique_ptr<cst_node>;
       [[nodiscard]] auto filtered_parse_error(std::string_view rule_name) -> parse_error;
@@ -217,9 +218,9 @@ namespace cpf {
          return result;
       }
 
-      template<typename T, typename ParseForestFactory, typename ValidateTree, typename MaterializeTree,
+      template<typename T, typename RecognizeFactory, typename ParseForestFactory, typename ValidateTree, typename MaterializeTree,
                typename DamageIndexer>
-      [[nodiscard]] auto parse_shared_forest(ParseForestFactory&& parse_forest, const model_spec& model,
+      [[nodiscard]] auto parse_shared_forest(RecognizeFactory&& recognize, ParseForestFactory&& parse_forest, const model_spec& model,
                                              std::size_t root_rule, const parse_options& options,
                                              ValidateTree&& validate_tree, MaterializeTree&& materialize_tree,
                                              DamageIndexer&& damage_indexer) -> parse_result<T> {
@@ -228,10 +229,23 @@ namespace cpf {
          }
 
          auto fetch_forest = std::forward<ParseForestFactory>(parse_forest);
+          auto recognize_only = std::forward<RecognizeFactory>(recognize);
          auto validate = std::forward<ValidateTree>(validate_tree);
          auto materialize = std::forward<MaterializeTree>(materialize_tree);
          auto index_damage = std::forward<DamageIndexer>(damage_indexer);
          const auto root_rule_name = model.rule_names[root_rule];
+
+          if (!options.build_ast && !options.allow_partial && !options.error_on_ambiguity &&
+              !requires_tree_validation(model)) {
+             auto result = parse_result<T>{};
+             auto recognized = recognize_only();
+             result.success = recognized.success;
+             result.status = recognized.success ? parse_status::success : parse_status::failure;
+             if (!recognized.success) {
+                result.error = std::move(recognized.error);
+             }
+             return result;
+          }
 
          auto forest = fetch_forest(forest_span_order::ascending);
          if (!forest.success) {

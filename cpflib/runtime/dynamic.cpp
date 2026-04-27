@@ -1018,6 +1018,7 @@ namespace cpf {
                                        const token_sequence& tokens,
                                        const parse_options& options) const -> parse_result<dynamic_node> {
          return detail::parse_shared_forest<dynamic_node>(
+                [&]() { return detail::earley_recognize(tokens, grammar_spec, root_rule); },
                [&](detail::forest_span_order order) {
                   return detail::earley_parse(tokens, grammar_spec, root_rule, options.allow_partial, order);
                },
@@ -1045,6 +1046,7 @@ namespace cpf {
                                    const token_sequence& tokens,
                                    const parse_options& options) const -> parse_result<cst_node> {
          return detail::parse_shared_forest<cst_node>(
+                [&]() { return detail::earley_recognize(tokens, grammar_spec, root_rule); },
                [&](detail::forest_span_order order) {
                   return detail::earley_parse(tokens, grammar_spec, root_rule, options.allow_partial, order);
                },

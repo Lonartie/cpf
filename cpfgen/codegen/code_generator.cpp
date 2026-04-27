@@ -3150,6 +3150,7 @@ namespace cpf {
               "cpf::parse_result<T> parse_generated(const cpf::token_sequence& tokens, std::size_t root_rule, const "
               "cpf::parse_options& options) {");
          line(source, 2, "return cpf::detail::parse_shared_forest<T>(");
+         line(source, 3, "[&]() { return cpf::detail::earley_recognize(tokens, grammar_spec, root_rule); },");
          line(source, 3, "[&](cpf::detail::forest_span_order order) {");
          line(source, 4, "return cpf::detail::earley_parse(tokens, grammar_spec, root_rule, options.allow_partial, order);");
          line(source, 3, "},");
@@ -3182,6 +3183,7 @@ namespace cpf {
          line(source, 1,
               "cpf::parse_result<cpf::cst_node> parse_generated_cst(const cpf::token_sequence& tokens, std::size_t root_rule, const cpf::parse_options& options) {");
          line(source, 2, "return cpf::detail::parse_shared_forest<cpf::cst_node>(");
+         line(source, 3, "[&]() { return cpf::detail::earley_recognize(tokens, grammar_spec, root_rule); },");
          line(source, 3, "[&](cpf::detail::forest_span_order order) {");
          line(source, 4, "return cpf::detail::earley_parse(tokens, grammar_spec, root_rule, options.allow_partial, order);");
          line(source, 3, "},");

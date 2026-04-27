@@ -314,6 +314,7 @@ namespace {
    template<typename T>
    cpf::parse_result<T> parse_generated(const cpf::token_sequence& tokens, std::size_t root_rule, const cpf::parse_options& options) {
       return cpf::detail::parse_shared_forest<T>(
+         [&]() { return cpf::detail::earley_recognize(tokens, grammar_spec, root_rule); },
          [&](cpf::detail::forest_span_order order) {
             return cpf::detail::earley_parse(tokens, grammar_spec, root_rule, options.allow_partial, order);
          },
@@ -342,6 +343,7 @@ namespace {
 
    cpf::parse_result<cpf::cst_node> parse_generated_cst(const cpf::token_sequence& tokens, std::size_t root_rule, const cpf::parse_options& options) {
       return cpf::detail::parse_shared_forest<cpf::cst_node>(
+         [&]() { return cpf::detail::earley_recognize(tokens, grammar_spec, root_rule); },
          [&](cpf::detail::forest_span_order order) {
             return cpf::detail::earley_parse(tokens, grammar_spec, root_rule, options.allow_partial, order);
          },
