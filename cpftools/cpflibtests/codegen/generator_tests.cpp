@@ -160,7 +160,7 @@ TEST_SUITE("cpflib.code_generator") {
                std::string::npos);
          CHECK(generated.header.find("inline void write_calculator_debug_indent(std::ostream& os, std::size_t indent)") !=
                std::string::npos);
-         CHECK(generated.header.find("inline void write_calculator_debug_block(std::ostream& os, std::string_view block, std::size_t indent)") !=
+         CHECK(generated.header.find("inline void write_calculator_debug_block(std::ostream& os, std::string block, std::size_t indent)") !=
                std::string::npos);
          CHECK(generated.header.find("visit_recursive(*node.left, visitor, &node);") != std::string::npos);
       }

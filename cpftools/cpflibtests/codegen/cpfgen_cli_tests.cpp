@@ -1,11 +1,22 @@
 #include "support/doctest.h"
 
+#include <cerrno>
 #include <cstdlib>
-#include <map>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <string>
 #include <string_view>
+#include <system_error>
+#include <vector>
+
+#if defined(_WIN32)
+#include <windows.h>
+#else
+#include <fcntl.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
 
 namespace {
    struct command_result {
@@ -29,31 +40,176 @@ namespace {
       return {std::istreambuf_iterator<char>{stream}, std::istreambuf_iterator<char>{}};
    }
 
-   [[nodiscard]] std::string shell_quote(const std::filesystem::path& path) {
-      const auto text = path.string();
 #if defined(_WIN32)
-      auto quoted = std::string{"\""};
+   [[nodiscard]] std::wstring windows_quote(const std::filesystem::path& path) {
+      const auto text = path.native();
+      if (text.empty()) {
+         return L"\"\"";
+      }
+      if (text.find_first_of(L" \t\n\v\"") == std::wstring::npos) {
+         return text;
+      }
+
+      auto quoted = std::wstring{L"\""};
+      auto backslash_count = std::size_t{0};
       for (const auto ch: text) {
-         if (ch == '\"') {
-            quoted += '\\';
+         if (ch == L'\\') {
+            ++backslash_count;
+            continue;
          }
+
+         if (ch == L'\"') {
+            quoted.append(backslash_count * 2 + 1, L'\\');
+            quoted += ch;
+            backslash_count = 0;
+            continue;
+         }
+
+         quoted.append(backslash_count, L'\\');
+         backslash_count = 0;
          quoted += ch;
       }
-      quoted += '\"';
+
+      quoted.append(backslash_count * 2, L'\\');
+      quoted += L'\"';
       return quoted;
+
+   }
+
+   [[nodiscard]] std::wstring windows_command_line(const std::filesystem::path& executable,
+                                                   const std::vector<std::filesystem::path>& arguments) {
+      auto command = windows_quote(executable);
+      for (const auto& argument: arguments) {
+         command += L' ';
+         command += windows_quote(argument);
+      }
+      return command;
+   }
+
+   [[nodiscard]] int run_cpfgen_process(const std::filesystem::path& grammar_path,
+                                        const std::filesystem::path& output_path,
+                                        const std::filesystem::path& stdout_path,
+                                        const std::filesystem::path& stderr_path) {
+      auto security_attributes = SECURITY_ATTRIBUTES{};
+      security_attributes.nLength = sizeof(security_attributes);
+      security_attributes.bInheritHandle = TRUE;
+
+      const auto stdout_handle = CreateFileW(stdout_path.c_str(), GENERIC_WRITE,
+                                             FILE_SHARE_READ | FILE_SHARE_WRITE, &security_attributes,
+                                             CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+      if (stdout_handle == INVALID_HANDLE_VALUE) {
+         throw std::system_error{static_cast<int>(GetLastError()), std::system_category(),
+                                 "Unable to open cpfgen stdout capture"};
+      }
+
+      const auto stderr_handle = CreateFileW(stderr_path.c_str(), GENERIC_WRITE,
+                                             FILE_SHARE_READ | FILE_SHARE_WRITE, &security_attributes,
+                                             CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+      if (stderr_handle == INVALID_HANDLE_VALUE) {
+         CloseHandle(stdout_handle);
+         throw std::system_error{static_cast<int>(GetLastError()), std::system_category(),
+                                 "Unable to open cpfgen stderr capture"};
+      }
+
+      auto startup = STARTUPINFOW{};
+      startup.cb = sizeof(startup);
+      startup.dwFlags = STARTF_USESTDHANDLES;
+      startup.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+      startup.hStdOutput = stdout_handle;
+      startup.hStdError = stderr_handle;
+
+      auto process = PROCESS_INFORMATION{};
+      auto command_line = windows_command_line(std::filesystem::path{CPFGEN_EXECUTABLE_PATH}, {grammar_path, output_path});
+      auto mutable_command_line = std::vector<wchar_t>{command_line.begin(), command_line.end()};
+      mutable_command_line.push_back(L'\0');
+      const auto launched = CreateProcessW(std::filesystem::path{CPFGEN_EXECUTABLE_PATH}.c_str(),
+                                           mutable_command_line.data(), nullptr, nullptr, TRUE, 0, nullptr,
+                                           nullptr, &startup, &process);
+
+      CloseHandle(stdout_handle);
+      CloseHandle(stderr_handle);
+
+      if (launched == FALSE) {
+         throw std::system_error{static_cast<int>(GetLastError()), std::system_category(),
+                                 "Unable to launch cpfgen"};
+      }
+
+      CloseHandle(process.hThread);
+      WaitForSingleObject(process.hProcess, INFINITE);
+      auto exit_code = DWORD{1};
+      if (GetExitCodeProcess(process.hProcess, &exit_code) == FALSE) {
+         const auto error = GetLastError();
+         CloseHandle(process.hProcess);
+         throw std::system_error{static_cast<int>(error), std::system_category(),
+                                 "Unable to read cpfgen exit code"};
+      }
+      CloseHandle(process.hProcess);
+      return static_cast<int>(exit_code);
+   }
 #else
-      auto quoted = std::string{"'"};
-      for (const auto ch: text) {
-         if (ch == '\'') {
-            quoted += "'\\''";
-         } else {
-            quoted += ch;
+   [[nodiscard]] int run_cpfgen_process(const std::filesystem::path& grammar_path,
+                                        const std::filesystem::path& output_path,
+                                        const std::filesystem::path& stdout_path,
+                                        const std::filesystem::path& stderr_path) {
+      const auto stdout_fd = ::open(stdout_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0666);
+      if (stdout_fd < 0) {
+         throw std::system_error{errno, std::system_category(), "Unable to open cpfgen stdout capture"};
+      }
+
+      const auto stderr_fd = ::open(stderr_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0666);
+      if (stderr_fd < 0) {
+         const auto error = errno;
+         ::close(stdout_fd);
+         throw std::system_error{error, std::system_category(), "Unable to open cpfgen stderr capture"};
+      }
+
+      const auto child = ::fork();
+      if (child < 0) {
+         const auto error = errno;
+         ::close(stdout_fd);
+         ::close(stderr_fd);
+         throw std::system_error{error, std::system_category(), "Unable to fork cpfgen child process"};
+      }
+
+      if (child == 0) {
+         if (::dup2(stdout_fd, STDOUT_FILENO) < 0 || ::dup2(stderr_fd, STDERR_FILENO) < 0) {
+            _exit(127);
+         }
+         ::close(stdout_fd);
+         ::close(stderr_fd);
+
+         auto executable = std::filesystem::path{CPFGEN_EXECUTABLE_PATH}.string();
+         auto grammar = grammar_path.string();
+         auto output = output_path.string();
+         auto arguments = std::vector<char*>{
+               executable.data(),
+               grammar.data(),
+               output.data(),
+               nullptr
+         };
+         ::execv(executable.c_str(), arguments.data());
+         _exit(127);
+      }
+
+      ::close(stdout_fd);
+      ::close(stderr_fd);
+
+      auto status = int{0};
+      while (::waitpid(child, &status, 0) < 0) {
+         if (errno != EINTR) {
+            throw std::system_error{errno, std::system_category(), "Unable to wait for cpfgen child process"};
          }
       }
-      quoted += '\'';
-      return quoted;
-#endif
+
+      if (WIFEXITED(status)) {
+         return WEXITSTATUS(status);
+      }
+      if (WIFSIGNALED(status)) {
+         return 128 + WTERMSIG(status);
+      }
+      return -1;
    }
+#endif
 
    [[nodiscard]] command_result run_cpfgen(std::string_view grammar_source, std::string_view grammar_name) {
       const auto root = std::filesystem::temp_directory_path() /
@@ -67,14 +223,13 @@ namespace {
       const auto stderr_path = root / "stderr.txt";
       write_file(grammar_path, grammar_source);
 
-      auto command = shell_quote(std::filesystem::path{CPFGEN_EXECUTABLE_PATH});
-      command += ' ' + shell_quote(grammar_path);
-      command += ' ' + shell_quote(output_path);
-      command += " >" + shell_quote(stdout_path);
-      command += " 2>" + shell_quote(stderr_path);
-
       command_result result;
-      result.exit_code = std::system(command.c_str());
+      try {
+         result.exit_code = run_cpfgen_process(grammar_path, output_path, stdout_path, stderr_path);
+      } catch (const std::exception& exception) {
+         result.exit_code = -1;
+         result.stderr_text = exception.what();
+      }
       if (std::filesystem::exists(stdout_path)) {
          result.stdout_text = read_file(stdout_path);
       }
@@ -102,14 +257,13 @@ namespace {
       const auto stdout_path = root / "stdout.txt";
       const auto stderr_path = root / "stderr.txt";
 
-      auto command = shell_quote(std::filesystem::path{CPFGEN_EXECUTABLE_PATH});
-      command += ' ' + shell_quote(grammar_path);
-      command += ' ' + shell_quote(output_path);
-      command += " >" + shell_quote(stdout_path);
-      command += " 2>" + shell_quote(stderr_path);
-
       command_result result;
-      result.exit_code = std::system(command.c_str());
+      try {
+         result.exit_code = run_cpfgen_process(grammar_path, output_path, stdout_path, stderr_path);
+      } catch (const std::exception& exception) {
+         result.exit_code = -1;
+         result.stderr_text = exception.what();
+      }
       if (std::filesystem::exists(stdout_path)) {
          result.stdout_text = read_file(stdout_path);
       }

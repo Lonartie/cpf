@@ -54,20 +54,24 @@ inline void write_default_attrs_debug_indent(std::ostream& os, std::size_t inden
    }
 }
 
-inline void write_default_attrs_debug_block(std::ostream& os, std::string_view block, std::size_t indent) {
-   auto position = std::size_t{0};
-   while (position <= block.size()) {
-      auto line_end = block.find('\n', position);
-      if (line_end == std::string_view::npos) {
-         line_end = block.size();
-      }
+inline void write_default_attrs_debug_block(std::ostream& os, std::string block, std::size_t indent) {
+   if (block.empty()) {
       write_default_attrs_debug_indent(os, indent);
-      os << block.substr(position, line_end - position);
-      if (line_end == block.size()) {
+      return;
+   }
+   for (;;) {
+      const auto line_end = block.find('\n');
+      write_default_attrs_debug_indent(os, indent);
+      os << block.substr(0, line_end);
+      if (line_end == std::string::npos) {
          break;
       }
       os << '\n';
-      position = line_end + 1;
+      block.erase(0, line_end + 1);
+      if (block.empty()) {
+         write_default_attrs_debug_indent(os, indent);
+         break;
+      }
    }
 }
 

@@ -96,7 +96,7 @@ namespace cpf {
             auto end = offset;
             if (std::isspace(static_cast<unsigned char>(input[end])) != 0) {
                found.kind = parse_error_found_kind::token;
-               found.text = std::string{std::string_view{input.data() + end, 1}};
+               found.text.assign(1, input[end]);
                return found;
             }
             while (end < input.size() && std::isspace(static_cast<unsigned char>(input[end])) == 0) {
@@ -328,6 +328,9 @@ namespace cpf {
 
          auto best_skip_match_at(std::string_view input, std::size_t position, const grammar_spec& grammar)
                -> std::optional<raw_lexer_match> {
+            if (position >= input.size()) {
+               return std::nullopt;
+            }
             auto best = std::optional<raw_lexer_match>{};
             const auto& dispatch = lexer_dispatch_of(grammar);
             const auto current = static_cast<unsigned char>(input[position]);
@@ -994,6 +997,9 @@ namespace cpf {
 
          auto best_token_match_at(std::string_view input, std::size_t position, const grammar_spec& grammar)
                -> std::optional<raw_lexer_match> {
+            if (position >= input.size()) {
+               return std::nullopt;
+            }
             auto best = std::optional<raw_lexer_match>{};
             const auto& dispatch = lexer_dispatch_of(grammar);
             const auto current = static_cast<unsigned char>(input[position]);
