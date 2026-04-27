@@ -1,3 +1,5 @@
+include_guard(GLOBAL)
+
 function(cpf_link_grammars target)
     if (NOT TARGET ${target})
         message(FATAL_ERROR "cpf_link_grammars: target '${target}' does not exist")
@@ -27,17 +29,17 @@ function(cpf_link_grammars target)
     set(grammar_stems)
 
     foreach (grammar_file IN LISTS grammar_files)
-        get_filename_component(grammar_absolute ${grammar_file} ABSOLUTE BASE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
-        if (NOT EXISTS ${grammar_absolute})
+        get_filename_component(grammar_absolute "${grammar_file}" ABSOLUTE BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+        if (NOT EXISTS "${grammar_absolute}")
             message(FATAL_ERROR "cpf_link_grammars: grammar '${grammar_file}' does not exist")
         endif ()
 
-        get_filename_component(grammar_extension ${grammar_absolute} EXT)
+        get_filename_component(grammar_extension "${grammar_absolute}" EXT)
         if (NOT grammar_extension STREQUAL ".cpf")
             message(FATAL_ERROR "cpf_link_grammars: grammar '${grammar_file}' must use the .cpf extension")
         endif ()
 
-        get_filename_component(grammar_stem ${grammar_absolute} NAME_WE)
+        get_filename_component(grammar_stem "${grammar_absolute}" NAME_WE)
         if (grammar_stem IN_LIST grammar_stems)
             message(FATAL_ERROR "cpf_link_grammars: duplicate grammar stem '${grammar_stem}' for target '${target}'")
         endif ()
@@ -53,12 +55,12 @@ function(cpf_link_grammars target)
         list(APPEND cpfgen_command --depfile ${generated_depfile})
 
         add_custom_command(
-                OUTPUT ${generated_header} ${generated_source}
-                DEPFILE ${generated_depfile}
-                COMMAND ${CMAKE_COMMAND} -E make_directory ${generated_directory}
-                COMMAND ${cpfgen_command}
-                DEPENDS cpfgen ${grammar_absolute}
-                VERBATIM
+            OUTPUT ${generated_header} ${generated_source}
+            DEPFILE ${generated_depfile}
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${generated_directory}
+            COMMAND ${cpfgen_command}
+            DEPENDS cpfgen ${grammar_absolute}
+            VERBATIM
         )
 
         list(APPEND generated_headers ${generated_header})
@@ -77,7 +79,7 @@ function(cpf_link_grammars target)
 
     set(cpf_link_grammars_target ${target}_cpf_grammars_${cpf_link_grammars_call_count})
     add_custom_target(${cpf_link_grammars_target}
-            DEPENDS ${generated_headers} ${generated_sources}
+        DEPENDS ${generated_headers} ${generated_sources}
     )
 
     add_dependencies(${target} cpfgen ${cpf_link_grammars_target})
