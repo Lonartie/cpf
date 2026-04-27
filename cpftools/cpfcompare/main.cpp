@@ -103,7 +103,7 @@ namespace {
       }
    }
 
-   void ensure_cpf_dynamic_accepts(const cpf::compiled_grammar& grammar, std::string_view input) {
+   void ensure_cpf_dynamic_accepts(const cpf::parser& grammar, std::string_view input) {
       auto options = cpf::parse_options{};
       options.build_ast = false;
       auto result = grammar.parse(input, options);
@@ -113,7 +113,7 @@ namespace {
       }
    }
 
-   void ensure_cpf_dynamic_accepts(const cpf::compiled_grammar& grammar, const cpf::token_sequence& tokens) {
+   void ensure_cpf_dynamic_accepts(const cpf::parser& grammar, const cpf::token_sequence& tokens) {
       auto options = cpf::parse_options{};
       options.build_ast = false;
       auto result = grammar.parse(tokens, options);

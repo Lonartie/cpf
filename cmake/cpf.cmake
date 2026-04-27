@@ -69,21 +69,9 @@ function(cpf_link_grammars target)
 
     set_source_files_properties(${generated_headers} ${generated_sources} PROPERTIES GENERATED TRUE)
 
-    get_property(cpf_link_grammars_call_count GLOBAL PROPERTY CPF_LINK_GRAMMARS_CALL_COUNT)
-    if (NOT DEFINED cpf_link_grammars_call_count OR cpf_link_grammars_call_count STREQUAL "CPF_LINK_GRAMMARS_CALL_COUNT-NOTFOUND")
-        set(cpf_link_grammars_call_count 0)
-    endif ()
-
-    math(EXPR cpf_link_grammars_call_count "${cpf_link_grammars_call_count} + 1")
-    set_property(GLOBAL PROPERTY CPF_LINK_GRAMMARS_CALL_COUNT ${cpf_link_grammars_call_count})
-
-    set(cpf_link_grammars_target ${target}_cpf_grammars_${cpf_link_grammars_call_count})
-    add_custom_target(${cpf_link_grammars_target}
-        DEPENDS ${generated_headers} ${generated_sources}
-    )
-
-    add_dependencies(${target} cpfgen ${cpf_link_grammars_target})
+    add_dependencies(${target} cpfgen)
     target_sources(${target} PRIVATE ${generated_headers} ${generated_sources})
     target_include_directories(${target} PUBLIC ${generated_directory})
+    target_link_libraries(${target} PUBLIC cpf)
 endfunction()
 

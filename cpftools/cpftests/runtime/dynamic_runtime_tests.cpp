@@ -25,7 +25,7 @@ namespace {
       stream << content;
    }
 
-   auto make_dynamic_calculator() -> cpf::compiled_grammar { return cpf::compile_grammar(dynamic_calculator_grammar); }
+   auto make_dynamic_calculator() -> cpf::parser { return cpf::compile_grammar(dynamic_calculator_grammar); }
 
    auto required_field(cpf::dynamic_node& node, std::string_view name) -> cpf::dynamic_field& {
       auto* field = node.get_field(name);

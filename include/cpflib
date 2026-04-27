@@ -1083,17 +1083,17 @@ namespace cpf {
    };
 
    /// @brief Runtime-compiled grammar that can lex, recognize, and parse without code generation.
-   class compiled_grammar {
+   class parser {
    public:
       using dynamic_parse_result = parse_result<dynamic_node>;
       using cst_parse_result = parse_result<cst_node>;
 
-      compiled_grammar() = default;
-      compiled_grammar(compiled_grammar&&) noexcept = default;
-      auto operator=(compiled_grammar&&) noexcept -> compiled_grammar& = default;
-      compiled_grammar(const compiled_grammar&) = default;
-      auto operator=(const compiled_grammar&) -> compiled_grammar& = default;
-      ~compiled_grammar();
+      parser() = default;
+      parser(parser&&) noexcept = default;
+      auto operator=(parser&&) noexcept -> parser& = default;
+      parser(const parser&) = default;
+      auto operator=(const parser&) -> parser& = default;
+      ~parser();
 
       /// @brief True when this object does not reference a compiled grammar.
       [[nodiscard]] auto empty() const -> bool;
@@ -1154,28 +1154,28 @@ namespace cpf {
    private:
       struct impl;
 
-      explicit compiled_grammar(std::shared_ptr<const impl> impl);
+      explicit parser(std::shared_ptr<const impl> impl);
       [[nodiscard]] auto implementation() const -> const impl&;
 
       std::shared_ptr<const impl> m_impl;
 
-      friend auto compile_grammar(const grammar& grammar) -> compiled_grammar;
-      friend auto compile_grammar(std::string_view source) -> compiled_grammar;
-      friend auto compile_grammar(const loaded_grammar& grammar) -> compiled_grammar;
-      friend auto compile_grammar_file(const std::filesystem::path& path) -> compiled_grammar;
+      friend auto compile_grammar(const grammar& grammar) -> parser;
+      friend auto compile_grammar(std::string_view source) -> parser;
+      friend auto compile_grammar(const loaded_grammar& grammar) -> parser;
+      friend auto compile_grammar_file(const std::filesystem::path& path) -> parser;
    };
 
    /// @brief Compiles a parsed grammar into an in-memory runtime parser.
-   [[nodiscard]] auto compile_grammar(const grammar& grammar) -> compiled_grammar;
+   [[nodiscard]] auto compile_grammar(const grammar& grammar) -> parser;
 
    /// @brief Parses and compiles grammar source text into an in-memory runtime parser.
-   [[nodiscard]] auto compile_grammar(std::string_view source) -> compiled_grammar;
+   [[nodiscard]] auto compile_grammar(std::string_view source) -> parser;
 
    /// @brief Compiles a loaded grammar with imports already expanded.
-   [[nodiscard]] auto compile_grammar(const loaded_grammar& grammar) -> compiled_grammar;
+   [[nodiscard]] auto compile_grammar(const loaded_grammar& grammar) -> parser;
 
    /// @brief Loads a grammar file and compiles it into an in-memory runtime parser.
-   [[nodiscard]] auto compile_grammar_file(const std::filesystem::path& path) -> compiled_grammar;
+   [[nodiscard]] auto compile_grammar_file(const std::filesystem::path& path) -> parser;
 } // namespace cpf
 
 
@@ -4761,7 +4761,7 @@ namespace cpf_amalgamated_cpf_runtime_dynamic_cpp_0 {
    } // namespace
 using namespace cpf_amalgamated_cpf_runtime_dynamic_cpp_0;
 
-   struct compiled_grammar::impl {
+   struct parser::impl {
       grammar source_grammar;
       grammar_analysis analysis_result;
       std::vector<dynamic_rule_info> public_rules;
@@ -5294,7 +5294,7 @@ using namespace cpf_amalgamated_cpf_runtime_dynamic_cpp_0;
       return os;
    }
 
-   auto compiled_grammar::impl::build(const grammar& grammar_model) -> std::shared_ptr<const impl> {
+   auto parser::impl::build(const grammar& grammar_model) -> std::shared_ptr<const impl> {
       auto compiled = std::make_shared<impl>();
       compiled->source_grammar = grammar_model;
       compiled->analysis_result = analyze_grammar(compiled->source_grammar);
@@ -6139,116 +6139,116 @@ using namespace cpf_amalgamated_cpf_runtime_dynamic_cpp_0;
       return compiled;
    }
 
-   compiled_grammar::compiled_grammar(std::shared_ptr<const impl> impl) : m_impl{std::move(impl)} {}
+   parser::parser(std::shared_ptr<const impl> impl) : m_impl{std::move(impl)} {}
 
-   compiled_grammar::~compiled_grammar() = default;
+   parser::~parser() = default;
 
-   auto compiled_grammar::implementation() const -> const impl& {
+   auto parser::implementation() const -> const impl& {
       if (m_impl == nullptr) {
          throw std::runtime_error{"Compiled grammar is empty"};
       }
       return *m_impl;
    }
 
-   auto compiled_grammar::empty() const -> bool { return m_impl == nullptr; }
+   auto parser::empty() const -> bool { return m_impl == nullptr; }
 
-   auto compiled_grammar::source_grammar() const -> const grammar& { return implementation().source_grammar; }
+   auto parser::source_grammar() const -> const grammar& { return implementation().source_grammar; }
 
-   auto compiled_grammar::analysis() const -> const grammar_analysis& { return implementation().analysis_result; }
+   auto parser::analysis() const -> const grammar_analysis& { return implementation().analysis_result; }
 
-   auto compiled_grammar::primary_entry_rule() const -> std::string_view {
+   auto parser::primary_entry_rule() const -> std::string_view {
       return implementation().analysis_result.summary.primary_entry_rule;
    }
 
-   auto compiled_grammar::rules() const -> std::span<const dynamic_rule_info> {
+   auto parser::rules() const -> std::span<const dynamic_rule_info> {
       if (m_impl == nullptr) {
          return {};
       }
       return {m_impl->public_rules.data(), m_impl->public_rules.size()};
    }
 
-   auto compiled_grammar::find_rule(std::string_view name) const -> const dynamic_rule_info* {
+   auto parser::find_rule(std::string_view name) const -> const dynamic_rule_info* {
       if (m_impl == nullptr) {
          return nullptr;
       }
       return m_impl->rule_info(name);
    }
 
-   auto compiled_grammar::lex(std::string_view input) const -> token_sequence {
+   auto parser::lex(std::string_view input) const -> token_sequence {
       return detail::lex_input(input, implementation().grammar_spec);
    }
 
-   auto compiled_grammar::recognize(std::string_view input) const -> recognize_result {
+   auto parser::recognize(std::string_view input) const -> recognize_result {
       const auto& state = implementation();
       return state.recognize(state.resolve_root_rule({}), input);
    }
 
-   auto compiled_grammar::recognize(const token_sequence& tokens) const -> recognize_result {
+   auto parser::recognize(const token_sequence& tokens) const -> recognize_result {
       const auto& state = implementation();
       return state.recognize(state.resolve_root_rule({}), tokens);
    }
 
-   auto compiled_grammar::recognize(std::string_view root_rule, std::string_view input) const -> recognize_result {
+   auto parser::recognize(std::string_view root_rule, std::string_view input) const -> recognize_result {
       const auto& state = implementation();
       return state.recognize(state.resolve_root_rule(root_rule), input);
    }
 
-   auto compiled_grammar::recognize(std::string_view root_rule, const token_sequence& tokens) const -> recognize_result {
+   auto parser::recognize(std::string_view root_rule, const token_sequence& tokens) const -> recognize_result {
       const auto& state = implementation();
       return state.recognize(state.resolve_root_rule(root_rule), tokens);
    }
 
-   auto compiled_grammar::parse(std::string_view input, const parse_options& options) const -> dynamic_parse_result {
+   auto parser::parse(std::string_view input, const parse_options& options) const -> dynamic_parse_result {
       const auto& state = implementation();
       return state.parse_dynamic(m_impl, state.resolve_root_rule({}), input, options);
    }
 
-   auto compiled_grammar::parse(const token_sequence& tokens, const parse_options& options) const -> dynamic_parse_result {
+   auto parser::parse(const token_sequence& tokens, const parse_options& options) const -> dynamic_parse_result {
       const auto& state = implementation();
       return state.parse_dynamic(m_impl, state.resolve_root_rule({}), tokens, options);
    }
 
-   auto compiled_grammar::parse(std::string_view root_rule, std::string_view input,
+   auto parser::parse(std::string_view root_rule, std::string_view input,
                                 const parse_options& options) const -> dynamic_parse_result {
       const auto& state = implementation();
       return state.parse_dynamic(m_impl, state.resolve_root_rule(root_rule), input, options);
    }
 
-   auto compiled_grammar::parse(std::string_view root_rule, const token_sequence& tokens,
+   auto parser::parse(std::string_view root_rule, const token_sequence& tokens,
                                 const parse_options& options) const -> dynamic_parse_result {
       const auto& state = implementation();
       return state.parse_dynamic(m_impl, state.resolve_root_rule(root_rule), tokens, options);
    }
 
-   auto compiled_grammar::parse_cst(std::string_view input, const parse_options& options) const -> cst_parse_result {
+   auto parser::parse_cst(std::string_view input, const parse_options& options) const -> cst_parse_result {
       const auto& state = implementation();
       return state.parse_cst(m_impl, state.resolve_root_rule({}), input, options);
    }
 
-   auto compiled_grammar::parse_cst(const token_sequence& tokens, const parse_options& options) const -> cst_parse_result {
+   auto parser::parse_cst(const token_sequence& tokens, const parse_options& options) const -> cst_parse_result {
       const auto& state = implementation();
       return state.parse_cst(m_impl, state.resolve_root_rule({}), tokens, options);
    }
 
-   auto compiled_grammar::parse_cst(std::string_view root_rule, std::string_view input,
+   auto parser::parse_cst(std::string_view root_rule, std::string_view input,
                                     const parse_options& options) const -> cst_parse_result {
       const auto& state = implementation();
       return state.parse_cst(m_impl, state.resolve_root_rule(root_rule), input, options);
    }
 
-   auto compiled_grammar::parse_cst(std::string_view root_rule, const token_sequence& tokens,
+   auto parser::parse_cst(std::string_view root_rule, const token_sequence& tokens,
                                     const parse_options& options) const -> cst_parse_result {
       const auto& state = implementation();
       return state.parse_cst(m_impl, state.resolve_root_rule(root_rule), tokens, options);
    }
 
-   auto compile_grammar(const grammar& grammar) -> compiled_grammar { return compiled_grammar{compiled_grammar::impl::build(grammar)}; }
+   auto compile_grammar(const grammar& grammar) -> parser { return parser{parser::impl::build(grammar)}; }
 
-   auto compile_grammar(std::string_view source) -> compiled_grammar { return compile_grammar(parse_grammar(source)); }
+   auto compile_grammar(std::string_view source) -> parser { return compile_grammar(parse_grammar(source)); }
 
-   auto compile_grammar(const loaded_grammar& grammar) -> compiled_grammar { return compile_grammar(grammar.parsed_grammar); }
+   auto compile_grammar(const loaded_grammar& grammar) -> parser { return compile_grammar(grammar.parsed_grammar); }
 
-   auto compile_grammar_file(const std::filesystem::path& path) -> compiled_grammar {
+   auto compile_grammar_file(const std::filesystem::path& path) -> parser {
       return compile_grammar(load_grammar_file(path));
    }
 } // namespace cpf

@@ -18,47 +18,43 @@ add_custom_command(
     VERBATIM
 )
 
-set_source_files_properties(${yacc_compare_parser_c} ${yacc_compare_parser_h} PROPERTIES GENERATED TRUE)
-
-set(yacc_compare_yacc_sources
+set_source_files_properties(
     ${yacc_compare_parser_c}
-    yacc_driver.c
+    ${yacc_compare_parser_h}
+    PROPERTIES GENERATED TRUE
 )
 
-add_library(yacc_compare_yacc STATIC ${yacc_compare_yacc_sources})
+add_executable(cpfcompare
+    main.cpp
+    yacc_driver.c
+    ${yacc_compare_parser_c}
+)
 
-set_target_properties(yacc_compare_yacc PROPERTIES
+set_target_properties(cpfcompare PROPERTIES
     C_STANDARD 11
     C_STANDARD_REQUIRED ON
     C_EXTENSIONS OFF
 )
 
-target_include_directories(yacc_compare_yacc PUBLIC
-    ${CMAKE_CURRENT_LIST_DIR}
-    ${yacc_compare_generated_dir}
-)
-
-add_executable(yacc_compare main.cpp)
-
-target_compile_definitions(yacc_compare PRIVATE
+target_compile_definitions(cpfcompare PRIVATE
     CPF_YACC_COMPARE_FIXTURE_PATH="${CMAKE_CURRENT_LIST_DIR}/fixtures/programs/c_subset_fixture.c"
     CPF_YACC_COMPARE_GRAMMAR_PATH="${CMAKE_CURRENT_LIST_DIR}/fixtures/grammars/c_subset.cpf"
 )
 
-cpf_link_grammars(yacc_compare
+target_include_directories(cpfcompare PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}
+    ${yacc_compare_generated_dir}
+)
+
+cpf_link_grammars(cpfcompare
     NAMESPACE cpfyacc::c_subset
     ${CMAKE_CURRENT_LIST_DIR}/fixtures/grammars/c_subset.cpf
 )
 
-target_include_directories(yacc_compare PRIVATE
-    ${CMAKE_CURRENT_LIST_DIR}
-)
-
-target_link_libraries(yacc_compare PRIVATE
-    yacc_compare_yacc
+target_link_libraries(cpfcompare PRIVATE
     cpf
     cpf_project_options
     cpf_project_warnings
 )
 
-add_test(NAME yacc_compare_smoke COMMAND yacc_compare --verify-only)
+add_test(NAME yacc_compare_smoke COMMAND cpfcompare --verify-only)

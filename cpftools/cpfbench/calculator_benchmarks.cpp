@@ -151,7 +151,7 @@ namespace {
       return expression;
    }
 
-   [[nodiscard]] auto runtime_calculator_parser() -> const cpf::compiled_grammar& {
+   [[nodiscard]] auto runtime_calculator_parser() -> const cpf::parser& {
       static const auto parser = cpf::compile_grammar_file(std::filesystem::path{CPF_BENCH_CALCULATOR_GRAMMAR_PATH});
       return parser;
    }

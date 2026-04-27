@@ -1,10 +1,13 @@
 add_subdirectory(cpfgenheader)
-add_subdirectory(cpftests)
+
+if (CPF_BUILD_TESTS)
+    add_subdirectory(cpftests)
+endif()
 
 if (CPF_BUILD_BENCHMARKS)
     add_subdirectory(cpfbench)
 endif ()
 
-if (CPF_BUILD_YACC_COMPARE)
-    add_subdirectory(yacc-compare)
+if (CPF_BUILD_COMPARE)
+    add_subdirectory(cpfcompare)
 endif ()

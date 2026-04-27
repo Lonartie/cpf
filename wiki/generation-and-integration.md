@@ -38,7 +38,7 @@ If you only need the parsed grammar, `cpf::parse_grammar_file(...)` returns the 
 
 ### Runtime compilation
 
-`cpf::compile_grammar(...)` and `cpf::compile_grammar_file(...)` return `cpf::compiled_grammar`, which supports:
+`cpf::compile_grammar(...)` and `cpf::compile_grammar_file(...)` return `cpf::parser`, which supports:
 
 - `lex(...)`
 - `recognize(...)`

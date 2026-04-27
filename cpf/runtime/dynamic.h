@@ -191,17 +191,17 @@ namespace cpf {
    };
 
    /// @brief Runtime-compiled grammar that can lex, recognize, and parse without code generation.
-   class compiled_grammar {
+   class parser {
    public:
       using dynamic_parse_result = parse_result<dynamic_node>;
       using cst_parse_result = parse_result<cst_node>;
 
-      compiled_grammar() = default;
-      compiled_grammar(compiled_grammar&&) noexcept = default;
-      auto operator=(compiled_grammar&&) noexcept -> compiled_grammar& = default;
-      compiled_grammar(const compiled_grammar&) = default;
-      auto operator=(const compiled_grammar&) -> compiled_grammar& = default;
-      ~compiled_grammar();
+      parser() = default;
+      parser(parser&&) noexcept = default;
+      auto operator=(parser&&) noexcept -> parser& = default;
+      parser(const parser&) = default;
+      auto operator=(const parser&) -> parser& = default;
+      ~parser();
 
       /// @brief True when this object does not reference a compiled grammar.
       [[nodiscard]] auto empty() const -> bool;
@@ -262,28 +262,28 @@ namespace cpf {
    private:
       struct impl;
 
-      explicit compiled_grammar(std::shared_ptr<const impl> impl);
+      explicit parser(std::shared_ptr<const impl> impl);
       [[nodiscard]] auto implementation() const -> const impl&;
 
       std::shared_ptr<const impl> m_impl;
 
-      friend auto compile_grammar(const grammar& grammar) -> compiled_grammar;
-      friend auto compile_grammar(std::string_view source) -> compiled_grammar;
-      friend auto compile_grammar(const loaded_grammar& grammar) -> compiled_grammar;
-      friend auto compile_grammar_file(const std::filesystem::path& path) -> compiled_grammar;
+      friend auto compile_grammar(const grammar& grammar) -> parser;
+      friend auto compile_grammar(std::string_view source) -> parser;
+      friend auto compile_grammar(const loaded_grammar& grammar) -> parser;
+      friend auto compile_grammar_file(const std::filesystem::path& path) -> parser;
    };
 
    /// @brief Compiles a parsed grammar into an in-memory runtime parser.
-   [[nodiscard]] auto compile_grammar(const grammar& grammar) -> compiled_grammar;
+   [[nodiscard]] auto compile_grammar(const grammar& grammar) -> parser;
 
    /// @brief Parses and compiles grammar source text into an in-memory runtime parser.
-   [[nodiscard]] auto compile_grammar(std::string_view source) -> compiled_grammar;
+   [[nodiscard]] auto compile_grammar(std::string_view source) -> parser;
 
    /// @brief Compiles a loaded grammar with imports already expanded.
-   [[nodiscard]] auto compile_grammar(const loaded_grammar& grammar) -> compiled_grammar;
+   [[nodiscard]] auto compile_grammar(const loaded_grammar& grammar) -> parser;
 
    /// @brief Loads a grammar file and compiles it into an in-memory runtime parser.
-   [[nodiscard]] auto compile_grammar_file(const std::filesystem::path& path) -> compiled_grammar;
+   [[nodiscard]] auto compile_grammar_file(const std::filesystem::path& path) -> parser;
 } // namespace cpf
 
 

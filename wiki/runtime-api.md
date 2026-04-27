@@ -29,7 +29,7 @@ The runtime compiler shares the same grammar frontend as `cpfgen`:
 - `cpf::compile_grammar(...)`
 - `cpf::compile_grammar_file(...)`
 
-`cpf::compiled_grammar` exposes:
+`cpf::parser` exposes:
 
 - `lex(...)`
 - `recognize(...)`

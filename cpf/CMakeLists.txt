@@ -20,3 +20,12 @@ target_link_libraries(cpf
         cpf_project_options
         cpf_project_warnings
 )
+
+if (CPF_AUTO_BUILD_HEADER)
+    # When cpf is built, also generate the single-header
+    add_custom_command(TARGET cpf POST_BUILD
+        COMMAND $<TARGET_FILE:cpfgenheader>
+        COMMENT "Regenerating include/cpflib"
+        VERBATIM
+    )
+endif ()
