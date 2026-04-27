@@ -25,7 +25,7 @@ cmake --build build
 ```
 
 Building the project also builds `cpftools/cpfgenheader/cpfgenheader`, which regenerates the committed
-`include/cpf.hpp` single-header bundle as a post-build step.
+`include/cpflib` single-header bundle as a post-build step.
 
 Run the test suite:
 
@@ -45,13 +45,13 @@ Regenerate the standalone CPF single header explicitly:
 ./build/cpftools/cpfgenheader/cpfgenheader
 ```
 
-By default, `cpfgenheader` uses compile-definition-injected paths and writes `include/cpf.hpp`. It scans `cpf/`
+By default, `cpfgenheader` uses compile-definition-injected paths and writes `include/cpflib`. It scans `cpf/`
 recursively, bundles every discovered header-like file into the declaration section, and places every discovered C++
 source file behind the `CPF_IMPLEMENTATION` gate. You can override the defaults when needed:
 
 ```zsh
-./build/cpftools/cpfgenheader/cpfgenheader --output /tmp/cpf.hpp
-./build/cpftools/cpfgenheader/cpfgenheader --source-root /path/to/cpf --output /tmp/cpf.hpp
+./build/cpftools/cpfgenheader/cpfgenheader --output /tmp/cpflib
+./build/cpftools/cpfgenheader/cpfgenheader --source-root /path/to/cpf --output /tmp/cpflib
 ```
 
 Compile and use a parser entirely at runtime:
@@ -75,15 +75,15 @@ exactly one translation unit:
 ```c++
 // cpf_runtime.cpp
 #define CPF_IMPLEMENTATION
-#include <cpf.hpp>
+#include <cpflib>
 ```
 
 ```c++
 // elsewhere.cpp
-#include <cpf.hpp>
+#include <cpflib>
 ```
 
-`cpf.hpp` contains the public runtime API together with the `runtime/runtime.h` detail declarations used by generated
+`cpflib` contains the public runtime API together with the `runtime/runtime.h` detail declarations used by generated
 parser sources. When `CPF_IMPLEMENTATION` is defined, the runtime `.cpp` implementation bodies are emitted directly from
 the amalgamated header.
 

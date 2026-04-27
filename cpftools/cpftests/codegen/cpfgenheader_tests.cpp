@@ -233,7 +233,7 @@ namespace {
       const auto stderr_path = root / "stderr.txt";
 
       command_result result;
-      result.output_path = root / "cpf.hpp";
+      result.output_path = root / "cpflib";
       try {
          result.exit_code = run_process(cpfgenheader_executable_path, arguments, stdout_path, stderr_path);
       } catch (const std::exception& exception) {
@@ -251,11 +251,11 @@ namespace {
 } // namespace
 
 TEST_SUITE("cpflib.cpfgenheader") {
-   TEST_CASE("regenerated single header matches committed include/cpf.hpp") {
+   TEST_CASE("regenerated single header matches committed include/cpflib") {
       const auto temporary_root = std::filesystem::temp_directory_path() / "cpfgenheader_tests_regenerate";
       std::filesystem::remove_all(temporary_root);
       std::filesystem::create_directories(temporary_root);
-      const auto generated_path = temporary_root / "cpf.hpp";
+      const auto generated_path = temporary_root / "cpflib";
 
       const auto result = run_cpfgenheader({std::filesystem::path{"--output"}, generated_path}, "regenerate");
 
@@ -271,7 +271,7 @@ TEST_SUITE("cpflib.cpfgenheader") {
       const auto temporary_root = std::filesystem::temp_directory_path() / "cpfgenheader_tests_recursive_discovery";
       std::filesystem::remove_all(temporary_root);
       std::filesystem::create_directories(temporary_root);
-      const auto generated_path = temporary_root / "cpf.hpp";
+      const auto generated_path = temporary_root / "cpflib";
 
       const auto result = run_cpfgenheader({std::filesystem::path{"--output"}, generated_path}, "recursive_discovery");
 

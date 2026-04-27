@@ -17,7 +17,7 @@ This directory contains the structured project documentation for CPF.
     - CMake integration through `cpf_link_grammars(...)`
 - [`runtime-api.md`](./runtime-api.md)
     - Generated parser API shape
-    - Single-header `cpf.hpp` usage
+    - Single-header `cpflib` usage
     - `cpf::parse_options`
     - Lazy parse forests via `cpf::parse_tree<T>`
     - Generic CST parsing through `parse_cst(...)`

@@ -38,7 +38,7 @@ target_compile_definitions(cpftests PRIVATE
     CPFGEN_EXECUTABLE_PATH="$<TARGET_FILE:cpfgen>"
     CPFGENHEADER_EXECUTABLE_PATH="$<TARGET_FILE:cpfgenheader>"
     CPF_SOURCE_ROOT_PATH="${PROJECT_SOURCE_DIR}"
-    CPF_SINGLE_HEADER_PATH="${PROJECT_SOURCE_DIR}/include/cpf.hpp"
+    CPF_SINGLE_HEADER_PATH="${PROJECT_SOURCE_DIR}/include/cpflib"
 )
 
 add_dependencies(cpftests cpfgen cpfgenheader)

@@ -138,7 +138,7 @@ The namespace value must be a valid C++ namespace such as `demo`, `demo::generat
 ## `cpfgenheader` single-header bundler
 
 CPF also ships a `cpfgenheader` executable under `cpftools` that flattens the `cpf/` headers and implementation files
-into one committed single-header bundle at `include/cpf.hpp`.
+into one committed single-header bundle at `include/cpflib`.
 
 ```text
 cpfgenheader [--source-root <path>] [--output <path>]
@@ -148,20 +148,20 @@ Behavior:
 
 - when run with no arguments, `cpfgenheader` uses compile-definition-injected defaults
 - the default source root is the repository root
-- the default output path is `include/cpf.hpp`
+- the default output path is `include/cpflib`
 - the tool walks `cpf/` recursively and picks up every header-like and C++ source file it finds
 - `--source-root` overrides which CPF source tree is bundled
 - `--output` overrides the generated single-header destination
-- building the `cpfgenheader` target also runs the executable as a post-build step, so `include/cpf.hpp` stays in sync
+- building the `cpfgenheader` target also runs the executable as a post-build step, so `include/cpflib` stays in sync
 
 Example:
 
 ```zsh
 ./build/cpftools/cpfgenheader/cpfgenheader
-./build/cpftools/cpfgenheader/cpfgenheader --output /tmp/cpf.hpp
+./build/cpftools/cpfgenheader/cpfgenheader --output /tmp/cpflib
 ```
 
-The generated `cpf.hpp` contains:
+The generated `cpflib` contains:
 
 - every recursively discovered CPF declaration file, flattened into one bundle
 - the `runtime/runtime.h` detail declarations and templates used by generated parser `.cpp` files
@@ -173,10 +173,10 @@ This means the file behaves like a normal header by default and like a source fi
 ```c++
 // one translation unit only
 #define CPF_IMPLEMENTATION
-#include <cpf.hpp>
+#include <cpflib>
 
 // every other translation unit
-#include <cpf.hpp>
+#include <cpflib>
 ```
 
 ## CMake integration
