@@ -7,7 +7,7 @@ This file records the attribution and license information that must be preserved
 
 | Component        | Version | CPF usage                                                                                                                     | Source                                 | License            |
 |------------------|---------|-------------------------------------------------------------------------------------------------------------------------------|----------------------------------------|--------------------|
-| doctest          | 2.5.0   | Vendored single-header test framework used by `cpftools/cpflibtests` and `cpftools/cpftests` via `cpftools/support/doctest.h` | https://github.com/doctest/doctest     | MIT                |
+| doctest          | 2.5.0   | Vendored single-header test framework used by `cpftools/cpftests` via `cpftools/support/doctest.h` | https://github.com/doctest/doctest     | MIT                |
 | CPM.cmake        | 0.42.1  | Fetched from `cpftools/cpfbench/CMakeLists.txt` to download benchmark dependencies                                            | https://github.com/cpm-cmake/CPM.cmake | MIT                |
 | Google Benchmark | 1.9.4   | Fetched from `cpftools/cpfbench/CMakeLists.txt` and linked into `cpfbench`                                                    | https://github.com/google/benchmark    | Apache License 2.0 |
 

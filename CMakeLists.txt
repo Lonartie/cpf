@@ -20,6 +20,6 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 cpf_enable_ipo_if_supported()
 cpf_add_project_targets()
 
-add_subdirectory(cpflib)
+add_subdirectory(cpf)
 add_subdirectory(cpfgen)
 add_subdirectory(cpftools)

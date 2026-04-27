@@ -1,6 +1,12 @@
 set(cpftests_sources
     attributes/attribute_tests.cpp
+    codegen/cpfgen_cli_tests.cpp
+    codegen/generator_tests.cpp
     main.cpp
+    parser/grammar_tests.cpp
+    runtime/complexity_tests.cpp
+    runtime/dynamic_runtime_tests.cpp
+    runtime/library_runtime_tests.cpp
     runtime/runtime_tests.cpp
 )
 
@@ -27,6 +33,12 @@ set(cpftests_grammar_files
 
 add_executable(cpftests ${cpftests_sources})
 
+target_compile_definitions(cpftests PRIVATE
+    CPFGEN_EXECUTABLE_PATH="$<TARGET_FILE:cpfgen>"
+)
+
+add_dependencies(cpftests cpfgen)
+
 cpf_link_grammars(cpftests ${cpftests_grammar_files})
 
 cpf_link_grammars(cpftests
@@ -40,7 +52,7 @@ target_include_directories(cpftests PRIVATE
 )
 
 target_link_libraries(cpftests PRIVATE
-    cpf
+    cpfgenlib
     cpf_project_options
     cpf_project_warnings
 )

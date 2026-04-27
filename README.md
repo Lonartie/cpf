@@ -27,7 +27,6 @@ cmake --build build
 Run the test suite:
 
 ```zsh
-./build/cpftools/cpflibtests/cpflibtests
 ./build/cpftools/cpftests/cpftests
 ```
 

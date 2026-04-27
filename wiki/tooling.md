@@ -22,7 +22,6 @@ cmake -S . -B build -DCPF_BUILD_BENCHMARKS=OFF
 Run the full test suite with:
 
 ```zsh
-./build/cpftools/cpflibtests/cpflibtests
 ./build/cpftools/cpftests/cpftests
 ```
 
@@ -30,8 +29,8 @@ The test tools live under `cpftools` and use the vendored `doctest` single-heade
 executables directly produces the underlying doctest failure output, which is usually easier to diagnose than the
 aggregated CTest summary.
 
-`cpflibtests` now also contains golden snapshot coverage for representative generated headers and sources under
-`cpftools/cpflibtests/codegen/snapshots/`. These snapshots lock in code generation for:
+`cpftests` also contains golden snapshot coverage for representative generated headers and sources under
+`cpftools/cpftests/codegen/snapshots/`. These snapshots lock in code generation for:
 
 - baseline/lazy-forest scaffolding (`calculator`)
 - default precedence and associativity fallbacks (`default_attrs`)
