@@ -12,10 +12,12 @@ This directory contains the structured project documentation for CPF.
 - [`generation-and-integration.md`](./generation-and-integration.md)
     - Library entry points
     - `cpfgen` command-line usage
+    - `cpfgenheader` single-header generation
     - Generated-code namespaces
     - CMake integration through `cpf_link_grammars(...)`
 - [`runtime-api.md`](./runtime-api.md)
     - Generated parser API shape
+    - Single-header `cpf.hpp` usage
     - `cpf::parse_options`
     - Lazy parse forests via `cpf::parse_tree<T>`
     - Generic CST parsing through `parse_cst(...)`
@@ -23,6 +25,7 @@ This directory contains the structured project documentation for CPF.
     - Error handling and complexity metadata
 - [`tooling.md`](./tooling.md)
     - Build commands
+    - `cpfgenheader` regeneration workflow
     - Test execution
     - Generator golden snapshots
     - Benchmark workflows and benchmark families

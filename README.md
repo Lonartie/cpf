@@ -13,7 +13,7 @@ dynamic ASTs, and CSTs.
 - `cpflib`: shared grammar frontend, runtime library, and dynamic in-memory parser compiler
 - `cpfgenlib`: code generator built on top of `cpflib`
 - `cpfgen`: command-line front end for code generation
-- `cpftools`: tests, support utilities, and benchmarks
+- `cpftools`: tests, support utilities, benchmarks, and the `cpfgenheader` single-header bundler
 
 ## Quick start
 
@@ -23,6 +23,9 @@ Configure and build the project:
 cmake -S . -B build
 cmake --build build
 ```
+
+Building the project also builds `cpftools/cpfgenheader/cpfgenheader`, which regenerates the committed
+`include/cpf.hpp` single-header bundle as a post-build step.
 
 Run the test suite:
 
@@ -34,6 +37,21 @@ Generate parser code from a grammar:
 
 ```zsh
 ./build/cpfgen/cpfgen /path/to/grammar.cpf /path/to/output --namespace demo::generated
+```
+
+Regenerate the standalone CPF single header explicitly:
+
+```zsh
+./build/cpftools/cpfgenheader/cpfgenheader
+```
+
+By default, `cpfgenheader` uses compile-definition-injected paths and writes `include/cpf.hpp`. It scans `cpf/`
+recursively, bundles every discovered header-like file into the declaration section, and places every discovered C++
+source file behind the `CPF_IMPLEMENTATION` gate. You can override the defaults when needed:
+
+```zsh
+./build/cpftools/cpfgenheader/cpfgenheader --output /tmp/cpf.hpp
+./build/cpftools/cpfgenheader/cpfgenheader --source-root /path/to/cpf --output /tmp/cpf.hpp
 ```
 
 Compile and use a parser entirely at runtime:
@@ -50,6 +68,24 @@ auto parser = cpf::compile_grammar(R"(
 auto result = parser.parse("1 + 2 + 3");
 auto cst = parser.parse_cst("1 + 2 + 3");
 ```
+
+Use CPF as a single-header library by adding `includes/` to your include path and defining `CPF_IMPLEMENTATION` in
+exactly one translation unit:
+
+```c++
+// cpf_runtime.cpp
+#define CPF_IMPLEMENTATION
+#include <cpf.hpp>
+```
+
+```c++
+// elsewhere.cpp
+#include <cpf.hpp>
+```
+
+`cpf.hpp` contains the public runtime API together with the `runtime/runtime.h` detail declarations used by generated
+parser sources. When `CPF_IMPLEMENTATION` is defined, the runtime `.cpp` implementation bodies are emitted directly from
+the amalgamated header.
 
 `cpfgen` prints any grammar diagnostics it finds to standard output during generation. Non-blocking warnings, including
 nullable-cycle warnings for Earley-compatible grammars, still produce the generated files. Blocking diagnostics stop

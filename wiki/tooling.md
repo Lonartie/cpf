@@ -11,6 +11,18 @@ cmake -S . -B build
 cmake --build build
 ```
 
+The build includes the `cpftools/cpfgenheader/cpfgenheader` executable. Building that target regenerates the committed
+`include/cpf.hpp` bundle automatically as a post-build step. The generator scans `cpf/` recursively, so newly added
+headers and `.cpp` files are picked up without maintaining a manual bundling list.
+
+Regenerate only the single-header bundle:
+
+```zsh
+cmake --build build --target cpfgenheader
+./build/cpftools/cpfgenheader/cpfgenheader
+./build/cpftools/cpfgenheader/cpfgenheader --output /tmp/cpf.hpp
+```
+
 Benchmarks are built by default. To skip them in constrained environments:
 
 ```zsh
@@ -36,6 +48,9 @@ aggregated CTest summary.
 - default precedence and associativity fallbacks (`default_attrs`)
 - `@import`-driven generation (`imported_bundle`)
 - explicit namespace wrapping (`namespaced_calculator`)
+
+It also contains a regeneration test for `cpfgenheader` that writes a temporary single-header file and byte-compares it
+with the committed `include/cpf.hpp` bundle.
 
 When intentionally changing generator output, refresh the snapshot files from a verified build tree and review the diff
 like any other public API change.

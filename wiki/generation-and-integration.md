@@ -135,6 +135,50 @@ auto generated = cpf::generate_code(grammar, "calculator", "demo::generated");
 
 The namespace value must be a valid C++ namespace such as `demo`, `demo::generated`, or `my_project::parsers`.
 
+## `cpfgenheader` single-header bundler
+
+CPF also ships a `cpfgenheader` executable under `cpftools` that flattens the `cpf/` headers and implementation files
+into one committed single-header bundle at `include/cpf.hpp`.
+
+```text
+cpfgenheader [--source-root <path>] [--output <path>]
+```
+
+Behavior:
+
+- when run with no arguments, `cpfgenheader` uses compile-definition-injected defaults
+- the default source root is the repository root
+- the default output path is `include/cpf.hpp`
+- the tool walks `cpf/` recursively and picks up every header-like and C++ source file it finds
+- `--source-root` overrides which CPF source tree is bundled
+- `--output` overrides the generated single-header destination
+- building the `cpfgenheader` target also runs the executable as a post-build step, so `include/cpf.hpp` stays in sync
+
+Example:
+
+```zsh
+./build/cpftools/cpfgenheader/cpfgenheader
+./build/cpftools/cpfgenheader/cpfgenheader --output /tmp/cpf.hpp
+```
+
+The generated `cpf.hpp` contains:
+
+- every recursively discovered CPF declaration file, flattened into one bundle
+- the `runtime/runtime.h` detail declarations and templates used by generated parser `.cpp` files
+- every recursively discovered CPF `.cpp` file inside an implementation block guarded by `#if defined(CPF_IMPLEMENTATION)`
+
+This means the file behaves like a normal header by default and like a source file when one translation unit defines
+`CPF_IMPLEMENTATION` before including it.
+
+```c++
+// one translation unit only
+#define CPF_IMPLEMENTATION
+#include <cpf.hpp>
+
+// every other translation unit
+#include <cpf.hpp>
+```
+
 ## CMake integration
 
 When `cpflib` is part of a project, it exposes the helper:
@@ -174,5 +218,5 @@ At a high level:
 - `cpflib` contains the runtime library used by generated parsers
 - `cpfgenlib` contains the grammar model, parser, loader, and code generator
 - `cpfgen` is the command-line front end
-- `cpftools` contains tests and benchmarks
+- `cpftools` contains tests, benchmarks, and the `cpfgenheader` single-header bundler
 
