@@ -1182,8 +1182,6 @@ namespace cpf {
 
 // --- end file: cpf/runtime/dynamic.h
 
-// --- end file: cpf/cpflib
-
 // --- begin file: cpf/runtime/runtime.h
 
 
@@ -1468,6 +1466,8 @@ namespace cpf {
    } // namespace detail
 } // namespace cpf
 // --- end file: cpf/runtime/runtime.h
+
+// --- end file: cpf/cpflib
 
 
 #if defined(CPF_IMPLEMENTATION)

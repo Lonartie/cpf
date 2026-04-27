@@ -2306,7 +2306,7 @@ namespace cpf {
 
          std::ostringstream source;
          line(source, 0, "#include \"" + base_name + ".h\"");
-         line(source, 0, "#include <runtime/runtime.h>");
+         line(source, 0, "#include <cpflib>");
          line(source, 0);
          line(source, 0, "#include <array>");
          line(source, 0, "#include <ostream>");

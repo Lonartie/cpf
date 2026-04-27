@@ -111,7 +111,7 @@ jobs:
 
           status=0
           for test_binary in \
-            "./build/cpftools/cpflibtests/cpflibtests${suffix}" \
+            "./build/cpftools/cpftests/cpfheadertests${suffix}" \
             "./build/cpftools/cpftests/cpftests${suffix}"
           do
             echo "::group::Running ${test_binary}"

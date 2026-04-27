@@ -8,3 +8,4 @@
 #include "parser/grammar_parser.h"
 #include "runtime/api.h"
 #include "runtime/dynamic.h"
+#include "runtime/runtime.h"

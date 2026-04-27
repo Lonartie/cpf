@@ -166,6 +166,8 @@ TEST_SUITE("cpflib.code_generator") {
       }
 
       SUBCASE("source output wires parser, errors, and cloning") {
+         CHECK(generated.source.find("#include <cpflib>") != std::string::npos);
+         CHECK(generated.source.find("#include <runtime/runtime.h>") == std::string::npos);
          CHECK(generated.source.find("grammar_productions{{") != std::string::npos);
          CHECK(generated.source.find("grammar_rule_production_indices{{") != std::string::npos);
          CHECK(generated.source.find("expression_complexity_inputs_0{{") != std::string::npos);
