@@ -12,8 +12,8 @@ target_include_directories(cpfgenlib PUBLIC
 target_link_libraries(cpfgenlib
     PUBLIC
         cpf
-        cpf_project_options
     PRIVATE
+        cpf_project_options
         cpf_project_warnings
 )
 

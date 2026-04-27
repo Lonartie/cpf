@@ -10,8 +10,10 @@ target_link_libraries(cpfgenheader PRIVATE
     cpf_project_warnings
 )
 
-add_custom_command(TARGET cpfgenheader POST_BUILD
-    COMMAND $<TARGET_FILE:cpfgenheader>
-    COMMENT "Regenerating include/cpflib"
-    VERBATIM
-)
+if (CPF_AUTO_BUILD_HEADER)
+    add_custom_command(TARGET cpfgenheader POST_BUILD
+        COMMAND $<TARGET_FILE:cpfgenheader>
+        COMMENT "Regenerating include/cpflib"
+        VERBATIM
+    )
+endif ()

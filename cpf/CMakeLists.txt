@@ -16,8 +16,7 @@ target_include_directories(cpf PUBLIC
 )
 
 target_link_libraries(cpf
-    PUBLIC
-        cpf_project_options
     PRIVATE
+        cpf_project_options
         cpf_project_warnings
 )
