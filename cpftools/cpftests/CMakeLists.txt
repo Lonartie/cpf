@@ -53,20 +53,18 @@ target_compile_definitions(cpfheadertests PRIVATE
     CPF_SINGLE_HEADER_PATH="${PROJECT_SOURCE_DIR}/include/cpflib"
 )
 
-add_dependencies(cpftests cpfgen cpfgenheader)
-add_dependencies(cpfheadertests cpfgen cpfgenheader)
+add_dependencies(cpftests cpfgen cpfgenheader cpf_single_header)
+add_dependencies(cpfheadertests cpfgen cpfgenheader cpf_single_header)
 
 cpf_link_grammars(cpftests ${cpftests_grammar_files})
 
 cpf_link_grammars(cpfheadertests ${cpftests_grammar_files})
 
 cpf_link_grammars(cpftests
-    NAMESPACE generated::fixtures
     fixtures/grammars/namespaced_calculator.cpf
 )
 
 cpf_link_grammars(cpfheadertests
-    NAMESPACE generated::fixtures
     fixtures/grammars/namespaced_calculator.cpf
 )
 

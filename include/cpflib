@@ -256,6 +256,8 @@ namespace cpf {
 
    /// @brief Parsed grammar document.
    struct grammar {
+      std::optional<std::string> code_namespace;
+      std::size_t code_namespace_line = 1;
       std::optional<std::string> whitespace_rule;
       std::size_t whitespace_rule_line = 1;
       std::vector<skip_rule> skip_rules;
@@ -982,11 +984,31 @@ namespace cpf {
       /// @param name Grammar label to search for.
       /// @return Matching field pointer or nullptr when absent.
       [[nodiscard]] auto get_field(std::string_view name) -> dynamic_field*;
-
-      /// @brief Finds one field by name.
-      /// @param name Grammar label to search for.
-      /// @return Matching field pointer or nullptr when absent.
       [[nodiscard]] auto get_field(std::string_view name) const -> const dynamic_field*;
+
+      /// @brief Finds one scalar token value by field name.
+      /// @param name Grammar label to search for.
+      /// @return Matching token value or nullptr when absent or not a scalar token field.
+      [[nodiscard]] auto get_token(std::string_view name) -> matched_string&;
+      [[nodiscard]] auto get_token(std::string_view name) const -> const matched_string&;
+
+      /// @brief Finds vector of scalar token values by field name.
+      /// @param name Grammar label to search for.
+      /// @return Matching token values or empty vector when absent or not a repeated token field.
+      [[nodiscard]] auto get_tokens(std::string_view name) -> std::vector<matched_string>&;
+      [[nodiscard]] auto get_tokens(std::string_view name) const -> const std::vector<matched_string>&;
+
+      /// @brief Finds one scalar node value by field name.
+      /// @param name Grammar label to search for.
+      /// @return Matching node reference or nullptr when absent or not a scalar node field.
+      [[nodiscard]] auto get_node(std::string_view name) -> const dynamic_node&;
+      [[nodiscard]] auto get_node(std::string_view name) const -> const dynamic_node&;
+
+      /// @brief Finds vector of scalar node values by field name.
+      /// @param name Grammar label to search for.
+      /// @return Matching node references or empty vector when absent or not a repeated node field.
+      [[nodiscard]] auto get_nodes(std::string_view name) -> std::vector<std::reference_wrapper<dynamic_node>>;
+       [[nodiscard]] auto get_nodes(std::string_view name) const -> std::vector<std::reference_wrapper<const dynamic_node>>;
 
       /// @brief Returns the exact source slice covered by this node.
       /// @param input Original input text used to produce the node.
@@ -3147,6 +3169,15 @@ namespace cpf_amalgamated_cpf_parser_grammar_parser_cpp_0 {
             return identifier;
          }
 
+         std::string parse_cpp_namespace() {
+            auto value = parse_identifier();
+            while (take("::")) {
+               value += "::";
+               value += parse_identifier();
+            }
+            return value;
+         }
+
          std::string parse_quoted() {
             skip_ignored();
             if (!is_quote(current())) {
@@ -3743,6 +3774,17 @@ namespace cpf_amalgamated_cpf_parser_grammar_parser_cpp_0 {
 
          void parse_directive(grammar& result) {
             auto directive = parse_identifier();
+            if (directive == "namespace") {
+               auto line = line_;
+               auto value = parse_cpp_namespace();
+               if (result.code_namespace.has_value()) {
+                  throw error("Duplicate @namespace directive");
+               }
+               result.code_namespace = std::move(value);
+               result.code_namespace_line = line;
+               expect(";");
+               return;
+            }
             if (directive == "whitespace") {
                auto line = line_;
                auto identifier = parse_identifier();
@@ -3753,9 +3795,6 @@ namespace cpf_amalgamated_cpf_parser_grammar_parser_cpp_0 {
                result.whitespace_rule_line = line;
                expect(";");
                return;
-            }
-            if (directive == "namespace") {
-               throw error("Grammar directive '@namespace' is not supported; use the existing code-generation namespace options");
             }
             throw error("Unknown grammar directive '@" + directive + "'");
          }
@@ -5420,6 +5459,52 @@ using namespace cpf_amalgamated_cpf_runtime_dynamic_cpp_0;
          return &found->second;
       }
       return nullptr;
+   }
+
+   auto dynamic_node::get_token(std::string_view name) -> matched_string& {
+      return get_field(name)->token.value();
+   }
+
+   auto dynamic_node::get_token(std::string_view name) const -> const matched_string& {
+      return get_field(name)->token.value();
+   }
+
+   auto dynamic_node::get_tokens(std::string_view name) -> std::vector<matched_string>& {
+      return get_field(name)->tokens;
+   }
+
+   auto dynamic_node::get_tokens(std::string_view name) const -> const std::vector<matched_string>& {
+      return get_field(name)->tokens;
+   }
+
+   auto dynamic_node::get_node(std::string_view name) -> const dynamic_node& {
+      return *get_field(name)->node;
+   }
+
+   auto dynamic_node::get_node(std::string_view name) const -> const dynamic_node& {
+      return *get_field(name)->node;
+   }
+
+   auto dynamic_node::get_nodes(std::string_view name) -> std::vector<std::reference_wrapper<dynamic_node>> {
+      auto& field = *get_field(name);
+      std::vector<std::reference_wrapper<dynamic_node>> nodes;
+      for (auto& node_ptr: field.nodes) {
+         if (node_ptr != nullptr) {
+            nodes.push_back(*node_ptr);
+         }
+      }
+      return nodes;
+   }
+
+   auto dynamic_node::get_nodes(std::string_view name) const -> std::vector<std::reference_wrapper<const dynamic_node>> {
+      const auto& field = *get_field(name);
+      std::vector<std::reference_wrapper<const dynamic_node>> nodes;
+      for (const auto& node_ptr: field.nodes) {
+         if (node_ptr != nullptr) {
+            nodes.push_back(*node_ptr);
+         }
+      }
+      return nodes;
    }
 
    auto dynamic_node::source_text(std::string_view input) const -> std::string {

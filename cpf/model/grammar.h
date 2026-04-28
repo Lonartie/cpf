@@ -97,6 +97,8 @@ namespace cpf {
 
    /// @brief Parsed grammar document.
    struct grammar {
+      std::optional<std::string> code_namespace;
+      std::size_t code_namespace_line = 1;
       std::optional<std::string> whitespace_rule;
       std::size_t whitespace_rule_line = 1;
       std::vector<skip_rule> skip_rules;

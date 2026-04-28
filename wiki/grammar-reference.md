@@ -318,6 +318,9 @@ Skip rules participate in generated lexing directly:
 - skipped input still influences the source ranges stored on produced tokens and AST captures
 - token-sequence `parse(...)` and `recognize(...)` reuse those already-filtered tokens instead of re-running skip handling
 
-`@namespace` is not part of the grammar language. Generated C++ namespaces are still configured through
+`@namespace <cpp-namespace>;` optionally declares the generated C++ namespace directly in the grammar.
+The namespace must use normal C++ syntax such as `demo::generated`.
+
+Explicit generation-time overrides still win when you pass
 `cpf::generate_code(..., code_namespace)`, `cpfgen --namespace ...`, or `cpf_link_grammars(... NAMESPACE ...)`.
 

@@ -327,14 +327,25 @@ TEST_SUITE("cpflib.grammar_parser") {
          CHECK(message.find("Skip rules must lower directly to a literal or regex terminal") != std::string::npos);
       }
 
-      SUBCASE("@namespace remains a generation-time concern") {
-         auto message = capture_error(R"(
+      SUBCASE("@namespace accepts C++ namespace syntax") {
+         auto grammar = cpf::parse_grammar(R"(
             @namespace generated::fixtures;
             expr -> 'x':value;
          )");
 
+         REQUIRE(grammar.code_namespace.has_value());
+         CHECK(*grammar.code_namespace == "generated::fixtures");
+      }
+
+      SUBCASE("duplicate @namespace directives are rejected") {
+         auto message = capture_error(R"(
+            @namespace generated::fixtures;
+            @namespace other::scope;
+            expr -> 'x':value;
+         )");
+
          REQUIRE_FALSE(message.empty());
-         CHECK(message.find("Grammar directive '@namespace' is not supported") != std::string::npos);
+         CHECK(message.find("Duplicate @namespace directive") != std::string::npos);
       }
 
       SUBCASE("token declarations do not accept rule attributes") {

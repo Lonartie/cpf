@@ -58,3 +58,4 @@ target_link_libraries(cpfcompare PRIVATE
 )
 
 add_test(NAME yacc_compare_smoke COMMAND cpfcompare --verify-only)
+set_tests_properties(yacc_compare_smoke PROPERTIES LABELS cpfcompare)

@@ -95,7 +95,7 @@ cpfgen <grammar-file> [output-directory] [--namespace <value>] [--depfile <path>
 Behavior:
 
 - when `output-directory` is omitted, generated files are written next to the grammar file
-- `--namespace` wraps the generated public API in a C++ namespace
+- `--namespace` wraps the generated public API in a C++ namespace and overrides any grammar `@namespace`
 - `--depfile` writes a make-style depfile listing imported grammar dependencies
 - any grammar diagnostics found during generation are printed to `stdout`
 - warning diagnostics still allow generation to continue and files to be written
@@ -117,7 +117,16 @@ can surface the warnings directly.
 
 ## Namespacing generated code
 
-Generated code can stay in the global namespace, or it can be wrapped in a user-provided namespace to avoid collisions.
+Generated code can stay in the global namespace, use a grammar-declared `@namespace`, or be wrapped in an
+explicit generation-time namespace to avoid collisions.
+
+### Grammar annotation
+
+```text
+@namespace demo::generated;
+```
+
+When present, this becomes the default generated C++ namespace.
 
 ### Library API
 
@@ -134,6 +143,7 @@ auto generated = cpf::generate_code(grammar, "calculator", "demo::generated");
 ```
 
 The namespace value must be a valid C++ namespace such as `demo`, `demo::generated`, or `my_project::parsers`.
+Explicit API, CLI, or CMake namespace arguments override the grammar annotation when both are present.
 
 ## `cpfgenheader` single-header bundler
 
@@ -209,7 +219,7 @@ Validation performed by `cpf_link_grammars(...)` includes:
 - target existence checks
 - `.cpf` extension checks
 - duplicate grammar-stem detection per target
-- namespace syntax validation
+- namespace syntax validation for explicit `NAMESPACE` overrides
 
 ## Repository layout
 

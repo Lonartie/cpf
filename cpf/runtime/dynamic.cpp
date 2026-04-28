@@ -1272,6 +1272,52 @@ namespace cpf {
       return nullptr;
    }
 
+   auto dynamic_node::get_token(std::string_view name) -> matched_string& {
+      return get_field(name)->token.value();
+   }
+
+   auto dynamic_node::get_token(std::string_view name) const -> const matched_string& {
+      return get_field(name)->token.value();
+   }
+
+   auto dynamic_node::get_tokens(std::string_view name) -> std::vector<matched_string>& {
+      return get_field(name)->tokens;
+   }
+
+   auto dynamic_node::get_tokens(std::string_view name) const -> const std::vector<matched_string>& {
+      return get_field(name)->tokens;
+   }
+
+   auto dynamic_node::get_node(std::string_view name) -> const dynamic_node& {
+      return *get_field(name)->node;
+   }
+
+   auto dynamic_node::get_node(std::string_view name) const -> const dynamic_node& {
+      return *get_field(name)->node;
+   }
+
+   auto dynamic_node::get_nodes(std::string_view name) -> std::vector<std::reference_wrapper<dynamic_node>> {
+      auto& field = *get_field(name);
+      std::vector<std::reference_wrapper<dynamic_node>> nodes;
+      for (auto& node_ptr: field.nodes) {
+         if (node_ptr != nullptr) {
+            nodes.push_back(*node_ptr);
+         }
+      }
+      return nodes;
+   }
+
+   auto dynamic_node::get_nodes(std::string_view name) const -> std::vector<std::reference_wrapper<const dynamic_node>> {
+      const auto& field = *get_field(name);
+      std::vector<std::reference_wrapper<const dynamic_node>> nodes;
+      for (const auto& node_ptr: field.nodes) {
+         if (node_ptr != nullptr) {
+            nodes.push_back(*node_ptr);
+         }
+      }
+      return nodes;
+   }
+
    auto dynamic_node::source_text(std::string_view input) const -> std::string {
       if (range.begin.offset > range.end.offset || range.end.offset > input.size()) {
          throw std::out_of_range{"Dynamic node source range is outside the input"};

@@ -90,11 +90,31 @@ namespace cpf {
       /// @param name Grammar label to search for.
       /// @return Matching field pointer or nullptr when absent.
       [[nodiscard]] auto get_field(std::string_view name) -> dynamic_field*;
-
-      /// @brief Finds one field by name.
-      /// @param name Grammar label to search for.
-      /// @return Matching field pointer or nullptr when absent.
       [[nodiscard]] auto get_field(std::string_view name) const -> const dynamic_field*;
+
+      /// @brief Finds one scalar token value by field name.
+      /// @param name Grammar label to search for.
+      /// @return Matching token value or nullptr when absent or not a scalar token field.
+      [[nodiscard]] auto get_token(std::string_view name) -> matched_string&;
+      [[nodiscard]] auto get_token(std::string_view name) const -> const matched_string&;
+
+      /// @brief Finds vector of scalar token values by field name.
+      /// @param name Grammar label to search for.
+      /// @return Matching token values or empty vector when absent or not a repeated token field.
+      [[nodiscard]] auto get_tokens(std::string_view name) -> std::vector<matched_string>&;
+      [[nodiscard]] auto get_tokens(std::string_view name) const -> const std::vector<matched_string>&;
+
+      /// @brief Finds one scalar node value by field name.
+      /// @param name Grammar label to search for.
+      /// @return Matching node reference or nullptr when absent or not a scalar node field.
+      [[nodiscard]] auto get_node(std::string_view name) -> const dynamic_node&;
+      [[nodiscard]] auto get_node(std::string_view name) const -> const dynamic_node&;
+
+      /// @brief Finds vector of scalar node values by field name.
+      /// @param name Grammar label to search for.
+      /// @return Matching node references or empty vector when absent or not a repeated node field.
+      [[nodiscard]] auto get_nodes(std::string_view name) -> std::vector<std::reference_wrapper<dynamic_node>>;
+       [[nodiscard]] auto get_nodes(std::string_view name) const -> std::vector<std::reference_wrapper<const dynamic_node>>;
 
       /// @brief Returns the exact source slice covered by this node.
       /// @param input Original input text used to produce the node.

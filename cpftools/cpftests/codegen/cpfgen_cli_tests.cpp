@@ -18,6 +18,8 @@
 #include <unistd.h>
 #endif
 
+#include <utility>
+
 namespace {
    struct command_result {
       int exit_code = 0;
@@ -89,7 +91,8 @@ namespace {
    [[nodiscard]] int run_cpfgen_process(const std::filesystem::path& grammar_path,
                                         const std::filesystem::path& output_path,
                                         const std::filesystem::path& stdout_path,
-                                        const std::filesystem::path& stderr_path) {
+                                        const std::filesystem::path& stderr_path,
+                                        const std::vector<std::string>& extra_arguments = {}) {
       auto security_attributes = SECURITY_ATTRIBUTES{};
       security_attributes.nLength = sizeof(security_attributes);
       security_attributes.bInheritHandle = TRUE;
@@ -119,7 +122,11 @@ namespace {
       startup.hStdError = stderr_handle;
 
       auto process = PROCESS_INFORMATION{};
-      auto command_line = windows_command_line(std::filesystem::path{CPFGEN_EXECUTABLE_PATH}, {grammar_path, output_path});
+      auto arguments = std::vector<std::filesystem::path>{grammar_path, output_path};
+      for (const auto& argument: extra_arguments) {
+         arguments.emplace_back(argument);
+      }
+      auto command_line = windows_command_line(std::filesystem::path{CPFGEN_EXECUTABLE_PATH}, arguments);
       auto mutable_command_line = std::vector<wchar_t>{command_line.begin(), command_line.end()};
       mutable_command_line.push_back(L'\0');
       const auto launched = CreateProcessW(std::filesystem::path{CPFGEN_EXECUTABLE_PATH}.c_str(),
@@ -150,7 +157,8 @@ namespace {
    [[nodiscard]] int run_cpfgen_process(const std::filesystem::path& grammar_path,
                                         const std::filesystem::path& output_path,
                                         const std::filesystem::path& stdout_path,
-                                        const std::filesystem::path& stderr_path) {
+                                        const std::filesystem::path& stderr_path,
+                                        const std::vector<std::string>& extra_arguments = {}) {
       const auto stdout_fd = ::open(stdout_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0666);
       if (stdout_fd < 0) {
          throw std::system_error{errno, std::system_category(), "Unable to open cpfgen stdout capture"};
@@ -181,12 +189,16 @@ namespace {
          auto executable = std::filesystem::path{CPFGEN_EXECUTABLE_PATH}.string();
          auto grammar = grammar_path.string();
          auto output = output_path.string();
-         auto arguments = std::vector<char*>{
-               executable.data(),
-               grammar.data(),
-               output.data(),
-               nullptr
-         };
+          auto owned_arguments = std::vector<std::string>{executable, grammar, output};
+          for (const auto& argument: extra_arguments) {
+             owned_arguments.push_back(argument);
+          }
+          auto arguments = std::vector<char*>{};
+          arguments.reserve(owned_arguments.size() + 1);
+          for (auto& argument: owned_arguments) {
+             arguments.push_back(argument.data());
+          }
+          arguments.push_back(nullptr);
          ::execv(executable.c_str(), arguments.data());
          _exit(127);
       }
@@ -211,7 +223,8 @@ namespace {
    }
 #endif
 
-   [[nodiscard]] command_result run_cpfgen(std::string_view grammar_source, std::string_view grammar_name) {
+   [[nodiscard]] command_result run_cpfgen(std::string_view grammar_source, std::string_view grammar_name,
+                                           std::vector<std::string> extra_arguments = {}) {
       const auto root = std::filesystem::temp_directory_path() /
                         (std::string{"cpfgen_cli_tests_"} + std::string{grammar_name});
       std::filesystem::remove_all(root);
@@ -225,7 +238,7 @@ namespace {
 
       command_result result;
       try {
-         result.exit_code = run_cpfgen_process(grammar_path, output_path, stdout_path, stderr_path);
+         result.exit_code = run_cpfgen_process(grammar_path, output_path, stdout_path, stderr_path, extra_arguments);
       } catch (const std::exception& exception) {
          result.exit_code = -1;
          result.stderr_text = exception.what();
@@ -242,7 +255,8 @@ namespace {
    }
 
    [[nodiscard]] command_result run_cpfgen(const std::map<std::filesystem::path, std::string>& files,
-                                           const std::filesystem::path& root_grammar_path) {
+                                           const std::filesystem::path& root_grammar_path,
+                                           std::vector<std::string> extra_arguments = {}) {
       const auto root = std::filesystem::temp_directory_path() /
                         (std::string{"cpfgen_cli_tests_"} + root_grammar_path.stem().string() + "_files");
       std::filesystem::remove_all(root);
@@ -259,7 +273,7 @@ namespace {
 
       command_result result;
       try {
-         result.exit_code = run_cpfgen_process(grammar_path, output_path, stdout_path, stderr_path);
+         result.exit_code = run_cpfgen_process(grammar_path, output_path, stdout_path, stderr_path, extra_arguments);
       } catch (const std::exception& exception) {
          result.exit_code = -1;
          result.stderr_text = exception.what();
@@ -330,6 +344,38 @@ TEST_SUITE("cpflib.cpfgen_cli") {
       CHECK(result.stderr_text.empty());
       CHECK(std::filesystem::exists(result.header_path));
       CHECK(std::filesystem::exists(result.source_path));
+   }
+
+   TEST_CASE("cpfgen uses @namespace from the grammar when no explicit override is provided") {
+      const auto result = run_cpfgen(R"(
+         @namespace demo::generated;
+         expression -> number;
+         number -> r'[0-9]+':value;
+      )",
+                                     "annotated_namespace_grammar");
+
+      CHECK(result.exit_code == 0);
+      CHECK(result.stderr_text.empty());
+      CHECK(read_file(result.header_path).find("namespace demo::generated {") != std::string::npos);
+      CHECK(read_file(result.source_path).find("namespace demo::generated {") != std::string::npos);
+   }
+
+   TEST_CASE("cpfgen --namespace overrides a grammar @namespace annotation") {
+      const auto result = run_cpfgen(R"(
+         @namespace demo::generated;
+         expression -> number;
+         number -> r'[0-9]+':value;
+      )",
+                                     "annotated_namespace_override_grammar", {"--namespace", "override::scope"});
+
+      CHECK(result.exit_code == 0);
+      CHECK(result.stderr_text.empty());
+      const auto header = read_file(result.header_path);
+      const auto source = read_file(result.source_path);
+      CHECK(header.find("namespace override::scope {") != std::string::npos);
+      CHECK(header.find("namespace demo::generated {") == std::string::npos);
+      CHECK(source.find("namespace override::scope {") != std::string::npos);
+      CHECK(source.find("namespace demo::generated {") == std::string::npos);
    }
 }
 

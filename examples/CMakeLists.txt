@@ -5,6 +5,7 @@ foreach (CPP_FILE IN LISTS CPP_FILES)
     set(TARGET_NAME "cpfexample_${BASE_NAME}")
     add_executable(${TARGET_NAME} ${CPP_FILE})
     target_link_libraries(${TARGET_NAME} PRIVATE
+            cpf
             cpf_project_options
             cpf_project_warnings
     )
@@ -15,4 +16,5 @@ foreach (CPP_FILE IN LISTS CPP_FILES)
     endif ()
 
     add_test(NAME ${TARGET_NAME} COMMAND ${TARGET_NAME})
+    set_tests_properties("${TARGET_NAME}" PROPERTIES LABELS "cpfexamples")
 endforeach ()

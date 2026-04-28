@@ -394,6 +394,15 @@ namespace cpf {
             return identifier;
          }
 
+         std::string parse_cpp_namespace() {
+            auto value = parse_identifier();
+            while (take("::")) {
+               value += "::";
+               value += parse_identifier();
+            }
+            return value;
+         }
+
          std::string parse_quoted() {
             skip_ignored();
             if (!is_quote(current())) {
@@ -990,6 +999,17 @@ namespace cpf {
 
          void parse_directive(grammar& result) {
             auto directive = parse_identifier();
+            if (directive == "namespace") {
+               auto line = line_;
+               auto value = parse_cpp_namespace();
+               if (result.code_namespace.has_value()) {
+                  throw error("Duplicate @namespace directive");
+               }
+               result.code_namespace = std::move(value);
+               result.code_namespace_line = line;
+               expect(";");
+               return;
+            }
             if (directive == "whitespace") {
                auto line = line_;
                auto identifier = parse_identifier();
@@ -1000,9 +1020,6 @@ namespace cpf {
                result.whitespace_rule_line = line;
                expect(";");
                return;
-            }
-            if (directive == "namespace") {
-               throw error("Grammar directive '@namespace' is not supported; use the existing code-generation namespace options");
             }
             throw error("Unknown grammar directive '@" + directive + "'");
          }

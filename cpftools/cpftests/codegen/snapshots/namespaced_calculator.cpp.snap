@@ -68,8 +68,8 @@ namespace {
 
 namespace {
    constexpr std::array<cpf::detail::lexer_symbol_spec, 2> grammar_token_symbols{{
-      {cpf::detail::lexer_symbol_kind::literal, "+", nullptr, 6},
-      {cpf::detail::lexer_symbol_kind::regex, "[0-9]+", &regex_0, 7}
+      {cpf::detail::lexer_symbol_kind::literal, "+", nullptr, 7},
+      {cpf::detail::lexer_symbol_kind::regex, "[0-9]+", &regex_0, 8}
    }};
    constexpr std::array<cpf::detail::production_spec, 4> grammar_productions{{
       {0, "expression", "expression -> addition", production_0_symbols.data(), production_0_symbols.size()},
@@ -99,8 +99,8 @@ namespace {
       ""
    }};
    constexpr std::array<cpf::detail::lexer_symbol_spec, 2> grammar_skip_symbols{{
-      {cpf::detail::lexer_symbol_kind::regex, "[ \t\r\n]+", &regex_1, 2},
-      {cpf::detail::lexer_symbol_kind::regex, "//[^\n]*", &regex_2, 3}
+      {cpf::detail::lexer_symbol_kind::regex, "[ \t\r\n]+", &regex_1, 3},
+      {cpf::detail::lexer_symbol_kind::regex, "//[^\n]*", &regex_2, 4}
    }};
    constexpr cpf::detail::grammar_spec grammar_spec{grammar_productions.data(), grammar_productions.size(), 3, grammar_rule_expected_labels.data(), grammar_rule_production_indices.data(), grammar_rule_production_offsets.data(), grammar_rule_production_counts.data(), grammar_token_symbols.data(), grammar_token_symbols.size(), grammar_skip_symbols.data(), grammar_skip_symbols.size(), false};
    constexpr std::array<std::string_view, 3> grammar_rule_names{{

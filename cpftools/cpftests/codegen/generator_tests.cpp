@@ -68,7 +68,7 @@ TEST_SUITE("cpflib.code_generator") {
             {"calculator", "calculator", ""},
             {"default_attrs", "default_attrs", ""},
             {"imported_bundle", "imported_bundle", ""},
-            {"namespaced_calculator", "namespaced_calculator", "generated::fixtures"},
+            {"namespaced_calculator", "namespaced_calculator", ""},
       };
 
       for (const auto& fixture: fixtures) {
@@ -673,6 +673,34 @@ TEST_SUITE("cpflib.code_generator") {
       CHECK(generated.source.find("auto detail::parse_expression_default(std::string_view input, const cpf::parse_options& options) -> cpf::parse_result<expression>") !=
             std::string::npos);
       CHECK(generated.source.find("} // namespace generated::fixtures") != std::string::npos);
+   }
+
+   TEST_CASE("generated code uses the grammar @namespace by default") {
+      auto grammar = cpf::parse_grammar(R"(
+         @namespace generated::fixtures;
+         expression -> number;
+         number -> r'[0-9]+':value;
+      )");
+
+      auto generated = cpf::generate_code(grammar, "namespaced_calculator");
+
+      CHECK(generated.header.find("namespace generated::fixtures {") != std::string::npos);
+      CHECK(generated.source.find("namespace generated::fixtures {") != std::string::npos);
+   }
+
+   TEST_CASE("explicit code-generation namespaces override the grammar @namespace") {
+      auto grammar = cpf::parse_grammar(R"(
+         @namespace generated::fixtures;
+         expression -> number;
+         number -> r'[0-9]+':value;
+      )");
+
+      auto generated = cpf::generate_code(grammar, "namespaced_calculator", "override::scope");
+
+      CHECK(generated.header.find("namespace override::scope {") != std::string::npos);
+      CHECK(generated.header.find("namespace generated::fixtures {") == std::string::npos);
+      CHECK(generated.source.find("namespace override::scope {") != std::string::npos);
+      CHECK(generated.source.find("namespace generated::fixtures {") == std::string::npos);
    }
 
    TEST_CASE("token declarations and inferred lexical helpers generate terminal captures") {

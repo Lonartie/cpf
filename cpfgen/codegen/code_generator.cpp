@@ -854,7 +854,9 @@ namespace cpf {
 
       generated_code generate_code_impl(const grammar& grammar, const std::string& base_name,
                                         std::string_view code_namespace) {
-         validate_cpp_namespace(code_namespace);
+         const auto effective_namespace =
+               code_namespace.empty() ? grammar.code_namespace.value_or(std::string{}) : std::string{code_namespace};
+         validate_cpp_namespace(effective_namespace);
 
          auto analysis = analyze_grammar(grammar);
 
@@ -1529,8 +1531,8 @@ namespace cpf {
          line(header, 0, "#include <variant>");
          line(header, 0, "#include <vector>");
          line(header, 0);
-         if (!code_namespace.empty()) {
-            line(header, 0, "namespace " + std::string{code_namespace} + " {");
+         if (!effective_namespace.empty()) {
+            line(header, 0, "namespace " + effective_namespace + " {");
             line(header, 0);
          }
 
@@ -2233,8 +2235,8 @@ namespace cpf {
             line(header, 0);
          }
 
-         if (!code_namespace.empty()) {
-            line(header, 0, "} // namespace " + std::string{code_namespace});
+         if (!effective_namespace.empty()) {
+            line(header, 0, "} // namespace " + effective_namespace);
             line(header, 0);
          }
 
@@ -2474,8 +2476,8 @@ namespace cpf {
          line(source, 0, "#include <stdexcept>");
          line(source, 0, "#include <utility>");
          line(source, 0);
-         if (!code_namespace.empty()) {
-            line(source, 0, "namespace " + std::string{code_namespace} + " {");
+         if (!effective_namespace.empty()) {
+            line(source, 0, "namespace " + effective_namespace + " {");
             line(source, 0);
          }
          line(source, 0, "namespace {");
@@ -3673,8 +3675,8 @@ namespace cpf {
             line(source, 0);
          }
 
-         if (!code_namespace.empty()) {
-            line(source, 0, "} // namespace " + std::string{code_namespace});
+         if (!effective_namespace.empty()) {
+            line(source, 0, "} // namespace " + effective_namespace);
             line(source, 0);
          }
 

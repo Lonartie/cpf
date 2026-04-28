@@ -72,6 +72,5 @@ function(cpf_link_grammars target)
     add_dependencies(${target} cpfgen)
     target_sources(${target} PRIVATE ${generated_headers} ${generated_sources})
     target_include_directories(${target} PUBLIC ${generated_directory})
-    target_link_libraries(${target} PUBLIC cpf)
 endfunction()
 

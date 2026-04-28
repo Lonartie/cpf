@@ -1,3 +1,4 @@
+@namespace generated::fixtures;
 @whitespace ws;
 skip ws -> r'[ \t\r\n]+';
 skip line_comment -> r'//[^\n]*';
