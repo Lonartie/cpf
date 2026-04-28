@@ -22,6 +22,10 @@ namespace {
             return "nullable_cycle";
          case cpf::grammar_diagnostic_code::suspicious_recursive_pattern:
             return "suspicious_recursive_pattern";
+         case cpf::grammar_diagnostic_code::inconsistent_inline_redefinition:
+            return "inconsistent_inline_redefinition";
+         case cpf::grammar_diagnostic_code::ignored_inline_request:
+            return "ignored_inline_request";
       }
       return "unknown";
    }
@@ -213,13 +217,14 @@ int main(int argc, char** argv) {
       auto base_name = grammar_path.stem().string();
       auto loaded = cpf::load_grammar_file(grammar_path);
       auto analysis = cpf::analyze_grammar(loaded.parsed_grammar);
-      print_diagnostics(analysis, loaded, grammar_path);
       if (analysis.has_errors()) {
+         print_diagnostics(analysis, loaded, grammar_path);
          std::cerr << "cpfgen: generation aborted because blocking grammar diagnostics were found" << std::endl;
          return 1;
       }
 
       auto generated = cpf::generate_code(loaded.parsed_grammar, base_name, code_namespace);
+      print_diagnostics(generated.analysis, loaded, grammar_path);
 
       std::filesystem::create_directories(output_directory);
       auto header_path = output_directory / (base_name + ".h");

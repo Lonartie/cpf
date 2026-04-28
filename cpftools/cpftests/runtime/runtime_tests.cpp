@@ -4,6 +4,7 @@
 #include "error_choice.h"
 #include "grouped.h"
 #include "imported_bundle.h"
+#include "inline_attributes.h"
 #include "lookahead.h"
 #include "lexer_priority.h"
 #include "merged_definitions.h"
@@ -1303,6 +1304,38 @@ TEST_SUITE("generated.runtime") {
          });
 
          CHECK(visited == std::vector<std::string>{"star_choice", "quant_alpha", "quant_digit", "quant_alpha"});
+      }
+   }
+
+   TEST_CASE("generated runtime honors rule and member [inline] annotations") {
+      SUBCASE("rule-level [inline] renames the sole nested member when captured") {
+         auto result = inline_rule_wrapper::parse("alpha");
+         REQUIRE(result.success);
+         REQUIRE(result.forest.size() == 1);
+         REQUIRE(result.forest.front()->wrapped != nullptr);
+         CHECK(result.forest.front()->wrapped->text.text == "alpha");
+      }
+
+      SUBCASE("rule-level [inline] exposes the sole nested member for unlabeled references") {
+         auto result = inline_auto_wrapper::parse("beta.");
+         REQUIRE(result.success);
+         REQUIRE(result.forest.size() == 1);
+         REQUIRE(result.forest.front()->value != nullptr);
+         CHECK(result.forest.front()->value->text.text == "beta");
+      }
+
+      SUBCASE("member-level [inline] flattens optional repeated children into the parent member") {
+         auto repeated = inline_member_wrapper::parse("{gamma,delta}");
+         REQUIRE(repeated.success);
+         REQUIRE(repeated.forest.size() == 1);
+         REQUIRE(repeated.forest.front()->list.size() == 2);
+         CHECK(repeated.forest.front()->list[0]->text.text == "gamma");
+         CHECK(repeated.forest.front()->list[1]->text.text == "delta");
+
+         auto empty = inline_member_wrapper::parse("{}");
+         REQUIRE(empty.success);
+         REQUIRE(empty.forest.size() == 1);
+         CHECK(empty.forest.front()->list.empty());
       }
    }
 

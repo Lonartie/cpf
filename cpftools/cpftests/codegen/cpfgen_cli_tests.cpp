@@ -377,5 +377,23 @@ TEST_SUITE("cpflib.cpfgen_cli") {
       CHECK(source.find("namespace override::scope {") != std::string::npos);
       CHECK(source.find("namespace demo::generated {") == std::string::npos);
    }
+
+   TEST_CASE("cpfgen prints inline diagnostics after successful generation") {
+      const auto result = run_cpfgen(R"(
+         inline_pair [inline] -> 'x':first 'y':second;
+         inline_pair -> 'z':first 'w':second;
+         inline_wrapper -> inline_pair:value[inline];
+      )",
+                                     "inline_warning_grammar");
+
+      CHECK(result.exit_code == 0);
+      CHECK(result.stdout_text.find("warning[inconsistent_inline_redefinition] rule 'inline_pair'") !=
+            std::string::npos);
+      CHECK(result.stdout_text.find("warning[ignored_inline_request] rule 'inline_pair'") != std::string::npos);
+      CHECK(result.stdout_text.find("warning[ignored_inline_request] rule 'inline_wrapper'") != std::string::npos);
+      CHECK(result.stderr_text.empty());
+      CHECK(std::filesystem::exists(result.header_path));
+      CHECK(std::filesystem::exists(result.source_path));
+   }
 }
 

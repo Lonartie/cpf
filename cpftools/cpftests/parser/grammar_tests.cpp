@@ -229,6 +229,28 @@ TEST_SUITE("cpflib.grammar_parser") {
       CHECK(fixed.exact_repetition == 3);
    }
 
+   TEST_CASE("rule and member [inline] annotations are preserved in the grammar model") {
+      auto grammar = cpf::parse_grammar(R"(
+         inline_value [inline] -> atom:value;
+         atom -> r'[A-Za-z]+':text;
+         wrapper -> inline_value:list[inline];
+      )");
+
+      auto* inline_value = grammar.find_rule("inline_value");
+      auto* wrapper = grammar.find_rule("wrapper");
+
+      REQUIRE(inline_value != nullptr);
+      REQUIRE(wrapper != nullptr);
+      CHECK(inline_value->inline_requested);
+      REQUIRE(inline_value->inline_definition_requested == std::vector<bool>{true});
+
+      REQUIRE(wrapper->productions.size() == 1);
+      REQUIRE(wrapper->productions.front().symbols.size() == 1);
+      const auto& capture = wrapper->productions.front().symbols.front();
+      CHECK(capture.label == "list");
+      CHECK(capture.inline_requested);
+   }
+
    TEST_CASE("skip declarations and @whitespace are preserved separately from grammar rules") {
       auto grammar = cpf::parse_grammar(R"(
          @whitespace ws;
@@ -249,9 +271,9 @@ TEST_SUITE("cpflib.grammar_parser") {
       REQUIRE(whitespace != nullptr);
       REQUIRE(comment != nullptr);
       CHECK(whitespace->kind == cpf::symbol_kind::regex);
-      CHECK(whitespace->value == "[ \t\r\n]+");
+      CHECK(whitespace->value == R"([ \t\r\n]+)");
       CHECK(comment->kind == cpf::symbol_kind::regex);
-      CHECK(comment->value == "//[^\n]*");
+      CHECK(comment->value == R"(//[^\n]*)");
       CHECK(grammar.find_rule("expr") != nullptr);
       CHECK(grammar.find_rule("number") != nullptr);
    }
@@ -942,6 +964,24 @@ TEST_SUITE("cpflib.grammar_parser") {
       CHECK(suspicious->severity == cpf::grammar_diagnostic_severity::warning);
       CHECK(suspicious->rule == "loop");
       CHECK(suspicious->message.find("self-recursive production") != std::string::npos);
+   }
+
+   TEST_CASE("grammar analysis warns when merged rule redefinitions disagree on [inline]") {
+      auto grammar = cpf::parse_grammar(R"(
+         merged [inline] -> atom:value;
+         merged -> atom:value;
+         atom -> r'[A-Za-z]+':text;
+      )");
+
+      const auto analysis = cpf::analyze_grammar(grammar);
+
+      const auto diagnostic = std::ranges::find_if(analysis.diagnostics, [](const auto& item) {
+         return item.code == cpf::grammar_diagnostic_code::inconsistent_inline_redefinition;
+      });
+      REQUIRE(diagnostic != analysis.diagnostics.end());
+      CHECK(diagnostic->severity == cpf::grammar_diagnostic_severity::warning);
+      CHECK(diagnostic->rule == "merged");
+      CHECK(diagnostic->message.find("treating the merged rule as [inline]") != std::string::npos);
    }
 
    TEST_CASE("grammar parser reports precise and expressive source errors") {

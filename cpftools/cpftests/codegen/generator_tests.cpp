@@ -405,6 +405,44 @@ TEST_SUITE("cpflib.code_generator") {
             std::string::npos);
    }
 
+   TEST_CASE("inline annotations collapse generated fields to the sole nested member") {
+      auto grammar = cpf::parse_grammar(R"(
+         inline_atom -> r'[A-Za-z]+':text;
+         inline_scalar [inline] -> inline_atom:value;
+         inline_rule_wrapper -> inline_scalar:wrapped;
+         inline_auto_wrapper -> inline_scalar '.';
+         inline_list_item -> r'[A-Za-z]+':text;
+         inline_list [inline] -> inline_list_item:items (',' inline_list_item:items)*;
+         inline_member_wrapper -> '{' inline_list?:list[inline] '}';
+      )");
+
+      auto generated = cpf::generate_code(grammar, "inline_attributes_codegen");
+
+      CHECK(generated.header.find("std::unique_ptr<inline_atom_node<UserData>> wrapped;") != std::string::npos);
+      CHECK(generated.header.find("std::unique_ptr<inline_atom_node<UserData>> value;") != std::string::npos);
+      CHECK(generated.header.find("std::vector<std::unique_ptr<inline_list_item_node<UserData>>> list;") !=
+            std::string::npos);
+      CHECK(generated.header.find("std::unique_ptr<inline_scalar_node<UserData>> wrapped;") == std::string::npos);
+      CHECK(generated.header.find("std::unique_ptr<inline_list_node<UserData>> list;") == std::string::npos);
+      CHECK(generated.source.find("inline_child_") != std::string::npos);
+      CHECK(generated.source.find("helper_children_") != std::string::npos);
+   }
+
+   TEST_CASE("generated analysis warns when inline requests cannot be honored") {
+      auto grammar = cpf::parse_grammar(R"(
+         inline_pair [inline] -> 'x':first 'y':second;
+         inline_wrapper -> inline_pair:value[inline];
+      )");
+
+      auto generated = cpf::generate_code(grammar, "ignored_inline_codegen");
+
+      const auto ignored_count = std::ranges::count_if(generated.analysis.diagnostics, [](const auto& diagnostic) {
+         return diagnostic.code == cpf::grammar_diagnostic_code::ignored_inline_request;
+      });
+      CHECK(ignored_count == 2);
+      CHECK(generated.analysis.has_warnings());
+   }
+
    TEST_CASE("conflicting merged member resolutions are rejected with expressive errors") {
       auto capture_error = [](const cpf::grammar& grammar) {
          try {

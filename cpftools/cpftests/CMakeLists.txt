@@ -22,6 +22,7 @@ set(cpftests_grammar_files
     fixtures/grammars/templates.cpf
     fixtures/grammars/tokens.cpf
     fixtures/grammars/quantified.cpf
+    fixtures/grammars/inline_attributes.cpf
     fixtures/grammars/attr_prec_numeric.cpf
     fixtures/grammars/attr_prec_labels.cpf
     fixtures/grammars/attr_dir.cpf

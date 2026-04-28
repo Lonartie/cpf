@@ -1,0 +1,8 @@
+inline_atom -> r'[A-Za-z]+':text;
+inline_scalar [inline] -> inline_atom:value;
+inline_rule_wrapper -> inline_scalar:wrapped;
+inline_auto_wrapper -> inline_scalar '.';
+inline_list_item -> r'[A-Za-z]+':text;
+inline_list [inline] -> inline_list_item:items (',' inline_list_item:items)*;
+inline_member_wrapper -> '{' inline_list?:list[inline] '}';
+

@@ -18,8 +18,15 @@ namespace cpf {
          std::string value;
          std::vector<std::string> template_arguments;
          std::string label;
+         bool inline_requested = false;
          symbol_quantifier quantifier = symbol_quantifier::one;
          std::size_t exact_repetition = 1;
+      };
+
+      struct parsed_rule_metadata {
+         std::vector<attribute> attributes;
+         bool inline_requested = false;
+         std::size_t inline_line = 1;
       };
 
       struct grouped_sequence_item {
@@ -403,7 +410,7 @@ namespace cpf {
             return value;
          }
 
-         std::string parse_quoted() {
+         std::string parse_quoted(bool preserve_backslashes = false) {
             skip_ignored();
             if (!is_quote(current())) {
                throw error("Expected quoted string");
@@ -417,6 +424,12 @@ namespace cpf {
                   advance();
                   if (eof()) {
                      throw error("Unexpected end of input in quoted string");
+                  }
+                  if (preserve_backslashes) {
+                     value += '\\';
+                     value += current();
+                     advance();
+                     continue;
                   }
                   auto escaped = current();
                   switch (escaped) {
@@ -455,9 +468,9 @@ namespace cpf {
             throw error("Unterminated quoted string");
          }
 
-         attribute parse_attribute() {
+         attribute parse_attribute(std::string name) {
             attribute parsed_attribute;
-            parsed_attribute.name = parse_identifier();
+            parsed_attribute.name = std::move(name);
             skip_ignored();
             if (take("=")) {
                parsed_attribute.operation = attribute_operator::assign;
@@ -488,16 +501,47 @@ namespace cpf {
             return parsed_attribute;
          }
 
-         std::vector<attribute> parse_attributes() {
-            std::vector<attribute> attributes;
+         parsed_rule_metadata parse_rule_metadata() {
+            parsed_rule_metadata metadata;
             if (!take("[")) {
-               return attributes;
+               return metadata;
             }
             do {
-               attributes.push_back(parse_attribute());
+               auto name = parse_identifier();
+               skip_ignored();
+               if (!eof() && (current() == '=' || current() == '<' || current() == '>')) {
+                  metadata.attributes.push_back(parse_attribute(std::move(name)));
+                  continue;
+               }
+               if (name != "inline") {
+                  throw error("Expected attribute operator");
+               }
+               if (metadata.inline_requested) {
+                  throw error("Duplicate [inline] rule attribute");
+               }
+               metadata.inline_requested = true;
+               metadata.inline_line = line_;
             } while (take(","));
             expect("]");
-            return attributes;
+            return metadata;
+         }
+
+         void parse_inline_annotations(bool& inline_requested, std::string_view context) {
+            if (!take("[")) {
+               return;
+            }
+
+            do {
+               auto annotation = parse_identifier();
+               if (annotation != "inline") {
+                  throw error("Unknown " + std::string{context} + " annotation '" + annotation + "'");
+               }
+               if (inline_requested) {
+                  throw error("Duplicate [inline] " + std::string{context} + " annotation");
+               }
+               inline_requested = true;
+            } while (take(","));
+            expect("]");
          }
 
          void parse_quantifier(symbol_quantifier& quantifier, std::size_t& exact_repetition) {
@@ -538,7 +582,8 @@ namespace cpf {
             exact_repetition = static_cast<std::size_t>(std::stoull(digits));
          }
 
-         void parse_item_suffix(std::string& label, symbol_quantifier& quantifier, std::size_t& exact_repetition) {
+         void parse_item_suffix(std::string& label, bool& inline_requested, symbol_quantifier& quantifier,
+                                std::size_t& exact_repetition) {
             parse_quantifier(quantifier, exact_repetition);
             skip_ignored();
             if (!take(":")) {
@@ -546,6 +591,7 @@ namespace cpf {
             }
 
             label = parse_identifier();
+            parse_inline_annotations(inline_requested, "member");
             auto original_quantifier = quantifier;
             auto original_exact_repetition = exact_repetition;
             parse_quantifier(quantifier, exact_repetition);
@@ -585,7 +631,7 @@ namespace cpf {
             if (current() == 'r' && position_ + 1 < text_.size() && is_quote(text_[position_ + 1])) {
                advance();
                parsed_symbol.kind = parsed_symbol_kind::regex;
-               parsed_symbol.value = parse_quoted();
+               parsed_symbol.value = parse_quoted(true);
             } else if (is_quote(current())) {
                parsed_symbol.kind = parsed_symbol_kind::literal;
                parsed_symbol.value = parse_quoted();
@@ -599,7 +645,8 @@ namespace cpf {
                   parsed_symbol.kind = parsed_symbol_kind::reference;
                }
             }
-            parse_item_suffix(parsed_symbol.label, parsed_symbol.quantifier, parsed_symbol.exact_repetition);
+            parse_item_suffix(parsed_symbol.label, parsed_symbol.inline_requested, parsed_symbol.quantifier,
+                              parsed_symbol.exact_repetition);
             return parsed_symbol;
          }
 
@@ -608,7 +655,12 @@ namespace cpf {
             expect("(");
             parsed_group.alternatives = parse_alternatives("group", ')');
             expect(")");
-            parse_item_suffix(parsed_group.label, parsed_group.quantifier, parsed_group.exact_repetition);
+            auto ignored_inline_requested = false;
+            parse_item_suffix(parsed_group.label, ignored_inline_requested, parsed_group.quantifier,
+                              parsed_group.exact_repetition);
+            if (ignored_inline_requested) {
+               throw error("Grouped captures do not support [inline]");
+            }
             return parsed_group;
          }
 
@@ -836,6 +888,7 @@ namespace cpf {
                                    const parameter_bindings* bindings) {
             symbol lowered_symbol;
             lowered_symbol.label = parsed_symbol.label;
+            lowered_symbol.inline_requested = parsed_symbol.inline_requested;
             lowered_symbol.quantifier = parsed_symbol.quantifier;
             lowered_symbol.exact_repetition = parsed_symbol.exact_repetition;
 
@@ -923,10 +976,14 @@ namespace cpf {
             parsed_rules.main_rule.identifier = parse_identifier();
             parsed_rules.main_rule.declared_as_token = declared_as_token;
             current_rule_ = parsed_rules.main_rule.identifier;
-            auto attributes = parse_attributes();
-            if (declared_as_token && !attributes.empty()) {
+            auto metadata = parse_rule_metadata();
+            if (declared_as_token && (!metadata.attributes.empty() || metadata.inline_requested)) {
                throw error("Token declarations do not support rule attributes");
             }
+            parsed_rules.main_rule.inline_requested = metadata.inline_requested;
+            parsed_rules.main_rule.inline_line = metadata.inline_requested ? metadata.inline_line : line;
+            parsed_rules.main_rule.inline_definition_requested.push_back(metadata.inline_requested);
+            parsed_rules.main_rule.inline_definition_lines.push_back(line);
             expect("->");
 
             auto parsed_alternatives = parse_alternatives("production", ';');
@@ -934,7 +991,7 @@ namespace cpf {
             auto lowered_productions = lower_alternatives(parsed_alternatives, line, true, parsed_rules.synthetic_rules);
             for (const auto& lowered_symbols: lowered_productions) {
                production parsed_production;
-               parsed_production.attributes = attributes;
+               parsed_production.attributes = metadata.attributes;
                parsed_production.symbols = lowered_symbols;
                parsed_production.line = line;
                parsed_production.definition = parsed_rules.main_rule.productions.size();
@@ -1030,6 +1087,16 @@ namespace cpf {
                if (existing->declared_as_token != parsed_rule.declared_as_token) {
                   throw error("Rule '" + parsed_rule.identifier + "' cannot be declared as both token and non-token");
                }
+               if (!existing->inline_requested && parsed_rule.inline_requested) {
+                  existing->inline_line = parsed_rule.inline_line;
+               }
+               existing->inline_requested = existing->inline_requested || parsed_rule.inline_requested;
+               existing->inline_definition_requested.insert(existing->inline_definition_requested.end(),
+                                                            parsed_rule.inline_definition_requested.begin(),
+                                                            parsed_rule.inline_definition_requested.end());
+               existing->inline_definition_lines.insert(existing->inline_definition_lines.end(),
+                                                        parsed_rule.inline_definition_lines.begin(),
+                                                        parsed_rule.inline_definition_lines.end());
                const auto definition_offset = existing->productions.size();
                for (auto& production: parsed_rule.productions) {
                   production.definition += definition_offset;

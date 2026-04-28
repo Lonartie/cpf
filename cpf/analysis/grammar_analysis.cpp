@@ -316,6 +316,37 @@ namespace cpf {
          ++analysis.summary.nullable_cycle_count;
       }
 
+      for (const auto& rule: grammar.rules) {
+         if (rule.synthetic || rule.inline_definition_requested.empty()) {
+            continue;
+         }
+
+         const auto saw_inline = std::ranges::any_of(rule.inline_definition_requested, [](auto requested) {
+            return requested;
+         });
+         const auto saw_non_inline = std::ranges::any_of(rule.inline_definition_requested, [](auto requested) {
+            return !requested;
+         });
+         if (!saw_inline || !saw_non_inline) {
+            continue;
+         }
+
+         auto diagnostic = grammar_diagnostic{};
+         diagnostic.severity = grammar_diagnostic_severity::warning;
+         diagnostic.code = grammar_diagnostic_code::inconsistent_inline_redefinition;
+         diagnostic.rule = rule.identifier;
+         diagnostic.line = rule.inline_definition_lines.front();
+         for (std::size_t index = 1; index < rule.inline_definition_requested.size(); ++index) {
+            if (rule.inline_definition_requested[index] != rule.inline_definition_requested.front()) {
+               diagnostic.line = rule.inline_definition_lines[index];
+               break;
+            }
+         }
+         diagnostic.message = "Rule '" + rule.identifier +
+                              "' mixes [inline] and non-[inline] redefinitions; treating the merged rule as [inline]";
+         analysis.diagnostics.push_back(std::move(diagnostic));
+      }
+
       for (std::size_t rule_index = 0; rule_index < rules.size(); ++rule_index) {
          const auto& rule = *rules[rule_index];
          if (rule.synthetic) {

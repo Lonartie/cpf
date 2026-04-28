@@ -2,6 +2,7 @@
 
 #include "support/doctest.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
@@ -314,6 +315,64 @@ TEST_SUITE("cpflib.dynamic_runtime") {
       REQUIRE(items.nodes[1] != nullptr);
       CHECK(items.nodes[0]->rule_name == "repeated_number");
       CHECK(items.nodes[1]->rule_name == "repeated_identifier");
+   }
+
+   TEST_CASE("compile_grammar honors rule and member [inline] annotations in the dynamic AST") {
+      auto parser = cpf::compile_grammar(R"(
+         inline_atom -> r'[A-Za-z]+':text;
+         inline_scalar [inline] -> inline_atom:value;
+         inline_rule_wrapper -> inline_scalar:wrapped;
+         inline_auto_wrapper -> inline_scalar '.';
+         inline_list_item -> r'[A-Za-z]+':text;
+         inline_list [inline] -> inline_list_item:items (',' inline_list_item:items)*;
+         inline_member_wrapper -> '{' inline_list?:list[inline] '}';
+      )");
+
+      auto labeled = parser.parse("inline_rule_wrapper", "alpha");
+      REQUIRE(labeled.success);
+      REQUIRE(labeled.forest.size() == 1);
+      const auto& labeled_root = *labeled.forest.front();
+      CHECK(labeled_root.get_field("wrapped") != nullptr);
+      CHECK(labeled_root.get_field("value") == nullptr);
+      REQUIRE(required_field(labeled_root, "wrapped").node != nullptr);
+      CHECK(required_field(*required_field(labeled_root, "wrapped").node, "text").token->text == "alpha");
+
+      auto unlabeled = parser.parse("inline_auto_wrapper", "beta.");
+      REQUIRE(unlabeled.success);
+      REQUIRE(unlabeled.forest.size() == 1);
+      const auto& unlabeled_root = *unlabeled.forest.front();
+      CHECK(unlabeled_root.get_field("value") != nullptr);
+      REQUIRE(required_field(unlabeled_root, "value").node != nullptr);
+      CHECK(required_field(*required_field(unlabeled_root, "value").node, "text").token->text == "beta");
+
+      auto repeated = parser.parse("inline_member_wrapper", "{gamma,delta}");
+      REQUIRE(repeated.success);
+      REQUIRE(repeated.forest.size() == 1);
+      const auto& repeated_root = *repeated.forest.front();
+      const auto& list = required_field(repeated_root, "list");
+      CHECK(list.shape == cpf::dynamic_field_shape::node_vector);
+      REQUIRE(list.nodes.size() == 2);
+      CHECK(required_field(*list.nodes[0], "text").token->text == "gamma");
+      CHECK(required_field(*list.nodes[1], "text").token->text == "delta");
+   }
+
+   TEST_CASE("dynamic parser analysis warns when inline requests cannot be honored") {
+      auto parser = cpf::compile_grammar(R"(
+         inline_pair [inline] -> 'x':first 'y':second;
+         inline_pair -> 'z':first 'w':second;
+         inline_wrapper -> inline_pair:value[inline];
+      )");
+
+      const auto& analysis = parser.analysis();
+      const auto ignored_count = std::count_if(analysis.diagnostics.begin(), analysis.diagnostics.end(), [](const auto& diagnostic) {
+         return diagnostic.code == cpf::grammar_diagnostic_code::ignored_inline_request;
+      });
+      const auto inconsistent = std::count_if(analysis.diagnostics.begin(), analysis.diagnostics.end(), [](const auto& diagnostic) {
+         return diagnostic.code == cpf::grammar_diagnostic_code::inconsistent_inline_redefinition;
+      });
+
+      CHECK(ignored_count == 2);
+      CHECK(inconsistent == 1);
    }
 
    TEST_CASE("dynamic runtime AST preserves partial recovery damage") {

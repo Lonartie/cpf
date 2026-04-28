@@ -365,6 +365,31 @@ namespace cpf {
          return field.shape == field_shape::capture_variant;
       }
 
+      [[nodiscard]] bool inline_requested_for(const symbol& symbol, const rule* referenced_rule) {
+         return symbol.inline_requested || (referenced_rule != nullptr && referenced_rule->inline_requested);
+      }
+
+      [[nodiscard]] const field_info*
+      inline_target_field(const symbol& symbol, const std::unordered_map<std::string, const rule*>& rules_by_name,
+                          const std::unordered_set<std::string>& lexical_rules,
+                          const std::unordered_map<std::string, class_info>& classes) {
+         if (symbol.kind != symbol_kind::reference || lexical_rules.contains(symbol.value)) {
+            return nullptr;
+         }
+
+         auto rule_it = rules_by_name.find(symbol.value);
+         if (rule_it == rules_by_name.end() || !inline_requested_for(symbol, rule_it->second)) {
+            return nullptr;
+         }
+
+         auto class_it = classes.find(symbol.value);
+         if (class_it == classes.end() || class_it->second.base_rule || class_it->second.fields.size() != 1) {
+            return nullptr;
+         }
+
+         return &class_it->second.fields.front();
+      }
+
       [[nodiscard]] bool uses_helper_rule(const symbol& symbol) { return !symbol.is_single(); }
 
       [[nodiscard]] bool is_lexical_reference(const symbol& symbol,
@@ -833,6 +858,9 @@ namespace cpf {
 
          if (symbol.has_label()) {
             text += ":" + symbol.label;
+            if (symbol.inline_requested) {
+               text += "[inline]";
+            }
          }
          return text;
       }
@@ -1158,6 +1186,14 @@ namespace cpf {
 
             const auto collect_symbol_fields = [&](const symbol& symbol) {
                auto collected = std::vector<field_info>{};
+               if (const auto* nested_field = inline_target_field(symbol, rules_by_name, lexical_rules, classes);
+                   nested_field != nullptr) {
+                  auto field = apply_symbol_quantifier_to_field(rule.identifier, *nested_field, symbol);
+                  field.name = symbol.has_label() ? symbol.label : nested_field->name;
+                  collected.push_back(std::move(field));
+                  return collected;
+               }
+
                if (symbol.has_label()) {
                   collected.push_back(field_from_symbol(symbol, lexical_rules, synthetic_capture_fields));
                   return collected;
@@ -1281,6 +1317,73 @@ namespace cpf {
             }
             fields_by_rule.emplace(name, std::move(fields));
          }
+
+         const auto rule_has_inline_target = [&](std::string_view rule_name) {
+            if (lexical_rules.contains(std::string{rule_name})) {
+               return false;
+            }
+            auto class_it = classes.find(std::string{rule_name});
+            return class_it != classes.end() && !class_it->second.base_rule && class_it->second.fields.size() == 1;
+         };
+
+         for (const auto& rule: grammar.rules) {
+            if (!rule.inline_requested || rule_has_inline_target(rule.identifier)) {
+               continue;
+            }
+
+            auto diagnostic = grammar_diagnostic{};
+            diagnostic.severity = grammar_diagnostic_severity::warning;
+            diagnostic.code = grammar_diagnostic_code::ignored_inline_request;
+            diagnostic.rule = rule.identifier;
+            diagnostic.line = rule.inline_line;
+            diagnostic.message = "Rule '" + rule.identifier +
+                                 "' requests [inline] but does not resolve to exactly one member; continuing without automatic inlining";
+            analysis.diagnostics.push_back(std::move(diagnostic));
+         }
+
+         auto seen_inline_member_diagnostics = std::set<std::string>{};
+         for (const auto& rule: grammar.rules) {
+            for (const auto& production: rule.productions) {
+               for (const auto& symbol: production.symbols) {
+                  if (!symbol.inline_requested) {
+                     continue;
+                  }
+
+                  auto key = rule.identifier + ":" + std::to_string(production.line) + ":" + symbol.label + ":" +
+                             std::to_string(static_cast<int>(symbol.kind)) + ":" + symbol.value;
+                  if (!seen_inline_member_diagnostics.insert(key).second) {
+                     continue;
+                  }
+
+                  const auto valid_inline_target =
+                        symbol.kind == symbol_kind::reference && rule_has_inline_target(symbol.value);
+                  if (valid_inline_target) {
+                     continue;
+                  }
+
+                  auto target = render_symbol_debug(symbol);
+                  auto diagnostic = grammar_diagnostic{};
+                  diagnostic.severity = grammar_diagnostic_severity::warning;
+                  diagnostic.code = grammar_diagnostic_code::ignored_inline_request;
+                  diagnostic.rule = rule.identifier;
+                  diagnostic.line = production.line;
+                  diagnostic.message = "Member '" + symbol.label + "' in rule '" + rule.identifier +
+                                       "' requests [inline] for '" + target +
+                                       "' but the referenced target does not resolve to exactly one member; continuing without inlining";
+                  analysis.diagnostics.push_back(std::move(diagnostic));
+               }
+            }
+         }
+
+         std::ranges::sort(analysis.diagnostics, [](const auto& lhs, const auto& rhs) {
+            if (lhs.line != rhs.line) {
+               return lhs.line < rhs.line;
+            }
+            if (lhs.severity != rhs.severity) {
+               return lhs.severity == grammar_diagnostic_severity::error;
+            }
+            return lhs.message < rhs.message;
+         });
 
          for (const auto& [name, info]: classes) {
             for (const auto& production: rules_by_name.at(name)->productions) {
@@ -2466,6 +2569,54 @@ namespace cpf {
             }
          }
 
+         const auto emit_inline_field_transfer = [&](std::ostringstream& output, int indent,
+                                                     std::string_view parent_rule_name, const symbol& symbol,
+                                                     std::string_view child_expression) {
+            const auto& nested_field = classes.at(symbol.value).fields.front();
+            const auto parent_field_name = symbol.has_label() ? symbol.label : nested_field.name;
+            const auto& parent_field = fields_by_rule.at(std::string{parent_rule_name}).at(parent_field_name);
+
+            if (parent_field.shape == field_shape::node_vector) {
+               if (nested_field.shape == field_shape::node_scalar) {
+                  line(output, indent, "if (" + std::string{child_expression} + "->" + nested_field.name + ") {");
+                  line(output, indent + 1,
+                       "node->" + parent_field_name + ".push_back(std::move(" + std::string{child_expression} +
+                             "->" + nested_field.name + "));" );
+                  line(output, indent, "}");
+               } else {
+                  line(output, indent,
+                       "for (auto& value : " + std::string{child_expression} + "->" + nested_field.name + ") {");
+                  line(output, indent + 1, "node->" + parent_field_name + ".push_back(std::move(value));");
+                  line(output, indent, "}");
+               }
+               return;
+            }
+
+            if (parent_field.shape == field_shape::terminal_vector) {
+               if (nested_field.shape == field_shape::terminal_scalar) {
+                  line(output, indent,
+                       "node->" + parent_field_name + ".push_back(std::move(" + std::string{child_expression} + "->" +
+                             nested_field.name + "));" );
+               } else if (nested_field.shape == field_shape::terminal_optional) {
+                  line(output, indent, "if (" + std::string{child_expression} + "->" + nested_field.name + ") {");
+                  line(output, indent + 1,
+                       "node->" + parent_field_name + ".push_back(std::move(*" + std::string{child_expression} + "->" +
+                             nested_field.name + "));" );
+                  line(output, indent, "}");
+               } else {
+                  line(output, indent,
+                       "for (auto& value : " + std::string{child_expression} + "->" + nested_field.name + ") {");
+                  line(output, indent + 1, "node->" + parent_field_name + ".push_back(std::move(value));");
+                  line(output, indent, "}");
+               }
+               return;
+            }
+
+            line(output, indent,
+                 "node->" + parent_field_name + " = std::move(" + std::string{child_expression} + "->" + nested_field.name +
+                       ");");
+         };
+
          std::ostringstream source;
          line(source, 0, "#include \"" + base_name + ".h\"");
          line(source, 0, "#include <cpflib>");
@@ -3229,8 +3380,32 @@ namespace cpf {
                      continue;
                   }
                   if (lowered_symbol.helper_id.has_value()) {
-                      const auto helper_name = "helper_" + std::to_string(*lowered_symbol.helper_id);
-                      if (!symbol.has_label()) {
+                       const auto helper_name = "helper_" + std::to_string(*lowered_symbol.helper_id);
+                       if (inline_target_field(symbol, rules_by_name, lexical_rules, classes) != nullptr) {
+                          if (symbol.is_optional()) {
+                             line(source, 4,
+                                  "auto helper_child_" + std::to_string(i) + " = extract_" + helper_name + "<" +
+                                        symbol.value + ">(cpf::detail::node_child_at(tree, " +
+                                        std::to_string(*child_index) + "));" );
+                             line(source, 4, "if (helper_child_" + std::to_string(i) + ") {");
+                             emit_inline_field_transfer(source, 5, info.name, symbol,
+                                                        "helper_child_" + std::to_string(i));
+                             line(source, 4, "}");
+                          } else {
+                             line(source, 4,
+                                  "auto helper_children_" + std::to_string(i) + " = extract_" + helper_name + "<" +
+                                        symbol.value + ">(cpf::detail::node_child_at(tree, " +
+                                        std::to_string(*child_index) + "));" );
+                             line(source, 4, "for (auto& helper_child : helper_children_" + std::to_string(i) + ") {");
+                             line(source, 5, "if (!helper_child) {");
+                             line(source, 6, "continue;");
+                             line(source, 5, "}");
+                             emit_inline_field_transfer(source, 5, info.name, symbol, "helper_child");
+                             line(source, 4, "}");
+                          }
+                          continue;
+                       }
+                       if (!symbol.has_label()) {
                          if (symbol.kind == symbol_kind::reference && structured_synthetic_rules.contains(symbol.value)) {
                             const auto helper_type = symbol.value;
                             if (symbol.is_optional()) {
@@ -3361,53 +3536,67 @@ namespace cpf {
                      continue;
                   }
 
-                    if (!symbol.has_label()) {
-                       if (symbol.kind == symbol_kind::reference && structured_synthetic_rules.contains(symbol.value)) {
-                          line(source, 4,
-                               "auto child_" + std::to_string(i) +
-                                     " = build_node(cpf::detail::node_child_at(tree, " + std::to_string(*child_index) + "));" );
-                          line(source, 4,
-                               "auto structured_child_" + std::to_string(i) + " = release_built_node_as<" +
-                                     symbol.value + ">(std::move(child_" + std::to_string(i) + "));" );
-                          line(source, 4, "if (structured_child_" + std::to_string(i) + ") {");
-                          for (const auto& nested_field: classes.at(symbol.value).fields) {
-                             const auto& parent_field = fields_by_rule.at(info.name).at(nested_field.name);
-                             if (parent_field.shape == field_shape::node_vector) {
-                                if (nested_field.shape == field_shape::node_scalar) {
-                                   line(source, 5, "if (structured_child_" + std::to_string(i) + "->" + nested_field.name + ") {");
-                                   line(source, 6, "node->" + nested_field.name + ".push_back(std::move(structured_child_" +
-                                                         std::to_string(i) + "->" + nested_field.name + "));" );
-                                   line(source, 5, "}");
-                                } else {
-                                   line(source, 5, "for (auto& value : structured_child_" + std::to_string(i) + "->" +
-                                                         nested_field.name + ") {");
-                                   line(source, 6, "node->" + nested_field.name + ".push_back(std::move(value));");
-                                   line(source, 5, "}");
-                                }
-                             } else if (parent_field.shape == field_shape::terminal_vector) {
-                                if (nested_field.shape == field_shape::terminal_scalar) {
-                                   line(source, 5, "node->" + nested_field.name + ".push_back(structured_child_" +
-                                                         std::to_string(i) + "->" + nested_field.name + ");" );
-                                } else if (nested_field.shape == field_shape::terminal_optional) {
-                                   line(source, 5, "if (structured_child_" + std::to_string(i) + "->" + nested_field.name + ") {");
-                                   line(source, 6, "node->" + nested_field.name + ".push_back(*structured_child_" +
-                                                         std::to_string(i) + "->" + nested_field.name + ");" );
-                                   line(source, 5, "}");
-                                } else {
-                                   line(source, 5, "for (auto& value : structured_child_" + std::to_string(i) + "->" +
-                                                         nested_field.name + ") {");
-                                   line(source, 6, "node->" + nested_field.name + ".push_back(std::move(value));");
-                                   line(source, 5, "}");
-                                }
-                             } else {
-                                line(source, 5, "node->" + nested_field.name + " = std::move(structured_child_" +
-                                                      std::to_string(i) + "->" + nested_field.name + ");" );
-                             }
-                          }
-                          line(source, 4, "}");
-                       }
-                       continue;
-                    }
+                  if (inline_target_field(symbol, rules_by_name, lexical_rules, classes) != nullptr) {
+                     line(source, 4,
+                          "auto child_" + std::to_string(i) +
+                                " = build_node(cpf::detail::node_child_at(tree, " + std::to_string(*child_index) + "));" );
+                     line(source, 4,
+                          "auto inline_child_" + std::to_string(i) + " = release_built_node_as<" + symbol.value + ">(" +
+                                "std::move(child_" + std::to_string(i) + "));" );
+                     line(source, 4, "if (inline_child_" + std::to_string(i) + ") {");
+                     emit_inline_field_transfer(source, 5, info.name, symbol,
+                                                "inline_child_" + std::to_string(i));
+                     line(source, 4, "}");
+                     continue;
+                  }
+
+                  if (!symbol.has_label()) {
+                     if (symbol.kind == symbol_kind::reference && structured_synthetic_rules.contains(symbol.value)) {
+                        line(source, 4,
+                             "auto child_" + std::to_string(i) +
+                                   " = build_node(cpf::detail::node_child_at(tree, " + std::to_string(*child_index) + "));" );
+                        line(source, 4,
+                             "auto structured_child_" + std::to_string(i) + " = release_built_node_as<" +
+                                   symbol.value + ">(std::move(child_" + std::to_string(i) + "));" );
+                        line(source, 4, "if (structured_child_" + std::to_string(i) + ") {");
+                        for (const auto& nested_field: classes.at(symbol.value).fields) {
+                           const auto& parent_field = fields_by_rule.at(info.name).at(nested_field.name);
+                           if (parent_field.shape == field_shape::node_vector) {
+                              if (nested_field.shape == field_shape::node_scalar) {
+                                 line(source, 5, "if (structured_child_" + std::to_string(i) + "->" + nested_field.name + ") {");
+                                 line(source, 6, "node->" + nested_field.name + ".push_back(std::move(structured_child_" +
+                                                       std::to_string(i) + "->" + nested_field.name + "));" );
+                                 line(source, 5, "}");
+                              } else {
+                                 line(source, 5, "for (auto& value : structured_child_" + std::to_string(i) + "->" +
+                                                       nested_field.name + ") {");
+                                 line(source, 6, "node->" + nested_field.name + ".push_back(std::move(value));");
+                                 line(source, 5, "}");
+                              }
+                           } else if (parent_field.shape == field_shape::terminal_vector) {
+                              if (nested_field.shape == field_shape::terminal_scalar) {
+                                 line(source, 5, "node->" + nested_field.name + ".push_back(structured_child_" +
+                                                       std::to_string(i) + "->" + nested_field.name + ");" );
+                              } else if (nested_field.shape == field_shape::terminal_optional) {
+                                 line(source, 5, "if (structured_child_" + std::to_string(i) + "->" + nested_field.name + ") {");
+                                 line(source, 6, "node->" + nested_field.name + ".push_back(*structured_child_" +
+                                                       std::to_string(i) + "->" + nested_field.name + ");" );
+                                 line(source, 5, "}");
+                              } else {
+                                 line(source, 5, "for (auto& value : structured_child_" + std::to_string(i) + "->" +
+                                                       nested_field.name + ") {");
+                                 line(source, 6, "node->" + nested_field.name + ".push_back(std::move(value));");
+                                 line(source, 5, "}");
+                              }
+                           } else {
+                              line(source, 5, "node->" + nested_field.name + " = std::move(structured_child_" +
+                                                    std::to_string(i) + "->" + nested_field.name + ");" );
+                           }
+                        }
+                        line(source, 4, "}");
+                     }
+                     continue;
+                  }
 
                   if (symbol.kind == symbol_kind::reference) {
                      if (symbol.has_label()) {

@@ -12,8 +12,8 @@ namespace generated::fixtures {
 namespace {
    using parse_node_ptr = cpf::detail::parse_node_ptr;
    const std::regex regex_0{"[0-9]+", std::regex_constants::optimize};
-   const std::regex regex_1{"[ \t\r\n]+", std::regex_constants::optimize};
-   const std::regex regex_2{"//[^\n]*", std::regex_constants::optimize};
+   const std::regex regex_1{"[ \\t\\r\\n]+", std::regex_constants::optimize};
+   const std::regex regex_2{"//[^\\n]*", std::regex_constants::optimize};
    constexpr std::array<std::string_view, 4> expression_complexity_inputs_0{{
       "0 + 0",
       "0 + 0 + 0 + 0",
@@ -99,8 +99,8 @@ namespace {
       ""
    }};
    constexpr std::array<cpf::detail::lexer_symbol_spec, 2> grammar_skip_symbols{{
-      {cpf::detail::lexer_symbol_kind::regex, "[ \t\r\n]+", &regex_1, 3},
-      {cpf::detail::lexer_symbol_kind::regex, "//[^\n]*", &regex_2, 4}
+      {cpf::detail::lexer_symbol_kind::regex, "[ \\t\\r\\n]+", &regex_1, 3},
+      {cpf::detail::lexer_symbol_kind::regex, "//[^\\n]*", &regex_2, 4}
    }};
    constexpr cpf::detail::grammar_spec grammar_spec{grammar_productions.data(), grammar_productions.size(), 3, grammar_rule_expected_labels.data(), grammar_rule_production_indices.data(), grammar_rule_production_offsets.data(), grammar_rule_production_counts.data(), grammar_token_symbols.data(), grammar_token_symbols.size(), grammar_skip_symbols.data(), grammar_skip_symbols.size(), false};
    constexpr std::array<std::string_view, 3> grammar_rule_names{{

@@ -198,6 +198,32 @@ namespace cpf {
          return field.shape == field_shape::capture_variant;
       }
 
+      [[nodiscard]] auto inline_requested_for(const symbol& symbol, const rule* referenced_rule) -> bool {
+         return symbol.inline_requested || (referenced_rule != nullptr && referenced_rule->inline_requested);
+      }
+
+      [[nodiscard]] auto inline_target_field(const symbol& symbol,
+                                            const std::unordered_map<std::string, const rule*>& rules_by_name,
+                                            const std::unordered_set<std::string>& lexical_rules,
+                                            const std::unordered_map<std::string, class_info>& classes)
+            -> const field_info* {
+         if (symbol.kind != symbol_kind::reference || lexical_rules.contains(symbol.value)) {
+            return nullptr;
+         }
+
+         auto rule_it = rules_by_name.find(symbol.value);
+         if (rule_it == rules_by_name.end() || !inline_requested_for(symbol, rule_it->second)) {
+            return nullptr;
+         }
+
+         auto class_it = classes.find(symbol.value);
+         if (class_it == classes.end() || class_it->second.base_rule || class_it->second.fields.size() != 1) {
+            return nullptr;
+         }
+
+         return &class_it->second.fields.front();
+      }
+
       [[nodiscard]] auto uses_helper_rule(const symbol& symbol) -> bool { return !symbol.is_single(); }
 
       [[nodiscard]] auto is_lexical_reference(const symbol& symbol,
@@ -522,6 +548,9 @@ namespace cpf {
 
          if (symbol.has_label()) {
             text += ":" + symbol.label;
+            if (symbol.inline_requested) {
+               text += "[inline]";
+            }
          }
          return text;
       }
@@ -850,7 +879,30 @@ namespace cpf {
          return fields_by_rule.at(rule_name).at(std::string{name});
       }
 
+      [[nodiscard]] auto rule_has_inline_target(std::string_view rule_name) const -> bool {
+         if (lexical_rules.contains(std::string{rule_name})) {
+            return false;
+         }
+
+         auto class_it = classes.find(std::string{rule_name});
+         return class_it != classes.end() && !class_it->second.base_rule && class_it->second.fields.size() == 1;
+      }
+
+      [[nodiscard]] auto inline_target_field_for(const symbol& symbol) const -> const field_info* {
+         return inline_target_field(symbol, rules_by_name, lexical_rules, classes);
+      }
+
       [[nodiscard]] auto helper_named(std::size_t helper_id) const -> const helper_info& { return helpers.at(helper_id); }
+
+      void merge_inline_child_field(dynamic_node& node, const symbol& symbol, std::unique_ptr<dynamic_node> child) const {
+         if (child == nullptr) {
+            return;
+         }
+
+         const auto& nested_field = classes.at(symbol.value).fields.front();
+         const auto parent_field_name = symbol.has_label() ? symbol.label : nested_field.name;
+         merge_dynamic_field(field_named(node, parent_field_name), std::move(field_named(*child, nested_field.name)));
+      }
 
       void collect_helper_tokens(const helper_info& helper, const detail::parse_node_ptr& tree,
                                  std::vector<matched_string>& values, bool lexical_reference) const {
@@ -1068,6 +1120,15 @@ namespace cpf {
                continue;
             }
 
+            if (lowered.helper_id.has_value() && inline_target_field_for(source_symbol) != nullptr) {
+               std::vector<std::unique_ptr<dynamic_node>> helper_nodes;
+               collect_helper_nodes(helper_named(*lowered.helper_id), node_child_at(tree, *child_index), helper_nodes);
+               for (auto& helper_node: helper_nodes) {
+                  merge_inline_child_field(*node, source_symbol, std::move(helper_node));
+               }
+               continue;
+            }
+
             if (lowered.helper_id.has_value() && !source_symbol.has_label()) {
                if (source_symbol.kind == symbol_kind::reference &&
                    structured_synthetic_rules.contains(source_symbol.value)) {
@@ -1082,6 +1143,11 @@ namespace cpf {
                      }
                   }
                }
+               continue;
+            }
+
+            if (inline_target_field_for(source_symbol) != nullptr) {
+               merge_inline_child_field(*node, source_symbol, build_dynamic_node(node_child_at(tree, *child_index)));
                continue;
             }
 
@@ -1631,6 +1697,15 @@ namespace cpf {
 
          const auto collect_symbol_fields = [&](const symbol& symbol) {
             auto collected = std::vector<field_info>{};
+             if (const auto* nested_field = inline_target_field(symbol, compiled->rules_by_name,
+                                                                compiled->lexical_rules, compiled->classes);
+                 nested_field != nullptr) {
+                auto field = apply_symbol_quantifier_to_field(rule.identifier, *nested_field, symbol);
+                field.name = symbol.has_label() ? symbol.label : nested_field->name;
+                collected.push_back(std::move(field));
+                return collected;
+             }
+
             if (symbol.has_label()) {
                collected.push_back(field_from_symbol(symbol, compiled->lexical_rules, synthetic_capture_fields));
                return collected;
@@ -1738,6 +1813,64 @@ namespace cpf {
          }
          compiled->fields_by_rule.emplace(name, std::move(fields));
       }
+
+      for (const auto& rule: compiled->source_grammar.rules) {
+         if (!rule.inline_requested || compiled->rule_has_inline_target(rule.identifier)) {
+            continue;
+         }
+
+         auto diagnostic = grammar_diagnostic{};
+         diagnostic.severity = grammar_diagnostic_severity::warning;
+         diagnostic.code = grammar_diagnostic_code::ignored_inline_request;
+         diagnostic.rule = rule.identifier;
+         diagnostic.line = rule.inline_line;
+         diagnostic.message = "Rule '" + rule.identifier +
+                              "' requests [inline] but does not resolve to exactly one member; continuing without automatic inlining";
+         compiled->analysis_result.diagnostics.push_back(std::move(diagnostic));
+      }
+
+      auto seen_inline_member_diagnostics = std::set<std::string>{};
+      for (const auto& rule: compiled->source_grammar.rules) {
+         for (const auto& production: rule.productions) {
+            for (const auto& symbol: production.symbols) {
+               if (!symbol.inline_requested) {
+                  continue;
+               }
+
+               auto key = rule.identifier + ":" + std::to_string(production.line) + ":" + symbol.label + ":" +
+                          std::to_string(static_cast<int>(symbol.kind)) + ":" + symbol.value;
+               if (!seen_inline_member_diagnostics.insert(key).second) {
+                  continue;
+               }
+
+               const auto valid_inline_target =
+                     symbol.kind == symbol_kind::reference && compiled->rule_has_inline_target(symbol.value);
+               if (valid_inline_target) {
+                  continue;
+               }
+
+               auto diagnostic = grammar_diagnostic{};
+               diagnostic.severity = grammar_diagnostic_severity::warning;
+               diagnostic.code = grammar_diagnostic_code::ignored_inline_request;
+               diagnostic.rule = rule.identifier;
+               diagnostic.line = production.line;
+               diagnostic.message = "Member '" + symbol.label + "' in rule '" + rule.identifier +
+                                    "' requests [inline] for '" + render_symbol_debug(symbol) +
+                                    "' but the referenced target does not resolve to exactly one member; continuing without inlining";
+               compiled->analysis_result.diagnostics.push_back(std::move(diagnostic));
+            }
+         }
+      }
+
+      std::ranges::sort(compiled->analysis_result.diagnostics, [](const auto& lhs, const auto& rhs) {
+         if (lhs.line != rhs.line) {
+            return lhs.line < rhs.line;
+         }
+         if (lhs.severity != rhs.severity) {
+            return lhs.severity == grammar_diagnostic_severity::error;
+         }
+         return lhs.message < rhs.message;
+      });
 
       for (std::size_t index = 0; index < compiled->source_grammar.rules.size(); ++index) {
          compiled->rule_indices.emplace(compiled->source_grammar.rules[index].identifier, index);

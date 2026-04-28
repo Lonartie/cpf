@@ -191,6 +191,7 @@ namespace cpf {
       symbol_kind kind = symbol_kind::reference;
       std::string value;
       std::string label;
+      bool inline_requested = false;
       symbol_quantifier quantifier = symbol_quantifier::one;
       std::size_t exact_repetition = 1;
       lookahead_kind lookahead = lookahead_kind::none;
@@ -238,6 +239,10 @@ namespace cpf {
    struct rule {
       std::string identifier;
       bool declared_as_token = false;
+      bool inline_requested = false;
+      std::size_t inline_line = 1;
+      std::vector<bool> inline_definition_requested;
+      std::vector<std::size_t> inline_definition_lines;
       bool synthetic = false;
       std::vector<production> productions;
 
@@ -298,7 +303,9 @@ namespace cpf {
       unreachable_rule,
       unused_rule,
       nullable_cycle,
-      suspicious_recursive_pattern
+      suspicious_recursive_pattern,
+      inconsistent_inline_redefinition,
+      ignored_inline_request
    };
 
    /// @brief One static diagnostic produced while analyzing a grammar.
@@ -2338,6 +2345,37 @@ using namespace cpf_amalgamated_cpf_analysis_grammar_analysis_cpp_0;
          ++analysis.summary.nullable_cycle_count;
       }
 
+      for (const auto& rule: grammar.rules) {
+         if (rule.synthetic || rule.inline_definition_requested.empty()) {
+            continue;
+         }
+
+         const auto saw_inline = std::ranges::any_of(rule.inline_definition_requested, [](auto requested) {
+            return requested;
+         });
+         const auto saw_non_inline = std::ranges::any_of(rule.inline_definition_requested, [](auto requested) {
+            return !requested;
+         });
+         if (!saw_inline || !saw_non_inline) {
+            continue;
+         }
+
+         auto diagnostic = grammar_diagnostic{};
+         diagnostic.severity = grammar_diagnostic_severity::warning;
+         diagnostic.code = grammar_diagnostic_code::inconsistent_inline_redefinition;
+         diagnostic.rule = rule.identifier;
+         diagnostic.line = rule.inline_definition_lines.front();
+         for (std::size_t index = 1; index < rule.inline_definition_requested.size(); ++index) {
+            if (rule.inline_definition_requested[index] != rule.inline_definition_requested.front()) {
+               diagnostic.line = rule.inline_definition_lines[index];
+               break;
+            }
+         }
+         diagnostic.message = "Rule '" + rule.identifier +
+                              "' mixes [inline] and non-[inline] redefinitions; treating the merged rule as [inline]";
+         analysis.diagnostics.push_back(std::move(diagnostic));
+      }
+
       for (std::size_t rule_index = 0; rule_index < rules.size(); ++rule_index) {
          const auto& rule = *rules[rule_index];
          if (rule.synthetic) {
@@ -2793,8 +2831,15 @@ namespace cpf_amalgamated_cpf_parser_grammar_parser_cpp_0 {
          std::string value;
          std::vector<std::string> template_arguments;
          std::string label;
+         bool inline_requested = false;
          symbol_quantifier quantifier = symbol_quantifier::one;
          std::size_t exact_repetition = 1;
+      };
+
+      struct parsed_rule_metadata {
+         std::vector<attribute> attributes;
+         bool inline_requested = false;
+         std::size_t inline_line = 1;
       };
 
       struct grouped_sequence_item {
@@ -3178,7 +3223,7 @@ namespace cpf_amalgamated_cpf_parser_grammar_parser_cpp_0 {
             return value;
          }
 
-         std::string parse_quoted() {
+         std::string parse_quoted(bool preserve_backslashes = false) {
             skip_ignored();
             if (!is_quote(current())) {
                throw error("Expected quoted string");
@@ -3192,6 +3237,12 @@ namespace cpf_amalgamated_cpf_parser_grammar_parser_cpp_0 {
                   advance();
                   if (eof()) {
                      throw error("Unexpected end of input in quoted string");
+                  }
+                  if (preserve_backslashes) {
+                     value += '\\';
+                     value += current();
+                     advance();
+                     continue;
                   }
                   auto escaped = current();
                   switch (escaped) {
@@ -3230,9 +3281,9 @@ namespace cpf_amalgamated_cpf_parser_grammar_parser_cpp_0 {
             throw error("Unterminated quoted string");
          }
 
-         attribute parse_attribute() {
+         attribute parse_attribute(std::string name) {
             attribute parsed_attribute;
-            parsed_attribute.name = parse_identifier();
+            parsed_attribute.name = std::move(name);
             skip_ignored();
             if (take("=")) {
                parsed_attribute.operation = attribute_operator::assign;
@@ -3263,16 +3314,47 @@ namespace cpf_amalgamated_cpf_parser_grammar_parser_cpp_0 {
             return parsed_attribute;
          }
 
-         std::vector<attribute> parse_attributes() {
-            std::vector<attribute> attributes;
+         parsed_rule_metadata parse_rule_metadata() {
+            parsed_rule_metadata metadata;
             if (!take("[")) {
-               return attributes;
+               return metadata;
             }
             do {
-               attributes.push_back(parse_attribute());
+               auto name = parse_identifier();
+               skip_ignored();
+               if (!eof() && (current() == '=' || current() == '<' || current() == '>')) {
+                  metadata.attributes.push_back(parse_attribute(std::move(name)));
+                  continue;
+               }
+               if (name != "inline") {
+                  throw error("Expected attribute operator");
+               }
+               if (metadata.inline_requested) {
+                  throw error("Duplicate [inline] rule attribute");
+               }
+               metadata.inline_requested = true;
+               metadata.inline_line = line_;
             } while (take(","));
             expect("]");
-            return attributes;
+            return metadata;
+         }
+
+         void parse_inline_annotations(bool& inline_requested, std::string_view context) {
+            if (!take("[")) {
+               return;
+            }
+
+            do {
+               auto annotation = parse_identifier();
+               if (annotation != "inline") {
+                  throw error("Unknown " + std::string{context} + " annotation '" + annotation + "'");
+               }
+               if (inline_requested) {
+                  throw error("Duplicate [inline] " + std::string{context} + " annotation");
+               }
+               inline_requested = true;
+            } while (take(","));
+            expect("]");
          }
 
          void parse_quantifier(symbol_quantifier& quantifier, std::size_t& exact_repetition) {
@@ -3313,7 +3395,8 @@ namespace cpf_amalgamated_cpf_parser_grammar_parser_cpp_0 {
             exact_repetition = static_cast<std::size_t>(std::stoull(digits));
          }
 
-         void parse_item_suffix(std::string& label, symbol_quantifier& quantifier, std::size_t& exact_repetition) {
+         void parse_item_suffix(std::string& label, bool& inline_requested, symbol_quantifier& quantifier,
+                                std::size_t& exact_repetition) {
             parse_quantifier(quantifier, exact_repetition);
             skip_ignored();
             if (!take(":")) {
@@ -3321,6 +3404,7 @@ namespace cpf_amalgamated_cpf_parser_grammar_parser_cpp_0 {
             }
 
             label = parse_identifier();
+            parse_inline_annotations(inline_requested, "member");
             auto original_quantifier = quantifier;
             auto original_exact_repetition = exact_repetition;
             parse_quantifier(quantifier, exact_repetition);
@@ -3360,7 +3444,7 @@ namespace cpf_amalgamated_cpf_parser_grammar_parser_cpp_0 {
             if (current() == 'r' && position_ + 1 < text_.size() && is_quote(text_[position_ + 1])) {
                advance();
                parsed_symbol.kind = parsed_symbol_kind::regex;
-               parsed_symbol.value = parse_quoted();
+               parsed_symbol.value = parse_quoted(true);
             } else if (is_quote(current())) {
                parsed_symbol.kind = parsed_symbol_kind::literal;
                parsed_symbol.value = parse_quoted();
@@ -3374,7 +3458,8 @@ namespace cpf_amalgamated_cpf_parser_grammar_parser_cpp_0 {
                   parsed_symbol.kind = parsed_symbol_kind::reference;
                }
             }
-            parse_item_suffix(parsed_symbol.label, parsed_symbol.quantifier, parsed_symbol.exact_repetition);
+            parse_item_suffix(parsed_symbol.label, parsed_symbol.inline_requested, parsed_symbol.quantifier,
+                              parsed_symbol.exact_repetition);
             return parsed_symbol;
          }
 
@@ -3383,7 +3468,12 @@ namespace cpf_amalgamated_cpf_parser_grammar_parser_cpp_0 {
             expect("(");
             parsed_group.alternatives = parse_alternatives("group", ')');
             expect(")");
-            parse_item_suffix(parsed_group.label, parsed_group.quantifier, parsed_group.exact_repetition);
+            auto ignored_inline_requested = false;
+            parse_item_suffix(parsed_group.label, ignored_inline_requested, parsed_group.quantifier,
+                              parsed_group.exact_repetition);
+            if (ignored_inline_requested) {
+               throw error("Grouped captures do not support [inline]");
+            }
             return parsed_group;
          }
 
@@ -3611,6 +3701,7 @@ namespace cpf_amalgamated_cpf_parser_grammar_parser_cpp_0 {
                                    const parameter_bindings* bindings) {
             symbol lowered_symbol;
             lowered_symbol.label = parsed_symbol.label;
+            lowered_symbol.inline_requested = parsed_symbol.inline_requested;
             lowered_symbol.quantifier = parsed_symbol.quantifier;
             lowered_symbol.exact_repetition = parsed_symbol.exact_repetition;
 
@@ -3698,10 +3789,14 @@ namespace cpf_amalgamated_cpf_parser_grammar_parser_cpp_0 {
             parsed_rules.main_rule.identifier = parse_identifier();
             parsed_rules.main_rule.declared_as_token = declared_as_token;
             current_rule_ = parsed_rules.main_rule.identifier;
-            auto attributes = parse_attributes();
-            if (declared_as_token && !attributes.empty()) {
+            auto metadata = parse_rule_metadata();
+            if (declared_as_token && (!metadata.attributes.empty() || metadata.inline_requested)) {
                throw error("Token declarations do not support rule attributes");
             }
+            parsed_rules.main_rule.inline_requested = metadata.inline_requested;
+            parsed_rules.main_rule.inline_line = metadata.inline_requested ? metadata.inline_line : line;
+            parsed_rules.main_rule.inline_definition_requested.push_back(metadata.inline_requested);
+            parsed_rules.main_rule.inline_definition_lines.push_back(line);
             expect("->");
 
             auto parsed_alternatives = parse_alternatives("production", ';');
@@ -3709,7 +3804,7 @@ namespace cpf_amalgamated_cpf_parser_grammar_parser_cpp_0 {
             auto lowered_productions = lower_alternatives(parsed_alternatives, line, true, parsed_rules.synthetic_rules);
             for (const auto& lowered_symbols: lowered_productions) {
                production parsed_production;
-               parsed_production.attributes = attributes;
+               parsed_production.attributes = metadata.attributes;
                parsed_production.symbols = lowered_symbols;
                parsed_production.line = line;
                parsed_production.definition = parsed_rules.main_rule.productions.size();
@@ -3805,6 +3900,16 @@ namespace cpf_amalgamated_cpf_parser_grammar_parser_cpp_0 {
                if (existing->declared_as_token != parsed_rule.declared_as_token) {
                   throw error("Rule '" + parsed_rule.identifier + "' cannot be declared as both token and non-token");
                }
+               if (!existing->inline_requested && parsed_rule.inline_requested) {
+                  existing->inline_line = parsed_rule.inline_line;
+               }
+               existing->inline_requested = existing->inline_requested || parsed_rule.inline_requested;
+               existing->inline_definition_requested.insert(existing->inline_definition_requested.end(),
+                                                            parsed_rule.inline_definition_requested.begin(),
+                                                            parsed_rule.inline_definition_requested.end());
+               existing->inline_definition_lines.insert(existing->inline_definition_lines.end(),
+                                                        parsed_rule.inline_definition_lines.begin(),
+                                                        parsed_rule.inline_definition_lines.end());
                const auto definition_offset = existing->productions.size();
                for (auto& production: parsed_rule.productions) {
                   production.definition += definition_offset;
@@ -4386,6 +4491,32 @@ namespace cpf_amalgamated_cpf_runtime_dynamic_cpp_0 {
          return field.shape == field_shape::capture_variant;
       }
 
+      [[nodiscard]] auto inline_requested_for(const symbol& symbol, const rule* referenced_rule) -> bool {
+         return symbol.inline_requested || (referenced_rule != nullptr && referenced_rule->inline_requested);
+      }
+
+      [[nodiscard]] auto inline_target_field(const symbol& symbol,
+                                            const std::unordered_map<std::string, const rule*>& rules_by_name,
+                                            const std::unordered_set<std::string>& lexical_rules,
+                                            const std::unordered_map<std::string, class_info>& classes)
+            -> const field_info* {
+         if (symbol.kind != symbol_kind::reference || lexical_rules.contains(symbol.value)) {
+            return nullptr;
+         }
+
+         auto rule_it = rules_by_name.find(symbol.value);
+         if (rule_it == rules_by_name.end() || !inline_requested_for(symbol, rule_it->second)) {
+            return nullptr;
+         }
+
+         auto class_it = classes.find(symbol.value);
+         if (class_it == classes.end() || class_it->second.base_rule || class_it->second.fields.size() != 1) {
+            return nullptr;
+         }
+
+         return &class_it->second.fields.front();
+      }
+
       [[nodiscard]] auto uses_helper_rule(const symbol& symbol) -> bool { return !symbol.is_single(); }
 
       [[nodiscard]] auto is_lexical_reference(const symbol& symbol,
@@ -4710,6 +4841,9 @@ namespace cpf_amalgamated_cpf_runtime_dynamic_cpp_0 {
 
          if (symbol.has_label()) {
             text += ":" + symbol.label;
+            if (symbol.inline_requested) {
+               text += "[inline]";
+            }
          }
          return text;
       }
@@ -5039,7 +5173,30 @@ using namespace cpf_amalgamated_cpf_runtime_dynamic_cpp_0;
          return fields_by_rule.at(rule_name).at(std::string{name});
       }
 
+      [[nodiscard]] auto rule_has_inline_target(std::string_view rule_name) const -> bool {
+         if (lexical_rules.contains(std::string{rule_name})) {
+            return false;
+         }
+
+         auto class_it = classes.find(std::string{rule_name});
+         return class_it != classes.end() && !class_it->second.base_rule && class_it->second.fields.size() == 1;
+      }
+
+      [[nodiscard]] auto inline_target_field_for(const symbol& symbol) const -> const field_info* {
+         return inline_target_field(symbol, rules_by_name, lexical_rules, classes);
+      }
+
       [[nodiscard]] auto helper_named(std::size_t helper_id) const -> const helper_info& { return helpers.at(helper_id); }
+
+      void merge_inline_child_field(dynamic_node& node, const symbol& symbol, std::unique_ptr<dynamic_node> child) const {
+         if (child == nullptr) {
+            return;
+         }
+
+         const auto& nested_field = classes.at(symbol.value).fields.front();
+         const auto parent_field_name = symbol.has_label() ? symbol.label : nested_field.name;
+         merge_dynamic_field(field_named(node, parent_field_name), std::move(field_named(*child, nested_field.name)));
+      }
 
       void collect_helper_tokens(const helper_info& helper, const detail::parse_node_ptr& tree,
                                  std::vector<matched_string>& values, bool lexical_reference) const {
@@ -5257,6 +5414,15 @@ using namespace cpf_amalgamated_cpf_runtime_dynamic_cpp_0;
                continue;
             }
 
+            if (lowered.helper_id.has_value() && inline_target_field_for(source_symbol) != nullptr) {
+               std::vector<std::unique_ptr<dynamic_node>> helper_nodes;
+               collect_helper_nodes(helper_named(*lowered.helper_id), node_child_at(tree, *child_index), helper_nodes);
+               for (auto& helper_node: helper_nodes) {
+                  merge_inline_child_field(*node, source_symbol, std::move(helper_node));
+               }
+               continue;
+            }
+
             if (lowered.helper_id.has_value() && !source_symbol.has_label()) {
                if (source_symbol.kind == symbol_kind::reference &&
                    structured_synthetic_rules.contains(source_symbol.value)) {
@@ -5271,6 +5437,11 @@ using namespace cpf_amalgamated_cpf_runtime_dynamic_cpp_0;
                      }
                   }
                }
+               continue;
+            }
+
+            if (inline_target_field_for(source_symbol) != nullptr) {
+               merge_inline_child_field(*node, source_symbol, build_dynamic_node(node_child_at(tree, *child_index)));
                continue;
             }
 
@@ -5820,6 +5991,15 @@ using namespace cpf_amalgamated_cpf_runtime_dynamic_cpp_0;
 
          const auto collect_symbol_fields = [&](const symbol& symbol) {
             auto collected = std::vector<field_info>{};
+             if (const auto* nested_field = inline_target_field(symbol, compiled->rules_by_name,
+                                                                compiled->lexical_rules, compiled->classes);
+                 nested_field != nullptr) {
+                auto field = apply_symbol_quantifier_to_field(rule.identifier, *nested_field, symbol);
+                field.name = symbol.has_label() ? symbol.label : nested_field->name;
+                collected.push_back(std::move(field));
+                return collected;
+             }
+
             if (symbol.has_label()) {
                collected.push_back(field_from_symbol(symbol, compiled->lexical_rules, synthetic_capture_fields));
                return collected;
@@ -5927,6 +6107,64 @@ using namespace cpf_amalgamated_cpf_runtime_dynamic_cpp_0;
          }
          compiled->fields_by_rule.emplace(name, std::move(fields));
       }
+
+      for (const auto& rule: compiled->source_grammar.rules) {
+         if (!rule.inline_requested || compiled->rule_has_inline_target(rule.identifier)) {
+            continue;
+         }
+
+         auto diagnostic = grammar_diagnostic{};
+         diagnostic.severity = grammar_diagnostic_severity::warning;
+         diagnostic.code = grammar_diagnostic_code::ignored_inline_request;
+         diagnostic.rule = rule.identifier;
+         diagnostic.line = rule.inline_line;
+         diagnostic.message = "Rule '" + rule.identifier +
+                              "' requests [inline] but does not resolve to exactly one member; continuing without automatic inlining";
+         compiled->analysis_result.diagnostics.push_back(std::move(diagnostic));
+      }
+
+      auto seen_inline_member_diagnostics = std::set<std::string>{};
+      for (const auto& rule: compiled->source_grammar.rules) {
+         for (const auto& production: rule.productions) {
+            for (const auto& symbol: production.symbols) {
+               if (!symbol.inline_requested) {
+                  continue;
+               }
+
+               auto key = rule.identifier + ":" + std::to_string(production.line) + ":" + symbol.label + ":" +
+                          std::to_string(static_cast<int>(symbol.kind)) + ":" + symbol.value;
+               if (!seen_inline_member_diagnostics.insert(key).second) {
+                  continue;
+               }
+
+               const auto valid_inline_target =
+                     symbol.kind == symbol_kind::reference && compiled->rule_has_inline_target(symbol.value);
+               if (valid_inline_target) {
+                  continue;
+               }
+
+               auto diagnostic = grammar_diagnostic{};
+               diagnostic.severity = grammar_diagnostic_severity::warning;
+               diagnostic.code = grammar_diagnostic_code::ignored_inline_request;
+               diagnostic.rule = rule.identifier;
+               diagnostic.line = production.line;
+               diagnostic.message = "Member '" + symbol.label + "' in rule '" + rule.identifier +
+                                    "' requests [inline] for '" + render_symbol_debug(symbol) +
+                                    "' but the referenced target does not resolve to exactly one member; continuing without inlining";
+               compiled->analysis_result.diagnostics.push_back(std::move(diagnostic));
+            }
+         }
+      }
+
+      std::ranges::sort(compiled->analysis_result.diagnostics, [](const auto& lhs, const auto& rhs) {
+         if (lhs.line != rhs.line) {
+            return lhs.line < rhs.line;
+         }
+         if (lhs.severity != rhs.severity) {
+            return lhs.severity == grammar_diagnostic_severity::error;
+         }
+         return lhs.message < rhs.message;
+      });
 
       for (std::size_t index = 0; index < compiled->source_grammar.rules.size(); ++index) {
          compiled->rule_indices.emplace(compiled->source_grammar.rules[index].identifier, index);

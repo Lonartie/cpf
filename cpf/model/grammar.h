@@ -32,6 +32,7 @@ namespace cpf {
       symbol_kind kind = symbol_kind::reference;
       std::string value;
       std::string label;
+      bool inline_requested = false;
       symbol_quantifier quantifier = symbol_quantifier::one;
       std::size_t exact_repetition = 1;
       lookahead_kind lookahead = lookahead_kind::none;
@@ -79,6 +80,10 @@ namespace cpf {
    struct rule {
       std::string identifier;
       bool declared_as_token = false;
+      bool inline_requested = false;
+      std::size_t inline_line = 1;
+      std::vector<bool> inline_definition_requested;
+      std::vector<std::size_t> inline_definition_lines;
       bool synthetic = false;
       std::vector<production> productions;
 

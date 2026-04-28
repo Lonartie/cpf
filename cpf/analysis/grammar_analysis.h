@@ -14,7 +14,9 @@ namespace cpf {
       unreachable_rule,
       unused_rule,
       nullable_cycle,
-      suspicious_recursive_pattern
+      suspicious_recursive_pattern,
+      inconsistent_inline_redefinition,
+      ignored_inline_request
    };
 
    /// @brief One static diagnostic produced while analyzing a grammar.
