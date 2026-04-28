@@ -14,9 +14,9 @@ multiplication   [prec = 'div']  ->  expression:lhs '*' expression:rhs;
 division         [lbl = 'div']   ->  expression:lhs '/' expression:rhs;
 power            [dir = right]   ->  expression:lhs '^' expression:rhs;
 grouping                         ->  '(' expression:inner ')';
-method_call                      ->  identifier:id '(' arguments?:args ')';
+method_call                      ->  identifier:id '(' arguments?:args[inline] ')';
 number                           ->  r'[0-9]+(\.[0-9]+)?':value;
-identifier                       ->  r'[a-zA-Z_][a-zA-Z0-9_]*':value;
+token identifier                 ->  r'[a-zA-Z_][a-zA-Z0-9_]*';
 arguments                        ->  expression:args (',' expression:args)*;)";
 
 /// @brief A calculator interpreter that evaluates the expression represented by the AST.
@@ -32,23 +32,24 @@ struct calculator {
       if (n.rule_name == "grouping") { return value(n.get_node("inner")); }
       if (n.rule_name == "number") { return std::stod(n.get_token("value").text); }
       if (n.rule_name == "method_call") {
-         auto args = n.get_node("args").get_nodes("args");
-         if (n.get_node("id").get_token("value").text == "sin" && require(args.size() == 1, "sin requires exactly one argument")) {
+         auto args = n.get_nodes("args");
+         const auto& identifier = n.get_token("id").text;
+         if (identifier == "sin" && require(args.size() == 1, "sin requires exactly one argument")) {
             return std::sin(value(args.front()));
          }
-         if (n.get_node("id").get_token("value").text == "cos" && require(args.size() == 1, "cos requires exactly one argument")) {
+         if (identifier == "cos" && require(args.size() == 1, "cos requires exactly one argument")) {
             return std::cos(value(args.front()));
          }
-         if (n.get_node("id").get_token("value").text == "tan" && require(args.size() == 1, "tan requires exactly one argument")) {
+         if (identifier == "tan" && require(args.size() == 1, "tan requires exactly one argument")) {
             return std::tan(value(args.front()));
          }
-         if (n.get_node("id").get_token("value").text == "sum" && require(args.size() >= 1, "sum requires at least one argument")) {
+         if (identifier == "sum" && require(args.size() >= 1, "sum requires at least one argument")) {
             double sum = 0;
             for (auto& arg: args)
                sum += value(arg);
             return sum;
          }
-         throw std::runtime_error(std::string("Unknown function: ") + n.get_node("id").get_token("value").text);
+         throw std::runtime_error(std::string("Unknown function: ") + identifier);
       }
       throw std::runtime_error(std::string("Unknown rule: ") + n.rule_name);
    }

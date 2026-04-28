@@ -1735,6 +1735,9 @@ namespace cpf {
             }
             line(header, 1, "std::size_t rule_id() const override { return RuleId; }");
             line(header, 1, "std::unique_ptr<" + templated_rule_type(info.name) + "> clone() const;");
+            line(header, 1, "template <typename T> bool is() const { return dynamic_cast<const T*>(this) != nullptr; }");
+            line(header, 1, "template <typename T> const T& as() const { return dynamic_cast<const T&>(*this); }");
+            line(header, 1, "template <typename T> T& as() { return dynamic_cast<T&>(*this); }");
             line(header, 0);
             line(header, 1, "protected:");
             line(header, 1, "   std::unique_ptr<cpf::node> clone_node() const override;");

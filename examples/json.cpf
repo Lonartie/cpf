@@ -1,0 +1,17 @@
+@namespace json;
+
+document                -> object:object;
+
+object                  -> '{' member_list?:list[inline] '}';
+array                   -> '[' value_list?:list[inline] ']';
+
+member_list [inline]    -> member:members (',' member:members)*;
+value_list  [inline]    -> value:values (',' value:values)*;
+
+member                  -> string:key ':' value:value;
+value                   -> object | array | string | number | boolean | null;
+
+string                  -> r'\"([^"\\]|\\.)*\"':text;
+number                  -> r'-?\d+(\.\d+)?([eE][+-]?\d+)?':text;
+boolean                 -> 'true':value | 'false':value;
+null                    -> 'null';

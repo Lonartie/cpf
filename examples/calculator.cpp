@@ -14,22 +14,22 @@ struct calculator {
    double operator()(const gen::grouping& g) { return value(g.inner); }
    double operator()(const gen::number& n) { return std::stod(n.value.text); }
    double operator()(const gen::method_call& n) {
-      if (n.id->value.text == "sin" && require(n.args->args.size() == 1, "sin requires exactly one argument")) {
-         return std::sin(value(n.args->args.front()));
+      if (n.id.text == "sin" && require(n.args.size() == 1, "sin requires exactly one argument")) {
+         return std::sin(value(n.args.front()));
       }
-      if (n.id->value.text == "cos" && require(n.args->args.size() == 1, "cos requires exactly one argument")) {
-         return std::cos(value(n.args->args.front()));
+      if (n.id.text == "cos" && require(n.args.size() == 1, "cos requires exactly one argument")) {
+         return std::cos(value(n.args.front()));
       }
-      if (n.id->value.text == "tan" && require(n.args->args.size() == 1, "tan requires exactly one argument")) {
-         return std::tan(value(n.args->args.front()));
+      if (n.id.text == "tan" && require(n.args.size() == 1, "tan requires exactly one argument")) {
+         return std::tan(value(n.args.front()));
       }
-      if (n.id->value.text == "sum" && require(n.args->args.size() >= 1, "sum requires at least one argument")) {
+      if (n.id.text == "sum" && require(n.args.size() >= 1, "sum requires at least one argument")) {
          double sum = 0;
-         for (auto& arg: n.args->args)
+         for (auto& arg: n.args)
             sum += value(arg);
          return sum;
       }
-      throw std::runtime_error(std::string("Unknown function: ") + n.id->value.text);
+      throw std::runtime_error(std::string("Unknown function: ") + n.id.text);
    }
 };
 
