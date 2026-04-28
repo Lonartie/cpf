@@ -759,11 +759,6 @@ namespace cpf {
                strip_labels_from_expression(group);
             }
 
-            if (item.lookahead == lookahead_kind::none && group.label.empty() &&
-                !is_group_single(group) && group_contains_nested_labeled_capture(group)) {
-               throw error("Quantified groups cannot contain labeled captures");
-            }
-
             if (item.lookahead != lookahead_kind::none || !is_group_single(group) || !group.label.empty()) {
                rule synthetic_rule;
                synthetic_rule.identifier = make_group_rule_name();
@@ -771,7 +766,7 @@ namespace cpf {
 
                const auto lowered_group =
                      lower_alternatives(group.alternatives, line,
-                                        item.lookahead == lookahead_kind::none && !group.label.empty(),
+                                        item.lookahead == lookahead_kind::none,
                                         synthetic_rules, bindings);
                synthetic_rule.productions.reserve(lowered_group.size());
                for (const auto& lowered_production: lowered_group) {

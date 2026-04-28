@@ -1,4 +1,4 @@
 #pragma once
 
-#include <cpflib>
+#include "../../cpf/parser/grammar_loader.h"
 

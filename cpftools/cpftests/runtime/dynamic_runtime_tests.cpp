@@ -271,6 +271,51 @@ TEST_SUITE("cpflib.dynamic_runtime") {
       CHECK(std::get<cpf::matched_string>(root.children[2]).text == ")");
    }
 
+   TEST_CASE("compile_grammar turns repeated labeled node captures into ordered node vectors") {
+      auto parser = cpf::compile_grammar(R"(
+         repeated_expr -> repeated_number | repeated_identifier;
+         repeated_number -> r'[0-9]+':value;
+         repeated_identifier -> r'[A-Za-z_]+':value;
+         repeated_arguments -> repeated_expr:args (',' repeated_expr:args)*;
+         repeated_pair -> repeated_number:items repeated_identifier:items;
+      )");
+
+      auto repeated_arguments = parser.parse("repeated_arguments", "1,two,3");
+      REQUIRE(repeated_arguments.success);
+      REQUIRE(repeated_arguments.forest.size() == 1);
+
+      const auto& arguments_root = *repeated_arguments.forest.front();
+      const auto& args = required_field(arguments_root, "args");
+      CHECK(args.shape == cpf::dynamic_field_shape::node_vector);
+      CHECK(args.value_kind == cpf::dynamic_field_value_kind::node_list);
+      CHECK(args.declared_type_name == "repeated_expr");
+      REQUIRE(args.nodes.size() == 3);
+      REQUIRE(args.nodes[0] != nullptr);
+      REQUIRE(args.nodes[1] != nullptr);
+      REQUIRE(args.nodes[2] != nullptr);
+      CHECK(args.nodes[0]->rule_name == "repeated_number");
+      CHECK(args.nodes[1]->rule_name == "repeated_identifier");
+      CHECK(args.nodes[2]->rule_name == "repeated_number");
+      CHECK(required_field(*args.nodes[0], "value").token->text == "1");
+      CHECK(required_field(*args.nodes[1], "value").token->text == "two");
+      CHECK(required_field(*args.nodes[2], "value").token->text == "3");
+
+      auto repeated_pair = parser.parse("repeated_pair", "1abc");
+      REQUIRE(repeated_pair.success);
+      REQUIRE(repeated_pair.forest.size() == 1);
+
+      const auto& pair_root = *repeated_pair.forest.front();
+      const auto& items = required_field(pair_root, "items");
+      CHECK(items.shape == cpf::dynamic_field_shape::node_vector);
+      CHECK(items.value_kind == cpf::dynamic_field_value_kind::node_list);
+      CHECK(items.declared_type_name == "repeated_expr");
+      REQUIRE(items.nodes.size() == 2);
+      REQUIRE(items.nodes[0] != nullptr);
+      REQUIRE(items.nodes[1] != nullptr);
+      CHECK(items.nodes[0]->rule_name == "repeated_number");
+      CHECK(items.nodes[1]->rule_name == "repeated_identifier");
+   }
+
    TEST_CASE("dynamic runtime AST preserves partial recovery damage") {
       auto parser = make_dynamic_calculator();
 

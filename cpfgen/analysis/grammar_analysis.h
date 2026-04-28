@@ -1,4 +1,4 @@
 #pragma once
 
-#include <cpflib>
+#include "../../cpf/analysis/grammar_analysis.h"
 

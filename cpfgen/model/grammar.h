@@ -1,3 +1,3 @@
 #pragma once
 
-#include <cpflib>
+#include "../../cpf/model/grammar.h"

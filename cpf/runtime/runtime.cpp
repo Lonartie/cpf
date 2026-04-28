@@ -295,6 +295,7 @@ namespace cpf {
             std::size_t token_symbol_count = 0;
             const lexer_symbol_spec* skip_symbols = nullptr;
             std::size_t skip_symbol_count = 0;
+            std::uint64_t fingerprint = 0;
 
             [[nodiscard]] bool operator==(const lexer_dispatch_key&) const = default;
          };
@@ -305,6 +306,74 @@ namespace cpf {
             std::vector<std::size_t> token_fallback_candidates;
             std::vector<std::size_t> skip_fallback_candidates;
          };
+
+         constexpr auto fingerprint_offset = std::uint64_t{14695981039346656037ull};
+         constexpr auto fingerprint_prime = std::uint64_t{1099511628211ull};
+
+         void mix_fingerprint(std::uint64_t& fingerprint, std::uint64_t value) {
+            fingerprint ^= value;
+            fingerprint *= fingerprint_prime;
+         }
+
+         void mix_fingerprint(std::uint64_t& fingerprint, std::string_view value) {
+            mix_fingerprint(fingerprint, value.size());
+            for (const auto ch: value) {
+               mix_fingerprint(fingerprint, static_cast<unsigned char>(ch));
+            }
+         }
+
+         [[nodiscard]] auto fingerprint_of(const lexer_symbol_spec& symbol) -> std::uint64_t {
+            auto fingerprint = fingerprint_offset;
+            mix_fingerprint(fingerprint, static_cast<std::uint64_t>(symbol.kind));
+            mix_fingerprint(fingerprint, symbol.text);
+            mix_fingerprint(fingerprint, symbol.precedence);
+            return fingerprint;
+         }
+
+         [[nodiscard]] auto fingerprint_of(const parser_symbol& symbol) -> std::uint64_t {
+            auto fingerprint = fingerprint_offset;
+            mix_fingerprint(fingerprint, static_cast<std::uint64_t>(symbol.kind));
+            mix_fingerprint(fingerprint, symbol.value);
+            mix_fingerprint(fingerprint, symbol.text);
+            return fingerprint;
+         }
+
+         [[nodiscard]] auto fingerprint_of(const production_spec& production) -> std::uint64_t {
+            auto fingerprint = fingerprint_offset;
+            mix_fingerprint(fingerprint, production.lhs);
+            mix_fingerprint(fingerprint, production.lhs_name);
+            mix_fingerprint(fingerprint, production.symbol_count);
+            for (std::size_t index = 0; index < production.symbol_count; ++index) {
+               mix_fingerprint(fingerprint, fingerprint_of(production.symbols[index]));
+            }
+            return fingerprint;
+         }
+
+         [[nodiscard]] auto fingerprint_lexer_symbols(const lexer_symbol_spec* symbols, std::size_t count) -> std::uint64_t {
+            auto fingerprint = fingerprint_offset;
+            mix_fingerprint(fingerprint, count);
+            for (std::size_t index = 0; index < count; ++index) {
+               mix_fingerprint(fingerprint, fingerprint_of(symbols[index]));
+            }
+            return fingerprint;
+         }
+
+         [[nodiscard]] auto fingerprint_earley_grammar(const grammar_spec& grammar) -> std::uint64_t {
+            auto fingerprint = fingerprint_offset;
+            mix_fingerprint(fingerprint, grammar.production_count);
+            mix_fingerprint(fingerprint, grammar.rule_count);
+            for (std::size_t index = 0; index < grammar.production_count; ++index) {
+               mix_fingerprint(fingerprint, fingerprint_of(grammar.productions[index]));
+            }
+            for (std::size_t index = 0; index < grammar.production_count; ++index) {
+               mix_fingerprint(fingerprint, grammar.rule_production_indices[index]);
+            }
+            for (std::size_t index = 0; index < grammar.rule_count; ++index) {
+               mix_fingerprint(fingerprint, grammar.rule_production_offsets[index]);
+               mix_fingerprint(fingerprint, grammar.rule_production_counts[index]);
+            }
+            return fingerprint;
+         }
 
          [[nodiscard]] auto lexer_dispatch_of(const grammar_spec& grammar) -> const lexer_dispatch&;
 
@@ -672,6 +741,7 @@ namespace cpf {
             const std::size_t* rule_production_counts = nullptr;
             std::size_t production_count = 0;
             std::size_t rule_count = 0;
+            std::uint64_t fingerprint = 0;
 
             [[nodiscard]] bool operator==(const earley_machine_key&) const = default;
          };
@@ -901,7 +971,9 @@ namespace cpf {
             return lexer_dispatch_key{grammar.token_symbols,
                                       grammar.token_symbol_count,
                                       grammar.skip_symbols,
-                                      grammar.skip_symbol_count};
+                                      grammar.skip_symbol_count,
+                                      fingerprint_lexer_symbols(grammar.token_symbols, grammar.token_symbol_count) ^
+                                            (fingerprint_lexer_symbols(grammar.skip_symbols, grammar.skip_symbol_count) << 1)};
          }
 
          [[nodiscard]] auto lexer_dispatch_of(const grammar_spec& grammar) -> const lexer_dispatch& {
@@ -953,7 +1025,8 @@ namespace cpf {
                                       grammar.rule_production_offsets,
                                       grammar.rule_production_counts,
                                       grammar.production_count,
-                                      grammar.rule_count};
+                                      grammar.rule_count,
+                                      fingerprint_earley_grammar(grammar)};
          }
 
          [[nodiscard]] auto earley_machine_of(const grammar_spec& grammar) -> const earley_machine& {

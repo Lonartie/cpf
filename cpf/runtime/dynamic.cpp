@@ -277,12 +277,17 @@ namespace cpf {
          if (existing == candidate) {
             return true;
          }
-         if ((existing == field_shape::terminal_scalar && candidate == field_shape::terminal_optional) ||
-             (existing == field_shape::terminal_optional && candidate == field_shape::terminal_scalar)) {
+         const auto existing_terminal = existing == field_shape::terminal_scalar || existing == field_shape::terminal_optional ||
+                                       existing == field_shape::terminal_vector;
+         const auto candidate_terminal = candidate == field_shape::terminal_scalar ||
+                                        candidate == field_shape::terminal_optional ||
+                                        candidate == field_shape::terminal_vector;
+         if (existing_terminal && candidate_terminal) {
             return true;
          }
-         if ((existing == field_shape::node_scalar && candidate == field_shape::node_scalar) ||
-             (existing == field_shape::node_vector && candidate == field_shape::node_vector)) {
+         const auto existing_node = existing == field_shape::node_scalar || existing == field_shape::node_vector;
+         const auto candidate_node = candidate == field_shape::node_scalar || candidate == field_shape::node_vector;
+         if (existing_node && candidate_node) {
             return true;
          }
          return false;
@@ -324,6 +329,56 @@ namespace cpf {
          return {};
       }
 
+      [[nodiscard]] auto field_layout_equal(const field_info& left, const field_info& right) -> bool {
+         if (left.name != right.name || left.type != right.type || left.resolved_rule != right.resolved_rule ||
+             left.shape != right.shape || left.variant_alternatives.size() != right.variant_alternatives.size()) {
+            return false;
+         }
+
+         for (std::size_t i = 0; i < left.variant_alternatives.size(); ++i) {
+            const auto& left_alternative = left.variant_alternatives[i];
+            const auto& right_alternative = right.variant_alternatives[i];
+            if (left_alternative.type != right_alternative.type ||
+                left_alternative.resolved_rule != right_alternative.resolved_rule ||
+                left_alternative.node != right_alternative.node ||
+                left_alternative.lexical != right_alternative.lexical) {
+               return false;
+            }
+         }
+
+         return true;
+      }
+
+      [[nodiscard]] auto apply_symbol_quantifier_to_field(std::string_view owner_rule, field_info field,
+                                                          const symbol& symbol) -> field_info {
+         if (symbol.is_single()) {
+            return field;
+         }
+
+         if (field.shape == field_shape::capture_variant) {
+            throw std::runtime_error{"Rule '" + std::string{owner_rule} +
+                                     "' cannot flatten quantified helper capture '" + field.name +
+                                     "' because variant members cannot be repeated or made optional implicitly"};
+         }
+
+         if (symbol.is_repeated()) {
+            if (field.shape == field_shape::terminal_scalar || field.shape == field_shape::terminal_optional) {
+               field.shape = field_shape::terminal_vector;
+            } else if (field.shape == field_shape::node_scalar) {
+               field.shape = field_shape::node_vector;
+            }
+            field.type = merged_field_type(field);
+            return field;
+         }
+
+         if (symbol.is_optional() && field.shape == field_shape::terminal_scalar) {
+            field.shape = field_shape::terminal_optional;
+            field.type = merged_field_type(field);
+         }
+
+         return field;
+      }
+
       [[nodiscard]] auto common_rule_base(std::string_view left, std::string_view right,
                                           const std::unordered_map<std::string, std::string>& bases)
             -> std::optional<std::string> {
@@ -354,8 +409,13 @@ namespace cpf {
       }
 
       void merge_field_resolution(std::string_view owner_rule, field_info& existing, const field_info& candidate,
-                                  const std::unordered_map<std::string, std::string>& bases) {
+                                  const std::unordered_map<std::string, std::string>& bases,
+                                  bool repeated_assignment = false) {
          if (is_variant_field(existing) || is_variant_field(candidate)) {
+            if (repeated_assignment) {
+               throw std::runtime_error{"Rule '" + std::string{owner_rule} + "' label '" + existing.name +
+                                        "' cannot be repeated because variant members are not supported in repeated captures"};
+            }
             if (existing.type != candidate.type || existing.shape != candidate.shape) {
                throw std::runtime_error{"Rule '" + std::string{owner_rule} + "' label '" + existing.name +
                                         "' has conflicting member types '" + describe_field_type(existing) + "' and '" +
@@ -381,8 +441,11 @@ namespace cpf {
          }
 
          if (!existing_is_node) {
-            if ((existing.shape == field_shape::terminal_scalar && candidate.shape == field_shape::terminal_optional) ||
-                (existing.shape == field_shape::terminal_optional && candidate.shape == field_shape::terminal_scalar)) {
+            if (repeated_assignment || existing.shape == field_shape::terminal_vector ||
+                candidate.shape == field_shape::terminal_vector) {
+               existing.shape = field_shape::terminal_vector;
+            } else if ((existing.shape == field_shape::terminal_scalar && candidate.shape == field_shape::terminal_optional) ||
+                       (existing.shape == field_shape::terminal_optional && candidate.shape == field_shape::terminal_scalar)) {
                existing.shape = field_shape::terminal_optional;
             }
             existing.type = merged_field_type(existing);
@@ -400,6 +463,10 @@ namespace cpf {
          }
 
          existing.resolved_rule = *common_base;
+         if (repeated_assignment || existing.shape == field_shape::node_vector ||
+             candidate.shape == field_shape::node_vector) {
+            existing.shape = field_shape::node_vector;
+         }
          existing.type = merged_field_type(existing);
       }
 
@@ -615,6 +682,7 @@ namespace cpf {
       std::unordered_set<std::string> lexical_rules;
       std::unordered_map<std::string, class_info> classes;
       std::unordered_map<std::string, std::unordered_map<std::string, field_info>> fields_by_rule;
+      std::unordered_set<std::string> structured_synthetic_rules;
       std::unordered_map<std::string, family_info> families;
       std::unordered_map<std::string, std::size_t> rule_indices;
       std::unordered_map<std::string, std::size_t> synthetic_capture_by_rule;
@@ -657,7 +725,7 @@ namespace cpf {
          if (found == public_rule_lookup.end()) {
             throw std::invalid_argument{"Unknown public rule '" + rule_name + "'"};
          }
-         return found->second;
+         return public_rules[found->second].id;
       }
 
       [[nodiscard]] auto rule_info(std::string_view name) const -> const dynamic_rule_info* {
@@ -723,6 +791,52 @@ namespace cpf {
             field.value_kind = dynamic_field_value_kind::node_list;
          }
          return field;
+      }
+
+      void merge_dynamic_field(dynamic_field& target, dynamic_field source) const {
+         switch (target.shape) {
+            case dynamic_field_shape::terminal_scalar:
+            case dynamic_field_shape::terminal_optional:
+            case dynamic_field_shape::capture_variant:
+               target.value_kind = source.value_kind;
+               target.value_type_name = std::move(source.value_type_name);
+               target.token = std::move(source.token);
+               target.node = std::move(source.node);
+               target.tokens = std::move(source.tokens);
+               target.nodes = std::move(source.nodes);
+               return;
+            case dynamic_field_shape::terminal_vector:
+               target.value_kind = dynamic_field_value_kind::token_list;
+               if (target.value_type_name.empty()) {
+                  target.value_type_name = target.declared_type_name;
+               }
+               if (source.value_kind == dynamic_field_value_kind::token && source.token.has_value()) {
+                  target.tokens.push_back(std::move(*source.token));
+               } else if (source.value_kind == dynamic_field_value_kind::token_list) {
+                  for (auto& token: source.tokens) {
+                     target.tokens.push_back(std::move(token));
+                  }
+               }
+               return;
+            case dynamic_field_shape::node_scalar:
+               target.value_kind = source.value_kind;
+               target.value_type_name = std::move(source.value_type_name);
+               target.node = std::move(source.node);
+               return;
+            case dynamic_field_shape::node_vector:
+               target.value_kind = dynamic_field_value_kind::node_list;
+               if (target.value_type_name.empty()) {
+                  target.value_type_name = target.declared_type_name;
+               }
+               if (source.value_kind == dynamic_field_value_kind::node && source.node != nullptr) {
+                  target.nodes.push_back(std::move(source.node));
+               } else if (source.value_kind == dynamic_field_value_kind::node_list) {
+                  for (auto& node: source.nodes) {
+                     target.nodes.push_back(std::move(node));
+                  }
+               }
+               return;
+         }
       }
 
       [[nodiscard]] auto field_named(dynamic_node& node, std::string_view name) const -> dynamic_field& {
@@ -886,14 +1000,15 @@ namespace cpf {
          }
          const auto& alternative = capture.production_alternatives[alternative_offset->second];
 
-         if (field.shape == dynamic_field_shape::terminal_scalar || field.shape == dynamic_field_shape::terminal_optional) {
+         if (field.shape == dynamic_field_shape::terminal_scalar || field.shape == dynamic_field_shape::terminal_optional ||
+             field.shape == dynamic_field_shape::terminal_vector) {
             field.value_kind = dynamic_field_value_kind::token;
             field.token = alternative.lexical ? matched_tree_at(node_child_at(tree, 0)) : matched_child_at(tree, 0);
             field.value_type_name = alternative_type_name_of(alternative);
             return;
          }
 
-         if (field.shape == dynamic_field_shape::node_scalar) {
+         if (field.shape == dynamic_field_shape::node_scalar || field.shape == dynamic_field_shape::node_vector) {
             field.value_kind = dynamic_field_value_kind::node;
             field.node = build_dynamic_node(node_child_at(tree, 0));
             field.value_type_name = field.node != nullptr ? field.node->rule_name : alternative.resolved_rule;
@@ -952,39 +1067,71 @@ namespace cpf {
             if (source_symbol.is_zero_width()) {
                continue;
             }
+
+            if (lowered.helper_id.has_value() && !source_symbol.has_label()) {
+               if (source_symbol.kind == symbol_kind::reference &&
+                   structured_synthetic_rules.contains(source_symbol.value)) {
+                  std::vector<std::unique_ptr<dynamic_node>> helper_nodes;
+                  collect_helper_nodes(helper_named(*lowered.helper_id), node_child_at(tree, *child_index), helper_nodes);
+                  for (auto& helper_node: helper_nodes) {
+                     if (helper_node == nullptr) {
+                        continue;
+                     }
+                     for (auto& [field_name, nested_field]: helper_node->fields) {
+                        merge_dynamic_field(field_named(*node, field_name), std::move(nested_field));
+                     }
+                  }
+               }
+               continue;
+            }
+
             if (!source_symbol.has_label()) {
+               if (source_symbol.kind == symbol_kind::reference &&
+                   structured_synthetic_rules.contains(source_symbol.value)) {
+                  auto structured_child = build_dynamic_node(node_child_at(tree, *child_index));
+                  if (structured_child != nullptr) {
+                     for (auto& [field_name, nested_field]: structured_child->fields) {
+                        merge_dynamic_field(field_named(*node, field_name), std::move(nested_field));
+                     }
+                  }
+               }
                continue;
             }
 
             auto& field = field_named(*node, source_symbol.label);
             const auto& declared_field = field_named(info.name, source_symbol.label);
+            auto assigned_value = make_field(declared_field);
 
             if (lowered.helper_id.has_value()) {
-               assign_helper_field(field, helper_named(*lowered.helper_id), node_child_at(tree, *child_index));
+               assign_helper_field(assigned_value, helper_named(*lowered.helper_id), node_child_at(tree, *child_index));
+               merge_dynamic_field(field, std::move(assigned_value));
                continue;
             }
 
             if (source_symbol.kind == symbol_kind::reference) {
                if (auto capture_it = synthetic_capture_by_rule.find(source_symbol.value);
                    capture_it != synthetic_capture_by_rule.end()) {
-                  assign_synthetic_capture_field(field, synthetic_captures[capture_it->second],
+                  assign_synthetic_capture_field(assigned_value, synthetic_captures[capture_it->second],
                                                  node_child_at(tree, *child_index));
                } else if (lexical_rules.contains(source_symbol.value)) {
-                  field.value_kind = dynamic_field_value_kind::token;
-                  field.token = matched_tree_at(node_child_at(tree, *child_index));
-                  field.value_type_name = source_symbol.value;
+                  assigned_value.value_kind = dynamic_field_value_kind::token;
+                  assigned_value.token = matched_tree_at(node_child_at(tree, *child_index));
+                  assigned_value.value_type_name = source_symbol.value;
                } else {
-                  field.value_kind = dynamic_field_value_kind::node;
-                  field.node = build_dynamic_node(node_child_at(tree, *child_index));
-                  field.value_type_name = field.node != nullptr ? field.node->rule_name : declared_field.resolved_rule;
+                  assigned_value.value_kind = dynamic_field_value_kind::node;
+                  assigned_value.node = build_dynamic_node(node_child_at(tree, *child_index));
+                  assigned_value.value_type_name =
+                        assigned_value.node != nullptr ? assigned_value.node->rule_name : declared_field.resolved_rule;
                }
+               merge_dynamic_field(field, std::move(assigned_value));
                continue;
             }
 
-            field.value_kind = dynamic_field_value_kind::token;
-            field.token = matched_child_at(tree, *child_index);
+            assigned_value.value_kind = dynamic_field_value_kind::token;
+            assigned_value.token = matched_child_at(tree, *child_index);
             auto declared_type_name = declared_type_name_of(declared_field);
-            field.value_type_name = declared_type_name.empty() ? "cpf::matched_string" : declared_type_name;
+            assigned_value.value_type_name = declared_type_name.empty() ? "cpf::matched_string" : declared_type_name;
+            merge_dynamic_field(field, std::move(assigned_value));
          }
 
          return node;
@@ -1263,17 +1410,22 @@ namespace cpf {
          }
       }
 
+      std::vector<std::string> ordered_referenced_synthetic_rules;
+      std::set<std::string> referenced_synthetic_rules;
       std::vector<std::string> ordered_labeled_synthetic_rules;
       std::set<std::string> labeled_synthetic_rules;
       for (const auto& rule: compiled->source_grammar.rules) {
          for (const auto& production: rule.productions) {
             for (const auto& symbol: production.symbols) {
-               if (!symbol.has_label() || symbol.kind != symbol_kind::reference) {
+               if (symbol.kind != symbol_kind::reference) {
                   continue;
                }
                if (auto rule_it = compiled->rules_by_name.find(symbol.value);
                    rule_it != compiled->rules_by_name.end() && rule_it->second->synthetic) {
-                  if (labeled_synthetic_rules.insert(symbol.value).second) {
+                  if (referenced_synthetic_rules.insert(symbol.value).second) {
+                     ordered_referenced_synthetic_rules.push_back(symbol.value);
+                  }
+                  if (symbol.has_label() && labeled_synthetic_rules.insert(symbol.value).second) {
                      ordered_labeled_synthetic_rules.push_back(symbol.value);
                   }
                }
@@ -1281,10 +1433,42 @@ namespace cpf {
          }
       }
 
+      std::set<std::string> captureful_synthetic_rules;
+      auto changed_captureful_synthetic_rules = true;
+      while (changed_captureful_synthetic_rules) {
+         changed_captureful_synthetic_rules = false;
+         for (const auto& rule_name: ordered_referenced_synthetic_rules) {
+            if (captureful_synthetic_rules.contains(rule_name)) {
+               continue;
+            }
+
+            const auto& synthetic_rule = *compiled->rules_by_name.at(rule_name);
+            auto captureful = false;
+            for (const auto& production: synthetic_rule.productions) {
+               for (const auto& symbol: production.symbols) {
+                  if (symbol.has_label() ||
+                      (symbol.kind == symbol_kind::reference &&
+                       captureful_synthetic_rules.contains(symbol.value))) {
+                     captureful = true;
+                     break;
+                  }
+               }
+               if (captureful) {
+                  break;
+               }
+            }
+
+            if (captureful) {
+               captureful_synthetic_rules.insert(rule_name);
+               changed_captureful_synthetic_rules = true;
+            }
+         }
+      }
+
       std::unordered_map<std::string, field_info> synthetic_capture_fields;
       std::unordered_map<std::string, std::vector<variant_alternative_info>> synthetic_capture_production_alternatives;
       std::set<std::string> structured_synthetic_rules;
-      for (const auto& rule_name: ordered_labeled_synthetic_rules) {
+      for (const auto& rule_name: ordered_referenced_synthetic_rules) {
          const auto& synthetic_rule = *compiled->rules_by_name.at(rule_name);
          auto simple_capture_rule = true;
          for (const auto& production: synthetic_rule.productions) {
@@ -1307,8 +1491,13 @@ namespace cpf {
             }
          }
 
-         if (!simple_capture_rule) {
+         if (!simple_capture_rule &&
+             (labeled_synthetic_rules.contains(rule_name) || captureful_synthetic_rules.contains(rule_name))) {
             structured_synthetic_rules.insert(rule_name);
+            continue;
+         }
+
+         if (!labeled_synthetic_rules.contains(rule_name)) {
             continue;
          }
 
@@ -1358,6 +1547,7 @@ namespace cpf {
          compiled->synthetic_capture_by_rule.emplace(rule_name, capture.id);
          compiled->synthetic_captures.push_back(std::move(capture));
       }
+      compiled->structured_synthetic_rules.insert(structured_synthetic_rules.begin(), structured_synthetic_rules.end());
 
       for (const auto& rule: compiled->source_grammar.rules) {
          if (rule.synthetic && !structured_synthetic_rules.contains(rule.identifier)) {
@@ -1379,66 +1569,120 @@ namespace cpf {
          if (auto base_it = bases.find(rule.identifier); base_it != bases.end()) {
             info.base = base_it->second;
          }
+         compiled->classes.emplace(info.name, std::move(info));
+      }
 
-         if (!info.base_rule) {
-            std::unordered_map<std::string, field_info> resolved_fields;
-            std::vector<std::string> field_order;
-            std::vector<std::set<std::string>> labels_by_definition;
+      const auto collect_rule_fields = [&](const rule& rule) {
+         auto fields = std::vector<field_info>{};
+         auto class_it = compiled->classes.find(rule.identifier);
+         if (class_it == compiled->classes.end() || class_it->second.base_rule) {
+            return fields;
+         }
 
-            auto merge_field = [&](field_info field) {
-               auto existing_it = resolved_fields.find(field.name);
-               if (existing_it == resolved_fields.end()) {
-                  field_order.push_back(field.name);
-                  field.type = merged_field_type(field);
-                  resolved_fields.emplace(field.name, std::move(field));
-                  return;
+         std::unordered_map<std::string, field_info> resolved_fields;
+         std::vector<std::string> field_order;
+         std::vector<std::set<std::string>> labels_by_definition;
+
+         const auto collect_symbol_fields = [&](const symbol& symbol) {
+            auto collected = std::vector<field_info>{};
+            if (symbol.has_label()) {
+               collected.push_back(field_from_symbol(symbol, compiled->lexical_rules, synthetic_capture_fields));
+               return collected;
+            }
+
+            if (symbol.kind != symbol_kind::reference || !structured_synthetic_rules.contains(symbol.value)) {
+               return collected;
+            }
+
+            auto nested_class_it = compiled->classes.find(symbol.value);
+            if (nested_class_it == compiled->classes.end() || nested_class_it->second.base_rule) {
+               return collected;
+            }
+
+            collected.reserve(nested_class_it->second.fields.size());
+            for (const auto& nested_field: nested_class_it->second.fields) {
+               collected.push_back(apply_symbol_quantifier_to_field(rule.identifier, nested_field, symbol));
+            }
+            return collected;
+         };
+
+         const auto merge_field = [&](field_info field, bool repeated_assignment) {
+            auto existing_it = resolved_fields.find(field.name);
+            if (existing_it == resolved_fields.end()) {
+               field_order.push_back(field.name);
+               field.type = merged_field_type(field);
+               resolved_fields.emplace(field.name, std::move(field));
+               return;
+            }
+            auto& existing = existing_it->second;
+            merge_field_resolution(rule.identifier, existing, field, bases, repeated_assignment);
+         };
+
+         for (const auto& production: rule.productions) {
+            std::unordered_map<std::string, std::size_t> field_counts;
+            std::set<std::string> labels_in_definition;
+            for (const auto& symbol: production.symbols) {
+               if (symbol.kind == symbol_kind::reference && !compiled->rules_by_name.contains(symbol.value)) {
+                  throw std::runtime_error{"Rule '" + rule.identifier + "' references unknown rule '" + symbol.value + "'"};
                }
-               auto& existing = existing_it->second;
-               merge_field_resolution(rule.identifier, existing, field, bases);
-            };
 
-            for (const auto& production: rule.productions) {
-               std::set<std::string> labels_in_definition;
-               for (const auto& symbol: production.symbols) {
-                  if (symbol.kind == symbol_kind::reference && !compiled->rules_by_name.contains(symbol.value)) {
-                     throw std::runtime_error{"Rule '" + rule.identifier + "' references unknown rule '" + symbol.value + "'"};
-                  }
-                  if (!symbol.has_label()) {
-                     continue;
-                  }
-                  if (!labels_in_definition.insert(symbol.label).second) {
-                     throw std::runtime_error{"Rule '" + rule.identifier + "' uses label '" + symbol.label +
-                                              "' more than once in definition " + std::to_string(production.definition)};
-                  }
-                  if (symbol.label == "user_data") {
+               auto symbol_fields = collect_symbol_fields(symbol);
+               for (auto& field: symbol_fields) {
+                  if (field.name == "user_data") {
                      throw std::runtime_error{"Rule '" + rule.identifier +
                                               "' cannot expose label 'user_data' because generated node templates reserve that member name"};
                   }
-                  merge_field(field_from_symbol(symbol, compiled->lexical_rules, synthetic_capture_fields));
-               }
-               labels_by_definition.push_back(std::move(labels_in_definition));
-            }
-
-            for (const auto& field_name: field_order) {
-               auto& field = resolved_fields.at(field_name);
-               auto missing_from_definition = false;
-               for (const auto& labels_in_definition: labels_by_definition) {
-                  if (!labels_in_definition.contains(field_name)) {
-                     missing_from_definition = true;
-                     break;
-                  }
-               }
-               if (missing_from_definition && field.shape == field_shape::terminal_scalar) {
-                  field.shape = field_shape::terminal_optional;
-                  field.type = merged_field_type(field);
+                  labels_in_definition.insert(field.name);
+                  const auto occurrence = ++field_counts[field.name];
+                  merge_field(std::move(field), occurrence > 1);
                }
             }
+            labels_by_definition.push_back(std::move(labels_in_definition));
+         }
 
-            for (const auto& field_name: field_order) {
-               info.fields.push_back(resolved_fields.at(field_name));
+         for (const auto& field_name: field_order) {
+            auto& field = resolved_fields.at(field_name);
+            auto missing_from_definition = false;
+            for (const auto& labels_in_definition: labels_by_definition) {
+               if (!labels_in_definition.contains(field_name)) {
+                  missing_from_definition = true;
+                  break;
+               }
+            }
+            if (missing_from_definition && field.shape == field_shape::terminal_scalar) {
+               field.shape = field_shape::terminal_optional;
+               field.type = merged_field_type(field);
             }
          }
-         compiled->classes.emplace(info.name, std::move(info));
+
+         fields.reserve(field_order.size());
+         for (const auto& field_name: field_order) {
+            fields.push_back(resolved_fields.at(field_name));
+         }
+         return fields;
+      };
+
+      auto changed_fields = true;
+      while (changed_fields) {
+         changed_fields = false;
+         for (const auto& rule: compiled->source_grammar.rules) {
+            auto class_it = compiled->classes.find(rule.identifier);
+            if (class_it == compiled->classes.end() || class_it->second.base_rule) {
+               continue;
+            }
+
+            auto next_fields = collect_rule_fields(rule);
+            const auto same_layout = class_it->second.fields.size() == next_fields.size() &&
+                                     std::equal(class_it->second.fields.begin(), class_it->second.fields.end(),
+                                                next_fields.begin(), next_fields.end(),
+                                                [](const auto& left, const auto& right) {
+                                                   return field_layout_equal(left, right);
+                                                });
+            if (!same_layout) {
+               class_it->second.fields = std::move(next_fields);
+               changed_fields = true;
+            }
+         }
       }
 
       for (const auto& [name, info]: compiled->classes) {

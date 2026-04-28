@@ -1,0 +1,17 @@
+@namespace gen;
+
+expression                       ->  addition        | subtraction
+                                  |  multiplication  | division
+                                  |  power           | method_call
+                                  |  grouping        | number;
+
+addition         [prec = 'sub']  ->  expression:lhs '+' expression:rhs;
+subtraction      [lbl = 'sub']   ->  expression:lhs '-' expression:rhs;
+multiplication   [prec = 'div']  ->  expression:lhs '*' expression:rhs;
+division         [lbl = 'div']   ->  expression:lhs '/' expression:rhs;
+power            [dir = right]   ->  expression:lhs '^' expression:rhs;
+method_call                      ->  identifier:id '(' arguments?:args ')';
+grouping                         ->  '(' expression:inner ')';
+number                           ->  r'[0-9]+(\.[0-9]+)?';
+identifier                       ->  r'[a-zA-Z_][a-zA-Z0-9_]*';
+arguments                        ->  expression:args (',' expression:args)*;

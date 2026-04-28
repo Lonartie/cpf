@@ -382,6 +382,29 @@ TEST_SUITE("cpflib.code_generator") {
       }
    }
 
+   TEST_CASE("repeated labeled node captures generate vector members with the closest common base") {
+      auto grammar = cpf::parse_grammar(R"(
+         repeated_expr -> repeated_number | repeated_identifier;
+         repeated_number -> r'[0-9]+':value;
+         repeated_identifier -> r'[A-Za-z_]+':value;
+         repeated_arguments -> repeated_expr:args (',' repeated_expr:args)*;
+         repeated_pair -> repeated_number:items repeated_identifier:items;
+         repeated_pair -> repeated_identifier:items repeated_number:items;
+      )");
+
+      auto generated = cpf::generate_code(grammar, "repeated_members");
+
+      CHECK(generated.header.find("std::vector<std::unique_ptr<repeated_expr_node<UserData>>> args;") !=
+            std::string::npos);
+      CHECK(generated.header.find("std::vector<std::unique_ptr<repeated_expr_node<UserData>>> items;") !=
+            std::string::npos);
+      CHECK(generated.source.find("node->args.push_back") != std::string::npos);
+      CHECK(generated.source.find("helper_child->args") != std::string::npos);
+      CHECK(generated.source.find(
+                  "node->items.push_back(release_built_node_as<repeated_expr>(std::move(child_0)));") !=
+            std::string::npos);
+   }
+
    TEST_CASE("conflicting merged member resolutions are rejected with expressive errors") {
       auto capture_error = [](const cpf::grammar& grammar) {
          try {
@@ -468,8 +491,8 @@ TEST_SUITE("cpflib.code_generator") {
          CHECK(generated.source.find("cpf::detail::matched_child_at(tree, 0)") != std::string::npos);
          CHECK(generated.source.find("tree->children.front()") == std::string::npos);
          CHECK(generated.source.find("node->value = extract_helper_") != std::string::npos);
-         CHECK(generated.source.find("node->values = extract_helper_") != std::string::npos);
-         CHECK(generated.source.find("node->digits = extract_helper_") != std::string::npos);
+         CHECK(generated.source.find("node->values.push_back") != std::string::npos);
+         CHECK(generated.source.find("node->digits.push_back") != std::string::npos);
          CHECK(generated.source.find("node->marker = extract_helper_") != std::string::npos);
       }
    }

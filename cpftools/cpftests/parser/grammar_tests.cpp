@@ -681,25 +681,37 @@ TEST_SUITE("cpflib.grammar_parser") {
       CHECK(higher_order_payload_instantiated);
    }
 
-   TEST_CASE("unsupported unlabeled quantified group captures report expressive parser errors") {
-      auto capture_error = [](std::string_view source) -> std::string {
-         try {
-            static_cast<void>(cpf::parse_grammar(source));
-         } catch (const std::runtime_error& error) {
-            return error.what();
-         }
-         return std::string{};
-      };
+   TEST_CASE("unlabeled quantified groups may preserve repeated labeled captures through helper rules") {
+      auto grammar = cpf::parse_grammar(R"(
+         expression -> number | identifier;
+         number -> r'[0-9]+':value;
+         identifier -> r'[A-Za-z_]+':value;
+         arguments -> expression:args (',' expression:args)*;
+      )");
 
+      auto* arguments = grammar.find_rule("arguments");
+      REQUIRE(arguments != nullptr);
+      REQUIRE(arguments->productions.size() == 1);
+      REQUIRE(arguments->productions.front().symbols.size() == 2);
 
-      SUBCASE("quantified groups cannot contain labeled captures") {
-         auto message = capture_error(R"(
-            expr -> ('x':value | 'y':value)+;
-         )");
+      const auto& head = arguments->productions.front().symbols[0];
+      const auto& tail = arguments->productions.front().symbols[1];
+      CHECK(head.label == "args");
+      CHECK(head.value == "expression");
+      CHECK_FALSE(tail.has_label());
+      CHECK(tail.kind == cpf::symbol_kind::reference);
+      CHECK(tail.value.find("cpf_group_") == 0);
+      CHECK(tail.quantifier == cpf::symbol_quantifier::zero_or_more);
 
-         REQUIRE_FALSE(message.empty());
-         CHECK(message.find("Quantified groups cannot contain labeled captures") != std::string::npos);
-      }
+      auto* helper_rule = grammar.find_rule(tail.value);
+      REQUIRE(helper_rule != nullptr);
+      REQUIRE(helper_rule->synthetic);
+      REQUIRE(helper_rule->productions.size() == 1);
+      REQUIRE(helper_rule->productions.front().symbols.size() == 2);
+      CHECK(helper_rule->productions.front().symbols[0].kind == cpf::symbol_kind::literal);
+      CHECK(helper_rule->productions.front().symbols[0].value == ",");
+      CHECK(helper_rule->productions.front().symbols[1].value == "expression");
+      CHECK(helper_rule->productions.front().symbols[1].label == "args");
    }
 
    TEST_CASE("grammar loader preprocesses @import directives across multiple files") {
