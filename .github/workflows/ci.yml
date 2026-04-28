@@ -100,28 +100,4 @@ jobs:
         run: cmake --build build --parallel
 
       - name: Run tests
-        shell: bash
-        run: |
-          suffix=''
-          if [[ "$RUNNER_OS" == 'Windows' ]]; then
-            suffix='.exe'
-          fi
-
-          doctest_args=(--success --duration --no-breaks --no-colors)
-
-          status=0
-          for test_binary in \
-            "./build/cpftools/cpftests/cpfheadertests${suffix}" \
-            "./build/cpftools/cpftests/cpftests${suffix}"
-          do
-            echo "::group::Running ${test_binary}"
-            if ! "${test_binary}" "${doctest_args[@]}"; then
-              status=1
-            fi
-            echo "::endgroup::"
-          done
-
-          exit "${status}"
-
-
-
+        run: ctest --test-dir build -V -C ${{ matrix.build_type }}
