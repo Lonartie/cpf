@@ -1,7 +1,6 @@
 #pragma once
 
-#include "analysis/grammar_analysis.h"
-#include "model/grammar.h"
+#include <cpflib>
 
 #include <string>
 #include <string_view>

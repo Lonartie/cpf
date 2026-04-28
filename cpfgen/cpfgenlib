@@ -1,8 +1,6 @@
 #pragma once
 
 /// Public umbrella header for CPF grammar parsing, loading, and code generation APIs.
-#include "analysis/grammar_analysis.h"
+#include <cpflib>
+#include "analysis/rule_complexity.h"
 #include "codegen/code_generator.h"
-#include "model/grammar.h"
-#include "parser/grammar_loader.h"
-#include "parser/grammar_parser.h"

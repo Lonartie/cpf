@@ -31,6 +31,7 @@ set(cpftests_grammar_files
     fixtures/grammars/ambiguous_choice.cpf
     fixtures/grammars/error_choice.cpf
     fixtures/grammars/custom_errors.cpf
+    fixtures/grammars/namespaced_calculator.cpf
 )
 
 add_executable(cpftests ${cpftests_sources})
@@ -57,17 +58,10 @@ target_compile_definitions(cpfheadertests PRIVATE
 add_dependencies(cpftests cpfgen cpfgenheader cpf_single_header)
 add_dependencies(cpfheadertests cpfgen cpfgenheader cpf_single_header)
 
+set(CPF_LINK_GRAMMARS_IGNORE_WARNINGS ON)
 cpf_link_grammars(cpftests ${cpftests_grammar_files})
-
 cpf_link_grammars(cpfheadertests ${cpftests_grammar_files})
-
-cpf_link_grammars(cpftests
-    fixtures/grammars/namespaced_calculator.cpf
-)
-
-cpf_link_grammars(cpfheadertests
-    fixtures/grammars/namespaced_calculator.cpf
-)
+set(CPF_LINK_GRAMMARS_IGNORE_WARNINGS OFF)
 
 target_include_directories(cpftests PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}

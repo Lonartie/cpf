@@ -110,6 +110,9 @@ struct expression_node : cpf::node_with_user_data<UserData> {
    static auto recompute_complexity(std::size_t production_index) -> const cpf::complexity&;
    std::size_t rule_id() const override { return RuleId; }
    std::unique_ptr<expression_node<UserData>> clone() const;
+   template <typename T> bool is() const { return dynamic_cast<const T*>(this) != nullptr; }
+   template <typename T> const T& as() const { return dynamic_cast<const T&>(*this); }
+   template <typename T> T& as() { return dynamic_cast<T&>(*this); }
 
    protected:
       std::unique_ptr<cpf::node> clone_node() const override;
@@ -152,6 +155,9 @@ struct addition_node : expression_node<UserData> {
    static auto recompute_complexity(std::size_t production_index) -> const cpf::complexity&;
    std::size_t rule_id() const override { return RuleId; }
    std::unique_ptr<addition_node<UserData>> clone() const;
+   template <typename T> bool is() const { return dynamic_cast<const T*>(this) != nullptr; }
+   template <typename T> const T& as() const { return dynamic_cast<const T&>(*this); }
+   template <typename T> T& as() { return dynamic_cast<T&>(*this); }
 
    protected:
       std::unique_ptr<cpf::node> clone_node() const override;
@@ -194,6 +200,9 @@ struct subtraction_node : expression_node<UserData> {
    static auto recompute_complexity(std::size_t production_index) -> const cpf::complexity&;
    std::size_t rule_id() const override { return RuleId; }
    std::unique_ptr<subtraction_node<UserData>> clone() const;
+   template <typename T> bool is() const { return dynamic_cast<const T*>(this) != nullptr; }
+   template <typename T> const T& as() const { return dynamic_cast<const T&>(*this); }
+   template <typename T> T& as() { return dynamic_cast<T&>(*this); }
 
    protected:
       std::unique_ptr<cpf::node> clone_node() const override;
@@ -236,6 +245,9 @@ struct multiplication_node : expression_node<UserData> {
    static auto recompute_complexity(std::size_t production_index) -> const cpf::complexity&;
    std::size_t rule_id() const override { return RuleId; }
    std::unique_ptr<multiplication_node<UserData>> clone() const;
+   template <typename T> bool is() const { return dynamic_cast<const T*>(this) != nullptr; }
+   template <typename T> const T& as() const { return dynamic_cast<const T&>(*this); }
+   template <typename T> T& as() { return dynamic_cast<T&>(*this); }
 
    protected:
       std::unique_ptr<cpf::node> clone_node() const override;
@@ -278,6 +290,9 @@ struct division_node : expression_node<UserData> {
    static auto recompute_complexity(std::size_t production_index) -> const cpf::complexity&;
    std::size_t rule_id() const override { return RuleId; }
    std::unique_ptr<division_node<UserData>> clone() const;
+   template <typename T> bool is() const { return dynamic_cast<const T*>(this) != nullptr; }
+   template <typename T> const T& as() const { return dynamic_cast<const T&>(*this); }
+   template <typename T> T& as() { return dynamic_cast<T&>(*this); }
 
    protected:
       std::unique_ptr<cpf::node> clone_node() const override;
@@ -318,6 +333,9 @@ struct number_node : expression_node<UserData> {
    static auto recompute_complexity(std::size_t production_index) -> const cpf::complexity&;
    std::size_t rule_id() const override { return RuleId; }
    std::unique_ptr<number_node<UserData>> clone() const;
+   template <typename T> bool is() const { return dynamic_cast<const T*>(this) != nullptr; }
+   template <typename T> const T& as() const { return dynamic_cast<const T&>(*this); }
+   template <typename T> T& as() { return dynamic_cast<T&>(*this); }
 
    protected:
       std::unique_ptr<cpf::node> clone_node() const override;

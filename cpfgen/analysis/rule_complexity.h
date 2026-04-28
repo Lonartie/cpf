@@ -1,6 +1,6 @@
 #pragma once
 
-#include "model/grammar.h"
+#include <cpflib>
 
 #include <string>
 #include <unordered_map>

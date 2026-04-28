@@ -52,6 +52,9 @@ function(cpf_link_grammars target)
         if (DEFINED CPF_LINK_GRAMMARS_NAMESPACE AND NOT CPF_LINK_GRAMMARS_NAMESPACE STREQUAL "")
             list(APPEND cpfgen_command --namespace ${CPF_LINK_GRAMMARS_NAMESPACE})
         endif ()
+        if (CPF_LINK_GRAMMARS_IGNORE_WARNINGS)
+            list(APPEND cpfgen_command --ignore-warnings)
+        endif ()
         list(APPEND cpfgen_command --depfile ${generated_depfile})
 
         add_custom_command(

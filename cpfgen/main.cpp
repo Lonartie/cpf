@@ -186,6 +186,7 @@ int main(int argc, char** argv) {
       std::filesystem::path output_directory;
       std::filesystem::path depfile_path;
       std::string code_namespace;
+      bool ignore_warnings = false;
 
       auto index = 2;
       if (index < argc && std::string_view{argv[index]}.rfind("--", 0) != 0) {
@@ -205,6 +206,8 @@ int main(int argc, char** argv) {
                return print_usage();
             }
             code_namespace = argv[index++];
+         } else if (option == "--ignore-warnings") {
+            ignore_warnings = true;
          } else {
             return print_usage();
          }
@@ -224,7 +227,10 @@ int main(int argc, char** argv) {
       }
 
       auto generated = cpf::generate_code(loaded.parsed_grammar, base_name, code_namespace);
-      print_diagnostics(generated.analysis, loaded, grammar_path);
+
+      if (!ignore_warnings) {
+         print_diagnostics(generated.analysis, loaded, grammar_path);
+      }
 
       std::filesystem::create_directories(output_directory);
       auto header_path = output_directory / (base_name + ".h");
