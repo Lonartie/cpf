@@ -1,0 +1,16 @@
+@namespace error_reporting;
+@whitespace ws;
+
+skip ws -> r'[ \t\r\n]+';
+skip line_comment -> r'#[^\n]*';
+
+document -> section+:sections;
+section -> '[' identifier:name ']' setting*:settings;
+setting -> identifier:key '=' value:value;
+value -> string | integer | boolean;
+
+identifier [error = 'expected setting name'] -> r'[A-Za-z_][A-Za-z0-9_]*':text;
+string [error = 'expected quoted string'] -> r'\"([^"\\]|\\.)*\"':text;
+integer [error = 'expected integer literal'] -> r'[0-9]+':text;
+boolean [error = 'expected boolean literal'] -> 'true':text | 'false':text;
+

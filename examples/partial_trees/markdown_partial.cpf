@@ -1,0 +1,13 @@
+@namespace partial_trees;
+@whitespace ws;
+
+skip ws -> r'[ \t\r\n]+';
+
+document -> block:blocks+;
+block -> heading | task_item | paragraph;
+heading -> '#':marks text:text;
+task_item -> '-':bullet '[' checked?:mark[inline] ']':close text:text;
+checked -> 'x':text;
+paragraph -> text:text;
+text [error = 'expected markdown text'] -> r'[A-Za-z_][A-Za-z0-9_]*';
+

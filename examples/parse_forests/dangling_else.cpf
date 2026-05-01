@@ -1,0 +1,12 @@
+@namespace parse_forests;
+
+statement    -> if_then_else | if_then | call;
+if_then_else -> kw_if:if_keyword identifier:condition kw_then:then_keyword statement:then_branch kw_else:else_keyword statement:else_branch;
+if_then      -> kw_if:if_keyword identifier:condition kw_then:then_keyword statement:then_branch;
+call         -> identifier:name '(' ')';
+
+token kw_if   -> 'if';
+token kw_then -> 'then';
+token kw_else -> 'else';
+token identifier -> r'[A-Za-z_][A-Za-z0-9_]*';
+
